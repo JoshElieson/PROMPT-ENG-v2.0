@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Loader2, LogOut, User } from "lucide-react";
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
 import { Button } from "@/components/ui/button";
@@ -26,21 +27,32 @@ export function AccountMenu() {
     clearError,
   } = useAuth();
 
+  const [menuOpen, setMenuOpen] = useState(false);
   const isLoggedIn = session != null;
+
+  useEffect(() => {
+    if (isLoggedIn) setMenuOpen(false);
+  }, [isLoggedIn]);
 
   return (
     <DropdownMenu
+      open={menuOpen}
       onOpenChange={(open) => {
-        if (!open) {
-          clearError();
-          if (isLoggingIn) cancelLogin();
-        }
+        if (!open && isLoggingIn) return;
+        setMenuOpen(open);
+        if (!open && !error) clearError();
       }}
     >
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          title={isLoggedIn ? session.user.name ?? session.user.login : "Account"}
+          title={
+            isLoggedIn
+              ? (session.user.name ?? session.user.login)
+              : isLoggingIn
+                ? "Finishing GitHub sign-in…"
+                : "Account"
+          }
           className={cn(
             "relative flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors",
             "hover:bg-panel-elevated hover:text-foreground",
@@ -53,6 +65,8 @@ export function AccountMenu() {
               alt=""
               className="h-6 w-6 object-cover"
             />
+          ) : isLoggingIn ? (
+            <Loader2 className="h-4 w-4 animate-spin text-accent" />
           ) : (
             <User className="h-4 w-4" />
           )}
@@ -105,6 +119,18 @@ export function AccountMenu() {
                   <Loader2 className="h-3 w-3 animate-spin" />
                   Waiting for authorization…
                 </p>
+                <p className="text-center text-[10px] leading-snug text-muted">
+                  Return to this app after approving on GitHub.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={cancelLogin}
+                >
+                  Cancel
+                </Button>
               </section>
             )}
 
@@ -112,6 +138,7 @@ export function AccountMenu() {
               <DropdownMenuItem
                 onSelect={(e) => {
                   e.preventDefault();
+                  setMenuOpen(true);
                   void startGitHubLogin();
                 }}
                 className="gap-2"

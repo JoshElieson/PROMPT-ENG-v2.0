@@ -20,12 +20,19 @@ export function SourceControlIcon({
 
   return (
     <span className={cn("relative inline-flex h-4 w-4 shrink-0", className)}>
-      <img
-        src={sourceControlIcon}
-        alt=""
+      <span
         aria-hidden
-        className="h-full w-full object-contain brightness-0 invert"
-        draggable={false}
+        className="h-full w-full bg-current"
+        style={{
+          maskImage: `url(${sourceControlIcon})`,
+          maskSize: "contain",
+          maskRepeat: "no-repeat",
+          maskPosition: "center",
+          WebkitMaskImage: `url(${sourceControlIcon})`,
+          WebkitMaskSize: "contain",
+          WebkitMaskRepeat: "no-repeat",
+          WebkitMaskPosition: "center",
+        }}
       />
 
       {showBadge && (

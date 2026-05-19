@@ -168,8 +168,6 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
     [search],
   );
 
-  const isSearching = search.trim().length > 0;
-
   const clearCloseTimer = useCallback(() => {
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current);
@@ -203,8 +201,8 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
       headerExtra={<ShoppingCart className="h-3.5 w-3.5 text-accent" />}
     >
       <section className="shrink-0 border-b border-border-subtle px-2 py-2">
-        <label className="relative flex items-center">
-          <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted" />
+        <label className="relative block w-full min-w-0">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
           <input
             type="search"
             value={search}
@@ -213,8 +211,12 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
               setOpenOrgId(null);
               setFlyoutAnchor(null);
             }}
-            placeholder="Search models or providers…"
-            className="w-full border border-border bg-surface py-1.5 pr-8 pl-8 text-xs text-foreground placeholder:text-muted outline-none focus:border-foreground/40"
+            placeholder="Search models or providers"
+            title="Search models or providers"
+            className={cn(
+              "box-border min-w-0 w-full border border-border bg-surface py-1.5 pl-8 text-xs text-foreground placeholder:text-muted outline-none focus:border-foreground/40",
+              search ? "pr-8" : "pr-2",
+            )}
           />
           {search && (
             <button
@@ -231,11 +233,6 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
             </button>
           )}
         </label>
-        {!isSearching && (
-          <p className="mt-2 px-1 text-[11px] text-muted">
-            Hover a provider to pick models for the Round Table
-          </p>
-        )}
       </section>
 
       <ScrollArea className="h-full">

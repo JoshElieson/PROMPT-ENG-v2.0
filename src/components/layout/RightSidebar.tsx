@@ -50,7 +50,10 @@ const ModelRow = memo(function ModelRow({
           <span className="block truncate text-sm font-medium">{name}</span>
           <span className="block truncate text-xs text-muted">{role}</span>
         </span>
-        <span className="text-sm font-medium tabular-nums text-muted-foreground">
+        <span
+          className="text-sm font-medium tabular-nums text-muted-foreground"
+          title="Model allocation"
+        >
           {active ? `${weight}%` : "Off"}
         </span>
       </button>
@@ -122,10 +125,6 @@ function RoundTableSection() {
               </p>
             ) : (
               <>
-                <p className="mb-3 text-[11px] text-muted">
-                  Click to include or exclude · set each model&apos;s input
-                  share (0–100%)
-                </p>
                 <section className="space-y-1">
                   {tableModels.map((model) => {
                     const active = isActive(model.id);

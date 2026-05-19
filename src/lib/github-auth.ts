@@ -21,6 +21,34 @@ export function isGitHubAuthConfigured(): boolean {
   return Boolean(getGitHubClientId());
 }
 
+type RawDeviceFlow = DeviceFlowPending & {
+  device_code?: string;
+  user_code?: string;
+  verification_uri?: string;
+  expires_in?: number;
+};
+
+export function normalizeDeviceFlowPending(raw: RawDeviceFlow): DeviceFlowPending {
+  const deviceCode = raw.deviceCode ?? raw.device_code ?? "";
+  const userCode = raw.userCode ?? raw.user_code ?? "";
+  const verificationUri =
+    raw.verificationUri ??
+    raw.verification_uri ??
+    "https://github.com/login/device";
+
+  if (!deviceCode || !userCode) {
+    throw new Error("GitHub returned an incomplete sign-in response. Please try again.");
+  }
+
+  return {
+    deviceCode,
+    userCode,
+    verificationUri,
+    expiresIn: Number(raw.expiresIn ?? raw.expires_in ?? 900),
+    interval: Number(raw.interval ?? 5),
+  };
+}
+
 async function postFormBrowser(
   url: string,
   body: Record<string, string>,
@@ -66,10 +94,11 @@ export async function startGitHubDeviceFlow(): Promise<DeviceFlowPending> {
   }
 
   if (isTauri()) {
-    return invoke<DeviceFlowPending>("github_start_device_flow", {
+    const pending = await invoke<RawDeviceFlow>("github_start_device_flow", {
       clientId,
       scope: SCOPES,
     });
+    return normalizeDeviceFlowPending(pending);
   }
 
   const data = await postFormBrowser(`${OAUTH_BASE}${DEVICE_CODE_PATH}`, {
@@ -77,13 +106,13 @@ export async function startGitHubDeviceFlow(): Promise<DeviceFlowPending> {
     scope: SCOPES,
   });
 
-  return {
+  return normalizeDeviceFlowPending({
     deviceCode: data.device_code,
     userCode: data.user_code,
     verificationUri: data.verification_uri,
     expiresIn: Number(data.expires_in) || 900,
     interval: Number(data.interval) || 5,
-  };
+  });
 }
 
 function delay(ms: number): Promise<void> {
@@ -99,32 +128,25 @@ export async function pollGitHubDeviceFlow(
     throw new Error("GitHub client ID is not configured.");
   }
 
+  if (!pending.deviceCode) {
+    throw new Error("Missing device code. Please try signing in again.");
+  }
+
+  if (isTauri()) {
+    return invoke<string>("github_wait_for_device_token", {
+      clientId,
+      deviceCode: pending.deviceCode,
+      intervalSecs: pending.interval,
+      expiresInSecs: pending.expiresIn,
+    });
+  }
+
   const deadline = Date.now() + pending.expiresIn * 1000;
   let intervalMs = pending.interval * 1000;
 
   while (Date.now() < deadline) {
     if (signal?.aborted) {
       throw new Error("Sign-in cancelled");
-    }
-
-    await delay(intervalMs);
-
-    if (isTauri()) {
-      const result = await invoke<{
-        status: "token" | "pending" | "slowDown";
-        accessToken?: string;
-      }>("github_poll_device_token", {
-        clientId,
-        deviceCode: pending.deviceCode,
-      });
-
-      if (result.status === "token" && result.accessToken) {
-        return result.accessToken;
-      }
-      if (result.status === "slowDown") {
-        intervalMs += 5000;
-      }
-      continue;
     }
 
     const data = await postFormBrowser(`${OAUTH_BASE}${ACCESS_TOKEN_PATH}`, {
@@ -139,28 +161,61 @@ export async function pollGitHubDeviceFlow(
 
     const error = data.error;
     if (error === "authorization_pending") {
-      continue;
-    }
-    if (error === "slow_down") {
+      // fall through to sleep
+    } else if (error === "slow_down") {
       intervalMs += 5000;
-      continue;
-    }
-    if (error === "expired_token") {
+    } else if (error === "expired_token") {
       throw new Error("The sign-in code expired. Please try again.");
-    }
-    if (error === "access_denied") {
+    } else if (error === "access_denied") {
       throw new Error("GitHub sign-in was denied.");
+    } else {
+      throw new Error(data.error_description ?? error ?? "GitHub sign-in failed");
     }
 
-    throw new Error(data.error_description ?? error ?? "GitHub sign-in failed");
+    await delay(intervalMs);
   }
 
   throw new Error("Sign-in timed out. Please try again.");
 }
 
+function normalizeGitHubUser(raw: GitHubUser & { avatarUrl?: string }): GitHubUser {
+  if (!raw?.login) {
+    throw new Error("Could not load your GitHub profile.");
+  }
+
+  return {
+    id: raw.id,
+    login: raw.login,
+    name: raw.name ?? null,
+    avatar_url: raw.avatar_url ?? raw.avatarUrl ?? "",
+    email: raw.email ?? null,
+  };
+}
+
+type RawAuthSession = AuthSession & {
+  access_token?: string;
+  login_at?: number;
+};
+
+export function normalizeAuthSession(raw: RawAuthSession): AuthSession {
+  const accessToken = raw.accessToken ?? raw.access_token;
+  if (!accessToken) {
+    throw new Error("GitHub did not return an access token.");
+  }
+
+  return {
+    accessToken,
+    loginAt: raw.loginAt ?? raw.login_at ?? Date.now(),
+    user: normalizeGitHubUser(raw.user),
+  };
+}
+
 export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser> {
   if (isTauri()) {
-    return invoke<GitHubUser>("github_fetch_user", { accessToken });
+    const user = await invoke<GitHubUser & { avatarUrl?: string }>("github_fetch_user", {
+      accessToken,
+    });
+    return normalizeGitHubUser(user);
   }
 
   const res = await fetch(`${API_BASE}${USER_API_PATH}`, {
@@ -176,19 +231,32 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser> 
   }
 
   const data = (await res.json()) as GitHubUser;
-  return {
-    id: data.id,
-    login: data.login,
-    name: data.name,
-    avatar_url: data.avatar_url,
-    email: data.email,
-  };
+  return normalizeGitHubUser(data);
 }
 
 export async function completeGitHubDeviceLogin(
   pending: DeviceFlowPending,
   signal?: AbortSignal,
 ): Promise<AuthSession> {
+  const clientId = getGitHubClientId();
+  if (!clientId) {
+    throw new Error("GitHub client ID is not configured.");
+  }
+
+  if (!pending.deviceCode) {
+    throw new Error("Missing device code. Please try signing in again.");
+  }
+
+  if (isTauri()) {
+    const session = await invoke<RawAuthSession>("github_complete_device_login", {
+      clientId,
+      deviceCode: pending.deviceCode,
+      intervalSecs: pending.interval,
+      expiresInSecs: pending.expiresIn,
+    });
+    return normalizeAuthSession(session);
+  }
+
   const accessToken = await pollGitHubDeviceFlow(pending, signal);
   const user = await fetchGitHubUser(accessToken);
   return { accessToken, user, loginAt: Date.now() };
