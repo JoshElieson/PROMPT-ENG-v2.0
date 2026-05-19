@@ -240,7 +240,7 @@ export function ChatComposer({ onSent }: ChatComposerProps) {
 
         <section
           className={cn(
-            "border border-border bg-panel",
+            "rounded-xl border border-border bg-panel",
             "focus-within:border-foreground focus-within:outline focus-within:outline-1 focus-within:outline-offset-0 focus-within:outline-foreground",
           )}
         >
@@ -294,7 +294,7 @@ export function ChatComposer({ onSent }: ChatComposerProps) {
             <Button
               type="button"
               size="icon"
-              className="h-7 w-7"
+              className="h-7 w-7 rounded-full"
               disabled={!canSend}
               onClick={handleSend}
               aria-label="Send message"

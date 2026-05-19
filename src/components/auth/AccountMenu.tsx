@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { GitHubAuthStatus } from "@/components/auth/GitHubAuthStatus";
 import { useAuth } from "@/contexts/AuthContext";
 import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
@@ -54,7 +55,7 @@ export function AccountMenu() {
                 : "Account"
           }
           className={cn(
-            "relative flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors",
+            "relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors",
             "hover:bg-panel-elevated hover:text-foreground",
             "data-[state=open]:bg-panel-elevated data-[state=open]:text-foreground",
           )}
@@ -63,7 +64,7 @@ export function AccountMenu() {
             <img
               src={session.user.avatar_url}
               alt=""
-              className="h-6 w-6 object-cover"
+              className="h-6 w-6 rounded-full object-cover"
             />
           ) : isLoggingIn ? (
             <Loader2 className="h-4 w-4 animate-spin text-accent" />
@@ -77,6 +78,11 @@ export function AccountMenu() {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent side="right" align="end" className="w-64">
+        <div className="px-2 pt-2">
+          <GitHubAuthStatus variant="menu" />
+        </div>
+        <DropdownMenuSeparator className="my-2" />
+
         {isLoggedIn ? (
           <>
             <DropdownMenuLabel className="font-normal">

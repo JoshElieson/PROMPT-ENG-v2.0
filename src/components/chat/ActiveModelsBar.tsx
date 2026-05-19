@@ -22,7 +22,7 @@ export function ActiveModelsBar() {
         {models.map((model) => (
           <span
             key={model.id}
-            className="inline-flex items-center gap-1 border border-border-subtle bg-panel/50 px-2 py-0.5 text-[11px] text-foreground/90"
+            className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-panel/50 px-2.5 py-0.5 text-[11px] text-foreground/90"
           >
             <ModelLogo orgId={model.orgId} size="xs" />
             {model.name}

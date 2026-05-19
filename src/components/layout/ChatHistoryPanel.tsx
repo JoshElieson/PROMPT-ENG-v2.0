@@ -22,7 +22,7 @@ function ChatListItem({
   return (
     <div
       className={cn(
-        "group relative flex w-full items-center border border-transparent transition-colors hover:bg-panel-elevated",
+        "group relative flex w-full items-center rounded-lg border border-transparent transition-colors hover:bg-panel-elevated",
         active && "border-foreground bg-panel-elevated",
       )}
     >

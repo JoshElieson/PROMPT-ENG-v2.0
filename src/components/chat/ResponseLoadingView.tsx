@@ -9,7 +9,7 @@ interface ResponseLoadingViewProps {
 export function ResponseLoadingView({ loading }: ResponseLoadingViewProps) {
   return (
     <article className="flex w-full flex-col items-start gap-2">
-      <section className="max-w-[85%] space-y-3 border border-border bg-panel px-4 py-3">
+      <section className="max-w-[85%] space-y-3 rounded-2xl border border-border bg-panel px-4 py-3">
         <RoundTableDiscussion
           modelIds={loading.targetModelIds}
           speakingModelIndex={loading.speakingModelIndex}

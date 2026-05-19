@@ -65,7 +65,7 @@ function OrgFlyout({
 
   return createPortal(
     <section
-      className="fixed z-50 min-w-[220px] border border-border bg-panel shadow-lg"
+      className="fixed z-50 min-w-[220px] rounded-lg border border-border bg-panel shadow-lg"
       style={{
         top: anchor.top,
         left: anchor.right + 6,

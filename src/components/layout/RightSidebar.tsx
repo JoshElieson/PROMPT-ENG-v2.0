@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { WeightSlider } from "@/components/ui/weight-slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -73,20 +73,6 @@ const ModelRow = memo(function ModelRow({
     </section>
   );
 });
-
-function SkeletonLines() {
-  return (
-    <section className="space-y-2.5 py-2">
-      {[100, 85, 70, 45].map((w) => (
-        <span
-          key={w}
-          className="block h-2 animate-pulse rounded-full bg-panel-elevated"
-          style={{ width: `${w}%` }}
-        />
-      ))}
-    </section>
-  );
-}
 
 function RoundTableSection() {
   const [roundTableEnabled, setRoundTableEnabled] = useState(true);
@@ -171,22 +157,12 @@ function RoundTableSection() {
   );
 }
 
-function ResponseSection() {
+function WorkflowSection() {
   return (
-    <SidebarPanel title="Response" active>
-      <ScrollArea className="h-full">
-        <section className="p-4">
-          <section className="flex items-center justify-between">
-            <span className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
-              Streaming
-              <ChevronDown className="h-3 w-3" />
-            </span>
-          </section>
-          <p className="mt-3 text-xs text-muted">Synthesizing response...</p>
-          <SkeletonLines />
-        </section>
-      </ScrollArea>
+    <SidebarPanel title="Workflow">
+      <section className="flex min-h-0 flex-1 flex-col p-3" aria-label="Workflow">
+        <section className="min-h-0 flex-1 rounded-lg border border-dashed border-border-subtle bg-surface/50" />
+      </section>
     </SidebarPanel>
   );
 }
@@ -204,11 +180,11 @@ export function RightSidebar() {
       <ResizablePanels
         direction="vertical"
         storageKey="prompt:right-panels"
-        defaultSizes={[0.55, 0.45]}
+        defaultSizes={[0.5, 0.5]}
         className="min-h-0 flex-1"
         panels={[
           { id: "round-table", minSize: 120, content: <RoundTableSection /> },
-          { id: "response", minSize: 100, content: <ResponseSection /> },
+          { id: "workflow", minSize: 100, content: <WorkflowSection /> },
         ]}
       />
 

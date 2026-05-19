@@ -19,7 +19,7 @@ function MessageContent({ content }: { content: string }) {
           return (
             <span
               key={`${part}-${i}`}
-              className="bg-accent/15 px-1 py-0.5 font-medium text-accent"
+              className="rounded-md bg-accent/15 px-1 py-0.5 font-medium text-accent"
             >
               {model ? `@${model.name}` : part}
             </span>
@@ -96,7 +96,7 @@ export function MessageBubble({ message, showTime = false }: MessageBubbleProps)
 
       <section
         className={cn(
-          "relative max-w-[85%] border px-4 py-3",
+          "relative max-w-[85%] rounded-2xl border px-4 py-3",
           isSent
             ? "border-accent/30 bg-accent/10"
             : "border-border bg-panel pr-10",

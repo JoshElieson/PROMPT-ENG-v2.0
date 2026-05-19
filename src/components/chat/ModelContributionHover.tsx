@@ -26,7 +26,7 @@ export function ModelContributionHover({
       role="tooltip"
       aria-label="Model blend for this response"
     >
-      <div className="flex flex-wrap items-center gap-3 border border-border bg-panel-elevated px-3 py-2.5 shadow-lg">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-panel-elevated px-3 py-2.5 shadow-lg">
         {contributions.map((entry) => {
           const model = getModelById(entry.modelId);
           if (!model) return null;
