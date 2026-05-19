@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,9 +49,23 @@ function MenuEntries({ items }: { items: MenuEntry[] }) {
   );
 }
 
-function MenuGroupDropdown({ label, items }: { label: string; items: MenuEntry[] }) {
+function MenuGroupDropdown({
+  label,
+  items,
+  open,
+  menuBarActive,
+  onOpenChange,
+  onActivate,
+}: {
+  label: string;
+  items: MenuEntry[];
+  open: boolean;
+  menuBarActive: boolean;
+  onOpenChange: (open: boolean) => void;
+  onActivate: () => void;
+}) {
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -59,6 +74,15 @@ function MenuGroupDropdown({ label, items }: { label: string; items: MenuEntry[]
             "hover:bg-panel-elevated hover:text-foreground",
             "data-[state=open]:bg-panel-elevated data-[state=open]:text-foreground",
           )}
+          onPointerEnter={() => {
+            if (menuBarActive) onActivate();
+          }}
+          onPointerDown={(e) => {
+            if (menuBarActive && !open) {
+              e.preventDefault();
+              onActivate();
+            }
+          }}
         >
           {label}
         </button>
@@ -71,6 +95,9 @@ function MenuGroupDropdown({ label, items }: { label: string; items: MenuEntry[]
 }
 
 export function MenuBar() {
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const menuBarActive = openMenu !== null;
+
   return (
     <nav
       className="flex min-w-0 flex-1 items-center gap-0.5"
@@ -81,6 +108,18 @@ export function MenuBar() {
           key={group.label}
           label={group.label}
           items={group.items}
+          open={openMenu === group.label}
+          menuBarActive={menuBarActive}
+          onOpenChange={(nextOpen) => {
+            if (nextOpen) {
+              setOpenMenu(group.label);
+            } else {
+              setOpenMenu((current) =>
+                current === group.label ? null : current,
+              );
+            }
+          }}
+          onActivate={() => setOpenMenu(group.label)}
         />
       ))}
     </nav>

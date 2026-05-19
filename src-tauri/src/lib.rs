@@ -1,9 +1,13 @@
 mod fs;
 mod git;
+mod github_auth;
 
 use fs::list_directory;
 use git::{
     git_clone, git_commit, git_fetch, git_init, git_pull, git_push, git_status,
+};
+use github_auth::{
+    github_fetch_user, github_poll_device_token, github_start_device_flow,
 };
 use tauri::Manager;
 
@@ -21,6 +25,9 @@ pub fn run() {
             git_init,
             git_clone,
             git_commit,
+            github_start_device_flow,
+            github_poll_device_token,
+            github_fetch_user,
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {

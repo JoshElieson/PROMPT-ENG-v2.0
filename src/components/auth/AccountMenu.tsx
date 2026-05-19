@@ -130,9 +130,9 @@ export function AccountMenu() {
 
             {!isConfigured && (
               <p className="px-2 py-2 text-[10px] leading-snug text-muted">
-                Create a GitHub OAuth app with Device Flow enabled, then set{" "}
+                Create a GitHub OAuth app with Device Flow enabled, set{" "}
                 <code className="text-foreground">VITE_GITHUB_CLIENT_ID</code> in
-                .env.
+                .env, then restart the app. See GITHUB_SETUP.md.
               </p>
             )}
 

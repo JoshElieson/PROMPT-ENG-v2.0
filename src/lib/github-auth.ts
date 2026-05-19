@@ -1,10 +1,16 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { AuthSession, DeviceFlowPending, GitHubUser } from "@/types/auth";
-
-const DEVICE_CODE_URL = "https://github.com/login/device/code";
-const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
-const USER_API_URL = "https://api.github.com/user";
+import { isTauri } from "@/lib/tauri";
 
 const SCOPES = "read:user user:email";
+
+const DEVICE_CODE_PATH = "/login/device/code";
+const ACCESS_TOKEN_PATH = "/login/oauth/access_token";
+const USER_API_PATH = "/user";
+
+/** Dev-only Vite proxies avoid browser CORS when not running inside Tauri. */
+const OAUTH_BASE = import.meta.env.DEV ? "/api/github-oauth" : "https://github.com";
+const API_BASE = import.meta.env.DEV ? "/api/github" : "https://api.github.com";
 
 export function getGitHubClientId(): string | undefined {
   const id = import.meta.env.VITE_GITHUB_CLIENT_ID;
@@ -15,7 +21,7 @@ export function isGitHubAuthConfigured(): boolean {
   return Boolean(getGitHubClientId());
 }
 
-async function postForm(
+async function postFormBrowser(
   url: string,
   body: Record<string, string>,
 ): Promise<Record<string, string>> {
@@ -29,9 +35,25 @@ async function postForm(
   });
 
   const data = (await res.json()) as Record<string, string>;
+
+  if (data.access_token) {
+    return data;
+  }
+
+  const oauthError = data.error;
+  if (
+    oauthError === "authorization_pending" ||
+    oauthError === "slow_down" ||
+    oauthError === "expired_token" ||
+    oauthError === "access_denied"
+  ) {
+    return data;
+  }
+
   if (!res.ok) {
     throw new Error(data.error_description ?? data.error ?? "GitHub request failed");
   }
+
   return data;
 }
 
@@ -43,7 +65,14 @@ export async function startGitHubDeviceFlow(): Promise<DeviceFlowPending> {
     );
   }
 
-  const data = await postForm(DEVICE_CODE_URL, {
+  if (isTauri()) {
+    return invoke<DeviceFlowPending>("github_start_device_flow", {
+      clientId,
+      scope: SCOPES,
+    });
+  }
+
+  const data = await postFormBrowser(`${OAUTH_BASE}${DEVICE_CODE_PATH}`, {
     client_id: clientId,
     scope: SCOPES,
   });
@@ -80,7 +109,25 @@ export async function pollGitHubDeviceFlow(
 
     await delay(intervalMs);
 
-    const data = await postForm(ACCESS_TOKEN_URL, {
+    if (isTauri()) {
+      const result = await invoke<{
+        status: "token" | "pending" | "slowDown";
+        accessToken?: string;
+      }>("github_poll_device_token", {
+        clientId,
+        deviceCode: pending.deviceCode,
+      });
+
+      if (result.status === "token" && result.accessToken) {
+        return result.accessToken;
+      }
+      if (result.status === "slowDown") {
+        intervalMs += 5000;
+      }
+      continue;
+    }
+
+    const data = await postFormBrowser(`${OAUTH_BASE}${ACCESS_TOKEN_PATH}`, {
       client_id: clientId,
       device_code: pending.deviceCode,
       grant_type: "urn:ietf:params:oauth:grant-type:device_code",
@@ -112,7 +159,11 @@ export async function pollGitHubDeviceFlow(
 }
 
 export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser> {
-  const res = await fetch(USER_API_URL, {
+  if (isTauri()) {
+    return invoke<GitHubUser>("github_fetch_user", { accessToken });
+  }
+
+  const res = await fetch(`${API_BASE}${USER_API_PATH}`, {
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${accessToken}`,

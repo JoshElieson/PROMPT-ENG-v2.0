@@ -18,6 +18,18 @@ export default defineConfig(async () => ({
     port: 1420,
     strictPort: true,
     host: host || false,
+    proxy: {
+      "/api/github-oauth": {
+        target: "https://github.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/github-oauth/, ""),
+      },
+      "/api/github": {
+        target: "https://api.github.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/github/, ""),
+      },
+    },
     hmr: host
       ? {
           protocol: "ws",
