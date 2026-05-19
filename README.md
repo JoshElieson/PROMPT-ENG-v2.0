@@ -1,70 +1,89 @@
 # Prompt
 
-A desktop prompt-engineering IDE — connect multiple AI models, manage project context with a file explorer, and orchestrate multi-model "Round Table" conversations.
+Desktop prompt-engineering IDE — multi-model chat, project file context, and Round Table orchestration.
 
-## Stack
+**Stack:** Tauri 2 · React 19 · TypeScript · Vite · Tailwind v4
 
-- **Tauri 2** — native desktop shell (downloadable `.exe` / `.dmg` / `.AppImage`)
-- **React 19 + TypeScript + Vite**
-- **Tailwind CSS v4** + **Radix UI** primitives (shadcn-style components)
-- **Rust** backend (SQLite, APIs) — coming in later phases
+---
 
-## UI layout (current)
+## Quick start (UI only)
 
-| Region | Purpose |
-|--------|---------|
-| Activity bar | Provider shortcuts, settings, profile |
-| Left sidebar | Chats, projects, file tree with context checkboxes |
-| Center | Welcome screen, chat history, prompt input |
-| Right sidebar | Round Table weights, streaming response, metrics |
-| Status bar | Command hints, system status |
-
-## Prerequisites
-
-1. [Node.js](https://nodejs.org/) (v18+)
-2. [Rust](https://www.rust-lang.org/tools/install) — required for `npm run tauri dev` / `npm run tauri build`
-3. [Tauri prerequisites](https://tauri.app/start/prerequisites/) for Windows
-
-## Development
-
-Preview the UI in the browser (no Rust needed):
+Fastest way to hack on the frontend — no Rust required.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:1420
+Open **http://localhost:1420**
 
-Full desktop app (requires Rust):
+| Command | What it does |
+|---------|----------------|
+| `npm run dev` | Vite dev server (hot reload) |
+| `npm run build` | Typecheck + production build |
+| `npm run preview` | Serve the production build locally |
+
+---
+
+## Full desktop app (Tauri)
+
+Use this when you need native dialogs, filesystem access, or the real window shell.
+
+### One-time setup
+
+1. **[Node.js](https://nodejs.org/)** 18+
+2. **[Rust](https://www.rust-lang.org/tools/install)** (`rustup` on Windows is fine)
+3. **[Tauri Windows prerequisites](https://tauri.app/start/prerequisites/)** (WebView2, MSVC build tools)
 
 ```bash
-npm run tauri dev
+npm install
+npm run tauri:dev
 ```
 
-## Build installer
+`tauri:dev` runs a small PowerShell helper that puts Cargo on `PATH` for the session, then starts `tauri dev` (Vite on **1420** + native window).
+
+### If `cargo` is not found
+
+- Close the terminal and open a new one after installing Rust, **or**
+- Add `%USERPROFILE%\.cargo\bin` to your user **PATH**, **or**
+- On Windows: `winget install Rustlang.Rustup`, then retry in a new terminal
+
+### Build an installer
 
 ```bash
 npm run tauri build
 ```
 
-Installers appear under `src-tauri/target/release/bundle/`.
+Output: `src-tauri/target/release/bundle/`
 
-## Window size
+---
 
-Default **1280×800** (League-client style, not fullscreen). Configured in `src-tauri/tauri.conf.json`.
+## Project layout
 
-## Projects & filesystem
+| Path | Role |
+|------|------|
+| `src/` | React UI (`@/` alias → `src/`) |
+| `src-tauri/` | Rust / Tauri config |
+| `scripts/tauri-dev.ps1` | Windows-friendly `tauri dev` launcher |
 
-- Projects start **empty** — click **+** under Projects to pick a folder from your computer (requires the Tauri desktop app).
-- Folders load **lazily** when expanded; hidden/build dirs (`node_modules`, `.git`, etc.) are skipped.
-- Per-item permissions (hover a row): **context** checkbox, **R** read, **W** write — persisted in `localStorage`.
-- Remove a project with the trash icon on the project root row.
+Default window: **1280×800** (`src-tauri/tauri.conf.json`).
 
-## Next steps
+---
 
-- [ ] Model provider connections (OpenRouter, OpenAI, Anthropic, Gemini, Ollama)
-- [ ] SQLite + FTS5 for chat/project storage
-- [ ] Wire permissions into AI context injection
-- [ ] Round Table orchestration (multi-model synthesis)
-- [ ] Keyboard shortcuts (⌘1–4, /, @)
+## Features (current)
+
+- **Activity bar** — providers, settings, profile
+- **Left sidebar** — chats, projects, file tree with context checkboxes
+- **Center** — welcome, history, prompt input
+- **Right sidebar** — Round Table weights, streaming, metrics
+- **Projects** — pick a folder (+), lazy tree, per-file R/W/context flags (`localStorage`); needs the Tauri app for folder picker
+
+---
+
+## Roadmap
+
+- Model providers (OpenRouter, OpenAI, Anthropic, Gemini, Ollama)
+- SQLite + FTS5 for chats/projects
+- Permissions → AI context injection
+- Round Table multi-model synthesis
+- Keyboard shortcuts (⌘1–4, `/`, `@`)
