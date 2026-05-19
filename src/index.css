@@ -34,6 +34,18 @@
   #root {
     @apply h-full w-full overflow-hidden bg-black text-foreground antialiased;
     font-family: var(--font-sans);
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+    box-shadow: none;
+  }
+
+  /* Prevent focus rings / borders from showing as a window-edge tint */
+  html:focus,
+  body:focus,
+  #root:focus {
+    outline: none;
   }
 
   ::-webkit-scrollbar {

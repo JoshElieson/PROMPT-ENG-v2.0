@@ -1,10 +1,20 @@
 import type { Chat } from "@/types/chat";
 
+export const MESSAGE_TIME_GAP_MS = 10 * 60 * 1000;
+
 export function formatChatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+export function shouldShowMessageTime(
+  currentCreatedAt: number,
+  previousCreatedAt: number | undefined,
+): boolean {
+  if (previousCreatedAt == null) return false;
+  return currentCreatedAt - previousCreatedAt >= MESSAGE_TIME_GAP_MS;
 }
 
 export function titleFromMessage(content: string): string {

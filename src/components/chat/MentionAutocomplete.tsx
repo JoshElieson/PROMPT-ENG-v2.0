@@ -1,3 +1,4 @@
+import { ModelLogo } from "@/components/models/ModelLogo";
 import type { AiModel } from "@/data/ai-models";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +32,10 @@ export function MentionAutocomplete({
             type="button"
             onMouseDown={(e) => {
               e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
               onSelect(model);
             }}
             className={cn(
@@ -40,12 +45,7 @@ export function MentionAutocomplete({
                 : "hover:bg-panel-elevated",
             )}
           >
-            <span
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white"
-              style={{ backgroundColor: model.color }}
-            >
-              {model.initial}
-            </span>
+            <ModelLogo orgId={model.orgId} size="sm" />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{model.name}</span>
               <span className="block truncate text-xs text-muted">

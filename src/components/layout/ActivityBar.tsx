@@ -1,7 +1,11 @@
-import { Bot, MessageSquare, Settings, User } from "lucide-react";
+import { Bot, MessageSquare, Settings } from "lucide-react";
+import { AccountMenu } from "@/components/auth/AccountMenu";
+import { SourceControlIcon } from "@/components/git/SourceControlIcon";
+import { useGit } from "@/contexts/GitContext";
+import { getGitChangeCount } from "@/lib/git-utils";
 import { cn } from "@/lib/utils";
 
-export type SidebarView = "explorer" | "agents";
+export type SidebarView = "explorer" | "agents" | "git";
 
 interface ActivityBarProps {
   activeView: SidebarView;
@@ -25,14 +29,14 @@ function ActivityButton({
       title={title}
       onClick={onClick}
       className={cn(
-        "relative flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors",
+        "relative flex h-9 w-9 items-center justify-center transition-colors",
         active
-          ? "border border-foreground bg-panel-elevated text-foreground"
-          : "border border-transparent hover:bg-panel-elevated hover:text-foreground",
+          ? "text-accent"
+          : "text-muted-foreground hover:bg-panel-elevated/60",
       )}
     >
       {active && (
-        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 bg-foreground" />
+        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 bg-accent" />
       )}
       {children}
     </button>
@@ -40,6 +44,13 @@ function ActivityButton({
 }
 
 export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
+  const { status } = useGit();
+  const changeCount = getGitChangeCount(status);
+  const scTitle =
+    changeCount > 0
+      ? `Source Control (${changeCount} change${changeCount === 1 ? "" : "s"})`
+      : "Source Control";
+
   return (
     <aside className="flex w-12 shrink-0 flex-col items-center border-r border-border-subtle bg-surface py-3">
       <div className="flex flex-col gap-1">
@@ -57,6 +68,13 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
         >
           <MessageSquare className="h-4 w-4" />
         </ActivityButton>
+        <ActivityButton
+          title={scTitle}
+          active={activeView === "git"}
+          onClick={() => onViewChange("git")}
+        >
+          <SourceControlIcon className="h-4 w-4" changeCount={changeCount} />
+        </ActivityButton>
       </div>
 
       <div className="mt-auto flex flex-col items-center gap-2">
@@ -67,14 +85,7 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
         >
           <Settings className="h-4 w-4" />
         </button>
-        <button
-          type="button"
-          title="Profile"
-          className="relative flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-panel-elevated hover:text-foreground"
-        >
-          <User className="h-4 w-4" />
-          <span className="absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full bg-success ring-2 ring-surface" />
-        </button>
+        <AccountMenu />
       </div>
     </aside>
   );

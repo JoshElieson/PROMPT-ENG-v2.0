@@ -32,7 +32,7 @@ export function TitleBar() {
     <header
       className={cn(
         "flex h-8 shrink-0 select-none items-stretch",
-        "border-b border-border-subtle bg-black text-foreground",
+        "border-0 border-b border-border-subtle bg-black text-foreground",
       )}
     >
       <div

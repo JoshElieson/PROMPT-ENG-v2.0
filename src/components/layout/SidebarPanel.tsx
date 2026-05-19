@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 
 interface SidebarPanelProps {
   title: string;
+  titleIcon?: ReactNode;
   active?: boolean;
   children: ReactNode;
   headerExtra?: ReactNode;
@@ -10,6 +11,7 @@ interface SidebarPanelProps {
 
 export function SidebarPanel({
   title,
+  titleIcon,
   active,
   children,
   headerExtra,
@@ -29,10 +31,11 @@ export function SidebarPanel({
       >
         <h3
           className={cn(
-            "text-[11px] font-semibold uppercase tracking-wider",
+            "flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider",
             active ? "text-accent" : "text-muted",
           )}
         >
+          {titleIcon}
           {title}
         </h3>
         {headerExtra}

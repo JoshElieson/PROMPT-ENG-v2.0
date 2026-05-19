@@ -1,6 +1,7 @@
 import { ResizablePanels, ResizableSidebar } from "@/components/ui/resizable-panels";
 import { AgentCartPanel } from "@/components/layout/AgentCartPanel";
 import { ChatHistoryPanel } from "@/components/layout/ChatHistoryPanel";
+import { GitPanel } from "@/components/layout/GitPanel";
 import { ProjectsPanel } from "@/components/layout/ProjectsPanel";
 import type { SidebarView } from "@/components/layout/ActivityBar";
 
@@ -10,6 +11,8 @@ interface LeftSidebarProps {
 
 export function LeftSidebar({ activeSection }: LeftSidebarProps) {
   const isExplorer = activeSection === "explorer";
+  const isGit = activeSection === "git";
+  const isAgents = activeSection === "agents";
 
   return (
     <ResizableSidebar
@@ -40,11 +43,15 @@ export function LeftSidebar({ activeSection }: LeftSidebarProps) {
             },
           ]}
         />
-      ) : (
+      ) : isGit ? (
+        <section key="git" className="flex min-h-0 flex-1 flex-col">
+          <GitPanel active />
+        </section>
+      ) : isAgents ? (
         <section key="agents" className="flex min-h-0 flex-1 flex-col">
           <AgentCartPanel active />
         </section>
-      )}
+      ) : null}
 
       <footer className="shrink-0 border-t border-border-subtle px-3 py-2">
         <p className="text-xs text-muted-foreground">

@@ -26,6 +26,7 @@ interface GitContextValue {
   fetch: () => Promise<void>;
   init: () => Promise<void>;
   clone: (url: string, parentPath: string) => Promise<GitCommandResult>;
+  commit: (message: string, stageAll?: boolean) => Promise<void>;
   clearMessage: () => void;
 }
 
@@ -152,6 +153,14 @@ export function GitProvider({ children }: { children: ReactNode }) {
     [setMessage],
   );
 
+  const commit = useCallback(
+    async (message: string, stageAll = false) => {
+      if (!repoPath) return;
+      await runOp("Committed.", () => git.gitCommit(repoPath, message, stageAll));
+    },
+    [repoPath, runOp],
+  );
+
   const clearMessage = useCallback(() => setLastMessage(null), []);
 
   const value = useMemo(
@@ -170,6 +179,7 @@ export function GitProvider({ children }: { children: ReactNode }) {
       fetch: fetchRemote,
       init,
       clone,
+      commit,
       clearMessage,
     }),
     [
@@ -186,6 +196,7 @@ export function GitProvider({ children }: { children: ReactNode }) {
       fetchRemote,
       init,
       clone,
+      commit,
       clearMessage,
     ],
   );

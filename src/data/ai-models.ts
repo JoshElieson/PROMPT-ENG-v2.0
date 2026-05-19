@@ -18,7 +18,7 @@ export interface AiModel {
 export const modelOrgs: ModelOrg[] = [
   { id: "openai", name: "ChatGPT", color: "#10a37f", initial: "G" },
   { id: "anthropic", name: "Claude", color: "#d97757", initial: "C" },
-  { id: "google", name: "Gemini", color: "#4285f4", initial: "G" },
+  { id: "google", name: "Gemini", color: "#3186FF", initial: "G" },
   { id: "deepseek", name: "DeepSeek", color: "#6366f1", initial: "D" },
   { id: "meta", name: "Llama", color: "#0668E1", initial: "L" },
   { id: "mistral", name: "Mistral", color: "#f97316", initial: "M" },

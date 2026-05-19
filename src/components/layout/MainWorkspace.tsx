@@ -1,16 +1,18 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { LayoutGrid } from "lucide-react";
 
+import { ActiveModelsBar } from "@/components/chat/ActiveModelsBar";
 import { ChatComposer } from "@/components/chat/ChatComposer";
-
 import { MessageBubble } from "@/components/chat/MessageBubble";
+import { ResponseLoadingView } from "@/components/chat/ResponseLoadingView";
 
 import { MenuBar } from "@/components/layout/MenuBar";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { useChats } from "@/contexts/ChatsContext";
+import { shouldShowMessageTime } from "@/lib/chat-utils";
 
 import { keyboardShortcuts } from "@/data/mock";
 
@@ -18,7 +20,7 @@ import { keyboardShortcuts } from "@/data/mock";
 
 export function MainWorkspace() {
 
-  const { activeChat } = useChats();
+  const { activeChat, responseLoading } = useChats();
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -31,14 +33,14 @@ export function MainWorkspace() {
 
 
   const scrollToEnd = () => {
-
     requestAnimationFrame(() => {
-
       scrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-
     });
-
   };
+
+  useEffect(() => {
+    if (responseLoading) scrollToEnd();
+  }, [responseLoading]);
 
 
 
@@ -66,7 +68,7 @@ export function MainWorkspace() {
 
       </header>
 
-
+      <ActiveModelsBar />
 
       <ScrollArea className="relative flex-1">
 
@@ -122,11 +124,20 @@ export function MainWorkspace() {
 
           <section className="mx-auto max-w-2xl space-y-4 px-6 py-4">
 
-            {messages.map((message) => (
-
-              <MessageBubble key={message.id} message={message} />
-
+            {messages.map((message, index) => (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                showTime={shouldShowMessageTime(
+                  message.createdAt,
+                  messages[index - 1]?.createdAt,
+                )}
+              />
             ))}
+
+            {responseLoading && (
+              <ResponseLoadingView loading={responseLoading} />
+            )}
 
             <div ref={scrollRef} aria-hidden className="h-px" />
 

@@ -42,3 +42,12 @@ export async function gitClone(
   requireTauri();
   return invoke<GitCommandResult>("git_clone", { url, parentPath });
 }
+
+export async function gitCommit(
+  path: string,
+  message: string,
+  stageAll = false,
+): Promise<GitCommandResult> {
+  requireTauri();
+  return invoke<GitCommandResult>("git_commit", { path, message, stageAll });
+}

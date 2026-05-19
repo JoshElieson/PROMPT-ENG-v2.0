@@ -64,6 +64,14 @@ export function getMentionQuery(
   const between = before.slice(at + 1);
   if (/\s/.test(between)) return null;
 
+  // Cursor is after a completed @mention token — not an active query
+  const tokenMatch = value.slice(at + 1).match(/^([a-z0-9][a-z0-9_-]*)/i);
+  if (tokenMatch) {
+    const model = getModelById(tokenMatch[1]);
+    const tokenEnd = at + 1 + tokenMatch[1].length;
+    if (model && cursor >= tokenEnd) return null;
+  }
+
   return { start: at, query: between.toLowerCase() };
 }
 

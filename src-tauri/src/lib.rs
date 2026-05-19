@@ -2,7 +2,9 @@ mod fs;
 mod git;
 
 use fs::list_directory;
-use git::{git_clone, git_fetch, git_init, git_pull, git_push, git_status};
+use git::{
+    git_clone, git_commit, git_fetch, git_init, git_pull, git_push, git_status,
+};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -18,10 +20,12 @@ pub fn run() {
             git_fetch,
             git_init,
             git_clone,
+            git_commit,
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_theme(Some(tauri::Theme::Dark));
+                let _ = window.set_shadow(false);
             }
             Ok(())
         })

@@ -230,7 +230,7 @@ export function ResizableSidebar({
           side === "left" ? "-right-0.5" : "-left-0.5",
         )}
       >
-        <span className="h-10 w-0.5 bg-border transition-colors hover:bg-muted-foreground/40 active:bg-foreground" />
+        <span className="h-10 w-0.5 bg-border transition-colors hover:bg-muted-foreground/40 active:bg-muted-foreground/60" />
       </div>
     </aside>
   );

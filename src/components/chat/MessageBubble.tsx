@@ -1,6 +1,10 @@
+import { useCallback, useState } from "react";
+import { Check, Copy } from "lucide-react";
 import type { ChatMessage } from "@/types/chat";
 import { getModelById } from "@/data/ai-models";
 import { AttachmentChips } from "@/components/chat/AttachmentChips";
+import { ModelContributionHover } from "@/components/chat/ModelContributionHover";
+import { Button } from "@/components/ui/button";
 import { formatChatTime } from "@/lib/chat-utils";
 import { cn } from "@/lib/utils";
 
@@ -27,64 +31,82 @@ function MessageContent({ content }: { content: string }) {
   );
 }
 
-interface MessageBubbleProps {
-  message: ChatMessage;
+function CopyResponseButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }, [content]);
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      title={copied ? "Copied" : "Copy response"}
+      aria-label={copied ? "Copied" : "Copy response"}
+      className="absolute right-1 top-1 h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+      onClick={() => void handleCopy()}
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-success" aria-hidden />
+      ) : (
+        <Copy className="h-3.5 w-3.5" aria-hidden />
+      )}
+    </Button>
+  );
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+interface MessageBubbleProps {
+  message: ChatMessage;
+  showTime?: boolean;
+}
+
+export function MessageBubble({ message, showTime = false }: MessageBubbleProps) {
   const isSent = message.role === "user";
-  const targets =
-    message.targetModelIds
-      ?.map((id) => getModelById(id))
-      .filter((m) => m != null) ?? [];
+  const showModelBlend =
+    !isSent &&
+    message.modelContributions != null &&
+    message.modelContributions.length > 0;
 
   return (
     <article
       className={cn(
-        "flex w-full flex-col gap-2",
+        "flex w-full flex-col",
+        showTime ? "gap-2" : "gap-0",
         isSent ? "items-end" : "items-start",
       )}
     >
-      <p
-        className={cn(
-          "text-xs text-muted",
-          isSent ? "text-right" : "text-left",
-        )}
-      >
-        {isSent ? "You" : "Assistant"}{" "}
-        <span className="text-muted-foreground">
+      {showTime && (
+        <p
+          className={cn(
+            "text-xs text-muted-foreground",
+            isSent ? "text-right" : "text-left",
+          )}
+        >
           {formatChatTime(message.createdAt)}
-        </span>
-      </p>
-
-      {targets.length > 0 && isSent && (
-        <p className="flex max-w-[85%] flex-wrap justify-end gap-1">
-          <span className="text-[10px] uppercase tracking-wider text-muted">
-            To:
-          </span>
-          {targets.map((model) => (
-            <span
-              key={model.id}
-              className="inline-flex items-center gap-1 border border-border-subtle px-2 py-0.5 text-[11px]"
-            >
-              <span
-                className="h-1.5 w-1.5"
-                style={{ backgroundColor: model.color }}
-              />
-              {model.name}
-            </span>
-          ))}
         </p>
       )}
 
       <section
         className={cn(
-          "max-w-[85%] border px-4 py-3",
+          "relative max-w-[85%] border px-4 py-3",
           isSent
             ? "border-accent/30 bg-accent/10"
-            : "border-border bg-panel",
+            : "border-border bg-panel pr-10",
+          showModelBlend && "group/message cursor-default",
         )}
       >
+        {!isSent && <CopyResponseButton content={message.content} />}
+        {showModelBlend && (
+          <ModelContributionHover contributions={message.modelContributions!} />
+        )}
         {message.attachments && message.attachments.length > 0 && (
           <div className="-mx-1 mb-2">
             <AttachmentChips attachments={message.attachments} readonly />

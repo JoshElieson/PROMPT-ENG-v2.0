@@ -9,6 +9,7 @@ import {
   type AiModel,
   type ModelOrg,
 } from "@/data/ai-models";
+import { ModelLogo } from "@/components/models/ModelLogo";
 import { useRoundTable } from "@/context/RoundTableContext";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ function FlyoutModelItem({
         onChange={onToggle}
         className="h-3.5 w-3.5 shrink-0 border-border bg-panel accent-foreground"
       />
+      <ModelLogo orgId={model.orgId} size="sm" />
       <span className="min-w-0 flex-1 truncate font-medium">{model.name}</span>
       <span className="shrink-0 text-[10px] text-muted">{model.role}</span>
     </label>
@@ -132,12 +134,7 @@ function OrgCartRow({
       onFocus={handleOpen}
       onBlur={onClose}
     >
-      <span
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
-        style={{ backgroundColor: org.color }}
-      >
-        {org.initial}
-      </span>
+      <ModelLogo orgId={org.id} size="md" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{org.name}</span>
         <span className="mt-0.5 block truncate text-[11px] text-muted">

@@ -187,7 +187,7 @@ pub fn git_pull(path: String) -> Result<GitCommandResult, String> {
     if !is_git_repo(&path) {
         return Err("Not a git repository.".to_string());
     }
-    match run_git(&path, &["pull", "--ff-only"]) {
+    match run_git(&path, &["pull"]) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
             output,
@@ -243,6 +243,41 @@ pub fn git_init(path: String) -> Result<GitCommandResult, String> {
         return Err("Already a git repository.".to_string());
     }
     match run_git(&path, &["init"]) {
+        Ok(output) => Ok(GitCommandResult {
+            success: true,
+            output,
+        }),
+        Err(e) => Ok(GitCommandResult {
+            success: false,
+            output: e,
+        }),
+    }
+}
+
+#[tauri::command]
+pub fn git_commit(
+    path: String,
+    message: String,
+    stage_all: bool,
+) -> Result<GitCommandResult, String> {
+    if !is_git_repo(&path) {
+        return Err("Not a git repository.".to_string());
+    }
+    let message = message.trim();
+    if message.is_empty() {
+        return Err("Commit message cannot be empty.".to_string());
+    }
+
+    if stage_all {
+        if let Err(e) = run_git(&path, &["add", "-A"]) {
+            return Ok(GitCommandResult {
+                success: false,
+                output: e,
+            });
+        }
+    }
+
+    match run_git(&path, &["commit", "-m", message]) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
             output,
