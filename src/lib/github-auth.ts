@@ -119,9 +119,84 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function extractAccessTokenFromPoll(
+  result: Record<string, unknown>,
+): string | undefined {
+  if (typeof result.accessToken === "string") return result.accessToken;
+  if (typeof result.access_token === "string") return result.access_token;
+
+  for (const key of ["Token", "token"]) {
+    const nested = result[key];
+    if (nested && typeof nested === "object") {
+      const obj = nested as Record<string, unknown>;
+      if (typeof obj.accessToken === "string") return obj.accessToken;
+      if (typeof obj.access_token === "string") return obj.access_token;
+    }
+  }
+
+  return undefined;
+}
+
+async function pollGitHubDeviceFlowTauri(
+  pending: DeviceFlowPending,
+  signal?: AbortSignal,
+  onAttempt?: (attempt: number) => void,
+): Promise<string> {
+  const clientId = getGitHubClientId();
+  if (!clientId) {
+    throw new Error("GitHub client ID is not configured.");
+  }
+
+  const pendingWithExpiry = pending as DeviceFlowPending & { expiresAt?: number };
+  const deadline =
+    pendingWithExpiry.expiresAt ?? Date.now() + pending.expiresIn * 1000;
+  let intervalMs = Math.max(pending.interval * 1000, 1000);
+  let attempt = 0;
+
+  while (Date.now() < deadline) {
+    if (signal?.aborted) {
+      throw new Error("Sign-in cancelled");
+    }
+
+    attempt += 1;
+    onAttempt?.(attempt);
+
+    let result: Record<string, unknown>;
+    try {
+      result = await invoke<Record<string, unknown>>("github_poll_device_token", {
+        clientId,
+        deviceCode: pending.deviceCode,
+      });
+    } catch (e) {
+      throw new Error(
+        e instanceof Error ? e.message : "Could not reach GitHub to complete sign-in.",
+      );
+    }
+
+    const status = String(result.status ?? "").toLowerCase();
+    const token = extractAccessTokenFromPoll(result);
+    if (token) return token;
+
+    if (status === "slowdown" || status === "slow_down") {
+      intervalMs += 5000;
+    } else if (status && status !== "pending") {
+      throw new Error(
+        typeof result.error === "string"
+          ? result.error
+          : `GitHub sign-in failed (${status}).`,
+      );
+    }
+
+    await delay(intervalMs);
+  }
+
+  throw new Error("Sign-in timed out. Please try again.");
+}
+
 export async function pollGitHubDeviceFlow(
   pending: DeviceFlowPending,
   signal?: AbortSignal,
+  onAttempt?: (attempt: number) => void,
 ): Promise<string> {
   const clientId = getGitHubClientId();
   if (!clientId) {
@@ -133,21 +208,20 @@ export async function pollGitHubDeviceFlow(
   }
 
   if (isTauri()) {
-    return invoke<string>("github_wait_for_device_token", {
-      clientId,
-      deviceCode: pending.deviceCode,
-      intervalSecs: pending.interval,
-      expiresInSecs: pending.expiresIn,
-    });
+    return pollGitHubDeviceFlowTauri(pending, signal, onAttempt);
   }
 
   const deadline = Date.now() + pending.expiresIn * 1000;
   let intervalMs = pending.interval * 1000;
+  let attempt = 0;
 
   while (Date.now() < deadline) {
     if (signal?.aborted) {
       throw new Error("Sign-in cancelled");
     }
+
+    attempt += 1;
+    onAttempt?.(attempt);
 
     const data = await postFormBrowser(`${OAUTH_BASE}${ACCESS_TOKEN_PATH}`, {
       client_id: clientId,
@@ -178,17 +252,23 @@ export async function pollGitHubDeviceFlow(
   throw new Error("Sign-in timed out. Please try again.");
 }
 
-function normalizeGitHubUser(raw: GitHubUser & { avatarUrl?: string }): GitHubUser {
-  if (!raw?.login) {
+function normalizeGitHubUser(raw: unknown): GitHubUser {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Could not load your GitHub profile.");
+  }
+
+  const data = raw as GitHubUser & { avatarUrl?: string };
+  const login = data.login;
+  if (!login || typeof login !== "string") {
     throw new Error("Could not load your GitHub profile.");
   }
 
   return {
-    id: raw.id,
-    login: raw.login,
-    name: raw.name ?? null,
-    avatar_url: raw.avatar_url ?? raw.avatarUrl ?? "",
-    email: raw.email ?? null,
+    id: typeof data.id === "number" ? data.id : 0,
+    login,
+    name: data.name ?? null,
+    avatar_url: data.avatar_url ?? data.avatarUrl ?? "",
+    email: data.email ?? null,
   };
 }
 
@@ -197,16 +277,21 @@ type RawAuthSession = AuthSession & {
   login_at?: number;
 };
 
-export function normalizeAuthSession(raw: RawAuthSession): AuthSession {
-  const accessToken = raw.accessToken ?? raw.access_token;
-  if (!accessToken) {
+export function normalizeAuthSession(raw: unknown): AuthSession {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("GitHub did not return a valid sign-in session.");
+  }
+
+  const data = raw as RawAuthSession;
+  const accessToken = data.accessToken ?? data.access_token;
+  if (!accessToken || typeof accessToken !== "string") {
     throw new Error("GitHub did not return an access token.");
   }
 
   return {
     accessToken,
-    loginAt: raw.loginAt ?? raw.login_at ?? Date.now(),
-    user: normalizeGitHubUser(raw.user),
+    loginAt: data.loginAt ?? data.login_at ?? Date.now(),
+    user: normalizeGitHubUser(data.user),
   };
 }
 
@@ -223,6 +308,7 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser> 
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${accessToken}`,
       "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "PromptEng/2.0",
     },
   });
 
@@ -237,6 +323,7 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser> 
 export async function completeGitHubDeviceLogin(
   pending: DeviceFlowPending,
   signal?: AbortSignal,
+  onPollAttempt?: (attempt: number) => void,
 ): Promise<AuthSession> {
   const clientId = getGitHubClientId();
   if (!clientId) {
@@ -247,17 +334,7 @@ export async function completeGitHubDeviceLogin(
     throw new Error("Missing device code. Please try signing in again.");
   }
 
-  if (isTauri()) {
-    const session = await invoke<RawAuthSession>("github_complete_device_login", {
-      clientId,
-      deviceCode: pending.deviceCode,
-      intervalSecs: pending.interval,
-      expiresInSecs: pending.expiresIn,
-    });
-    return normalizeAuthSession(session);
-  }
-
-  const accessToken = await pollGitHubDeviceFlow(pending, signal);
+  const accessToken = await pollGitHubDeviceFlow(pending, signal, onPollAttempt);
   const user = await fetchGitHubUser(accessToken);
   return { accessToken, user, loginAt: Date.now() };
 }

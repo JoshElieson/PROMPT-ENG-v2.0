@@ -14,7 +14,7 @@ export function GitHubAuthStatus({
   variant = "statusbar",
   className,
 }: GitHubAuthStatusProps) {
-  const { session, isLoggingIn, isHydrated, isConfigured } = useAuth();
+  const { session, isLoggingIn, deviceFlow, isHydrated, isConfigured } = useAuth();
 
   const isMenu = variant === "menu";
 
@@ -33,7 +33,7 @@ export function GitHubAuthStatus({
     );
   }
 
-  if (isLoggingIn) {
+  if (isLoggingIn || deviceFlow) {
     return (
       <span
         className={cn(
@@ -44,8 +44,10 @@ export function GitHubAuthStatus({
       >
         <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
         <GitHubIcon className="h-3.5 w-3.5 shrink-0" />
-        <span className={isMenu ? "text-xs font-medium" : "text-[11px]"}>
-          GitHub: Signing in…
+        <span className={cn("min-w-0", isMenu ? "text-xs font-medium" : "text-[11px]")}>
+          {isMenu
+            ? "Finishing GitHub sign-in…"
+            : "GitHub: Finishing sign-in…"}
         </span>
       </span>
     );

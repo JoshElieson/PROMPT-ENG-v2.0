@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   clearAuthSession,
   loadAuthSession,
@@ -19,7 +18,11 @@ import {
   isGitHubAuthConfigured,
   startGitHubDeviceFlow,
 } from "@/lib/github-auth";
-import { isTauri } from "@/lib/tauri";
+import {
+  clearPendingGitHubAuth,
+  loadPendingGitHubAuth,
+  savePendingGitHubAuth,
+} from "@/lib/github-pending-auth";
 import type { AuthSession, DeviceFlowPending } from "@/types/auth";
 
 interface AuthContextValue {
@@ -28,23 +31,34 @@ interface AuthContextValue {
   isConfigured: boolean;
   isLoggingIn: boolean;
   deviceFlow: DeviceFlowPending | null;
+  pollAttempt: number;
   error: string | null;
   startGitHubLogin: () => Promise<void>;
   cancelLogin: () => void;
   logout: () => void;
   clearError: () => void;
+  resumePendingLogin: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "GitHub sign-in failed. Please try again.";
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [deviceFlow, setDeviceFlow] = useState<DeviceFlowPending | null>(null);
+  const [pollAttempt, setPollAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+
   const loginGenerationRef = useRef(0);
+  const pollingDeviceCodeRef = useRef<string | null>(null);
+  const pollAbortRef = useRef<AbortController | null>(null);
 
   const refreshSession = useCallback(async () => {
     const stored = await loadAuthSession();
@@ -52,14 +66,98 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return stored;
   }, []);
 
+  const runPoll = useCallback(async (pending: DeviceFlowPending) => {
+    if (!pending.deviceCode) {
+      setError("Missing device code. Start sign-in again.");
+      return;
+    }
+
+    if (pollingDeviceCodeRef.current === pending.deviceCode) {
+      return;
+    }
+
+    pollingDeviceCodeRef.current = pending.deviceCode;
+    const generation = loginGenerationRef.current;
+
+    pollAbortRef.current?.abort();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+
+    setIsLoggingIn(true);
+    setDeviceFlow(pending);
+    setError(null);
+    setPollAttempt(0);
+
+    try {
+      const nextSession = await completeGitHubDeviceLogin(
+        pending,
+        controller.signal,
+        (attempt) => {
+          if (generation === loginGenerationRef.current) {
+            setPollAttempt(attempt);
+          }
+        },
+      );
+
+      if (generation !== loginGenerationRef.current) return;
+      if (controller.signal.aborted) return;
+
+      clearPendingGitHubAuth();
+      setSession(nextSession);
+      setDeviceFlow(null);
+      setError(null);
+      pollingDeviceCodeRef.current = null;
+      void saveAuthSession(nextSession);
+    } catch (e) {
+      if (generation !== loginGenerationRef.current) return;
+      if (controller.signal.aborted) return;
+
+      pollingDeviceCodeRef.current = null;
+      const message = getErrorMessage(e);
+      console.error("[auth] GitHub sign-in failed:", message);
+      setError(message);
+      setDeviceFlow(loadPendingGitHubAuth() ?? pending);
+    } finally {
+      if (pollAbortRef.current === controller) {
+        pollAbortRef.current = null;
+      }
+      if (pollingDeviceCodeRef.current === pending.deviceCode) {
+        pollingDeviceCodeRef.current = null;
+      }
+      if (generation === loginGenerationRef.current) {
+        setIsLoggingIn(false);
+      }
+    }
+  }, []);
+
+  const resumePendingLogin = useCallback(async () => {
+    if (session) return;
+
+    const pending = loadPendingGitHubAuth() ?? deviceFlow;
+    if (!pending?.deviceCode) {
+      setError("No pending sign-in. Start sign-in again.");
+      return;
+    }
+
+    pollingDeviceCodeRef.current = null;
+    await runPoll(pending);
+  }, [session, deviceFlow, runPoll]);
+
   useEffect(() => {
     let cancelled = false;
 
-    void loadAuthSession().then((stored) => {
+    void (async () => {
+      const stored = await loadAuthSession();
       if (cancelled) return;
-      if (stored) setSession(stored);
+      if (stored) {
+        setSession(stored);
+        clearPendingGitHubAuth();
+      } else {
+        const pending = loadPendingGitHubAuth();
+        if (pending) setDeviceFlow(pending);
+      }
       setIsHydrated(true);
-    });
+    })();
 
     return () => {
       cancelled = true;
@@ -67,46 +165,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void refreshSession();
-      }
-    };
+    if (!deviceFlow?.deviceCode || session) return;
+    void runPoll(deviceFlow);
+  }, [deviceFlow?.deviceCode, session, runPoll]);
 
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshSession();
+    };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [refreshSession]);
 
-  useEffect(() => {
-    if (!isTauri()) return;
-
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-
-    void getCurrentWindow()
-      .onFocusChanged(({ payload: focused }) => {
-        if (focused && !disposed) void refreshSession();
-      })
-      .then((fn) => {
-        if (disposed) {
-          fn();
-          return;
-        }
-        unlisten = fn;
-      });
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [refreshSession]);
-
   const cancelLogin = useCallback(() => {
     loginGenerationRef.current += 1;
-    abortRef.current?.abort();
-    abortRef.current = null;
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = null;
+    pollingDeviceCodeRef.current = null;
+    clearPendingGitHubAuth();
     setIsLoggingIn(false);
     setDeviceFlow(null);
+    setPollAttempt(0);
   }, []);
 
   const logout = useCallback(() => {
@@ -126,45 +206,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    cancelLogin();
+    loginGenerationRef.current += 1;
     const generation = loginGenerationRef.current;
+
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = null;
+    pollingDeviceCodeRef.current = null;
+    clearPendingGitHubAuth();
+
     setError(null);
+    setPollAttempt(0);
     setIsLoggingIn(true);
+    setDeviceFlow(null);
 
     try {
       const pending = await startGitHubDeviceFlow();
       if (generation !== loginGenerationRef.current) return;
 
+      savePendingGitHubAuth(pending);
       setDeviceFlow(pending);
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      const nextSession = await completeGitHubDeviceLogin(
-        pending,
-        controller.signal,
-      );
-      if (generation !== loginGenerationRef.current) return;
-
-      setSession(nextSession);
-      setDeviceFlow(null);
-      void saveAuthSession(nextSession);
     } catch (e) {
-      if (generation !== loginGenerationRef.current) return;
-
-      if (e instanceof Error && e.message !== "Sign-in cancelled") {
-        setError(e.message);
-      }
+      setError(getErrorMessage(e));
       setDeviceFlow(null);
-    } finally {
-      if (generation === loginGenerationRef.current) {
-        abortRef.current = null;
-        setIsLoggingIn(false);
-      }
+      setIsLoggingIn(false);
     }
-  }, [cancelLogin]);
+  }, []);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => () => pollAbortRef.current?.abort(), []);
 
   const value = useMemo(
     () => ({
@@ -173,22 +241,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isConfigured: isGitHubAuthConfigured(),
       isLoggingIn,
       deviceFlow,
+      pollAttempt,
       error,
       startGitHubLogin,
       cancelLogin,
       logout,
       clearError,
+      resumePendingLogin,
     }),
     [
       session,
       isHydrated,
       isLoggingIn,
       deviceFlow,
+      pollAttempt,
       error,
       startGitHubLogin,
       cancelLogin,
       logout,
       clearError,
+      resumePendingLogin,
     ],
   );
 

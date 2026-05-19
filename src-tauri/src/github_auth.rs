@@ -5,6 +5,27 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const DEVICE_CODE_URL: &str = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
 const USER_API_URL: &str = "https://api.github.com/user";
+const GITHUB_USER_AGENT: &str = "PromptEng/2.0 (Tauri; +https://github.com/login/device)";
+
+fn github_http_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .user_agent(GITHUB_USER_AGENT)
+        .build()
+        .map_err(|e| format!("Could not create HTTP client: {e}"))
+}
+
+/// Raw `/user` JSON from GitHub (snake_case field names).
+#[derive(Debug, Deserialize)]
+struct GitHubApiUser {
+    id: u64,
+    login: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    avatar_url: String,
+    #[serde(default)]
+    email: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,12 +37,14 @@ pub struct DeviceFlowPending {
     pub interval: u64,
 }
 
+/// GitHub API uses snake_case; Tauri IPC uses camelCase via `#[serde(rename_all)]` on commands.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubUser {
     pub id: u64,
     pub login: String,
     pub name: Option<String>,
+    #[serde(alias = "avatar_url")]
     pub avatar_url: String,
     pub email: Option<String>,
 }
@@ -38,7 +61,7 @@ async fn post_form(
     url: &str,
     body: &HashMap<String, String>,
 ) -> Result<HashMap<String, serde_json::Value>, String> {
-    let client = reqwest::Client::new();
+    let client = github_http_client()?;
     let res = client
         .post(url)
         .header("Accept", "application/json")
@@ -105,6 +128,15 @@ enum PollOutcome {
     SlowDown,
 }
 
+/// Flat shape so the webview always gets `{ status, accessToken? }`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DevicePollResponse {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access_token: Option<String>,
+}
+
 fn parse_token_poll_response(
     data: HashMap<String, serde_json::Value>,
 ) -> Result<PollOutcome, String> {
@@ -150,9 +182,9 @@ async fn wait_for_device_token(
         return Err("Missing device code. Please try signing in again.".into());
     }
 
-    let http = reqwest::Client::new();
+    let http = github_http_client()?;
     let deadline = Instant::now() + Duration::from_secs(expires_in_secs.max(60));
-    let mut interval = Duration::from_secs(interval_secs.max(2));
+    let mut interval = Duration::from_secs(interval_secs.max(1));
 
     loop {
         if Instant::now() >= deadline {
@@ -177,7 +209,7 @@ async fn fetch_github_user(access_token: &str) -> Result<GitHubUser, String> {
         return Err("Missing access token.".into());
     }
 
-    let client = reqwest::Client::new();
+    let client = github_http_client()?;
     let res = client
         .get(USER_API_URL)
         .header("Accept", "application/vnd.github+json")
@@ -187,16 +219,34 @@ async fn fetch_github_user(access_token: &str) -> Result<GitHubUser, String> {
         .await
         .map_err(|e| format!("Network error contacting GitHub: {e}"))?;
 
-    if !res.status().is_success() {
-        return Err("Could not load your GitHub profile.".into());
+    let status = res.status();
+    let body = res
+        .text()
+        .await
+        .map_err(|e| format!("Could not read GitHub profile response: {e}"))?;
+
+    if !status.is_success() {
+        let hint = match status.as_u16() {
+            401 => "The access token was rejected. Cancel and sign in again.",
+            403 => "GitHub blocked the profile request (often missing User-Agent or scopes).",
+            _ => "Check your OAuth app scopes include read:user.",
+        };
+        return Err(format!(
+            "Could not load your GitHub profile (HTTP {}). {hint}",
+            status.as_u16()
+        ));
     }
 
-    let data: GitHubUser = res
-        .json()
-        .await
+    let api: GitHubApiUser = serde_json::from_str(&body)
         .map_err(|e| format!("Invalid profile response from GitHub: {e}"))?;
 
-    Ok(data)
+    Ok(GitHubUser {
+        id: api.id,
+        login: api.login,
+        name: api.name,
+        avatar_url: api.avatar_url,
+        email: api.email,
+    })
 }
 
 fn now_ms() -> u64 {
@@ -236,6 +286,39 @@ pub async fn github_start_device_flow(
         expires_in: value_as_u64(&data, "expires_in").unwrap_or(900),
         interval: value_as_u64(&data, "interval").unwrap_or(5),
     })
+}
+
+#[tauri::command]
+pub async fn github_poll_device_token(
+    client_id: String,
+    device_code: String,
+) -> Result<DevicePollResponse, String> {
+    let client_id = client_id.trim().to_string();
+    let device_code = device_code.trim().to_string();
+    if client_id.is_empty() {
+        return Err("GitHub client ID is not configured.".into());
+    }
+    if device_code.is_empty() {
+        return Err("Missing device code. Please try signing in again.".into());
+    }
+
+    let http = github_http_client()?;
+    let data = poll_device_token_once(&http, &client_id, &device_code).await?;
+
+    match parse_token_poll_response(data)? {
+        PollOutcome::Token(token) => Ok(DevicePollResponse {
+            status: "token".into(),
+            access_token: Some(token),
+        }),
+        PollOutcome::Pending => Ok(DevicePollResponse {
+            status: "pending".into(),
+            access_token: None,
+        }),
+        PollOutcome::SlowDown => Ok(DevicePollResponse {
+            status: "slow_down".into(),
+            access_token: None,
+        }),
+    }
 }
 
 #[tauri::command]
