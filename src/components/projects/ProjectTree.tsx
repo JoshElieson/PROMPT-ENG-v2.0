@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import { listDirectory } from "@/lib/fs";
 import { useProjects } from "@/contexts/ProjectsContext";
-import { PermissionToggles } from "@/components/projects/PermissionToggles";
-import type { FsEntry, NodePermissions, Project } from "@/types/project";
+import { AccessCheckbox } from "@/components/projects/PermissionToggles";
+import type { FsEntry, Project } from "@/types/project";
 import { cn } from "@/lib/utils";
 
 interface ProjectTreeProps {
@@ -63,8 +63,8 @@ function FsTreeNode({
     }
   }, [entry.isDirectory, entry.path, expanded, children]);
 
-  const handlePermissionChange = (patch: Partial<NodePermissions>) => {
-    setPermissions(entry.path, patch);
+  const handleAccessChange = (enabled: boolean) => {
+    setPermissions(entry.path, { enabled });
   };
 
   return (
@@ -106,9 +106,9 @@ function FsTreeNode({
           {entry.name}
         </span>
 
-        <PermissionToggles
-          permissions={permissions}
-          onChange={handlePermissionChange}
+        <AccessCheckbox
+          enabled={permissions.enabled}
+          onChange={handleAccessChange}
         />
 
         {isRoot && projectId && onRemoveProject && (

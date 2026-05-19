@@ -15,6 +15,13 @@
   --color-accent-hover: #ff8555;
   --color-success: #22c55e;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
 }
 
 @layer base {
@@ -25,7 +32,7 @@
   html,
   body,
   #root {
-    @apply h-full w-full overflow-hidden bg-background text-foreground antialiased;
+    @apply h-full w-full overflow-hidden bg-black text-foreground antialiased;
     font-family: var(--font-sans);
   }
 
@@ -40,7 +47,11 @@
 
   ::-webkit-scrollbar-thumb {
     background: #333;
-    border-radius: 3px;
+    border-radius: 0;
+  }
+
+  .rounded-full {
+    border-radius: 0;
   }
 
   ::-webkit-scrollbar-thumb:hover {

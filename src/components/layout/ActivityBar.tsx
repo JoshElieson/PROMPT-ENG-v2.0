@@ -25,14 +25,14 @@ function ActivityButton({
       title={title}
       onClick={onClick}
       className={cn(
-        "relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors",
+        "relative flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors",
         active
-          ? "bg-panel-elevated text-accent ring-1 ring-accent/50"
-          : "hover:bg-panel-elevated hover:text-foreground",
+          ? "border border-foreground bg-panel-elevated text-foreground"
+          : "border border-transparent hover:bg-panel-elevated hover:text-foreground",
       )}
     >
       {active && (
-        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-accent" />
+        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 bg-foreground" />
       )}
       {children}
     </button>
@@ -44,14 +44,14 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
     <aside className="flex w-12 shrink-0 flex-col items-center border-r border-border-subtle bg-surface py-3">
       <div className="flex flex-col gap-1">
         <ActivityButton
-          title="Agents — Model Cart"
+          title="Model Cart"
           active={activeView === "agents"}
           onClick={() => onViewChange("agents")}
         >
           <Bot className="h-4 w-4" />
         </ActivityButton>
         <ActivityButton
-          title="Explorer — Chats & Projects"
+          title="Chats & Projects"
           active={activeView === "explorer"}
           onClick={() => onViewChange("explorer")}
         >
@@ -63,14 +63,14 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
         <button
           type="button"
           title="Settings"
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-panel-elevated hover:text-foreground"
+          className="flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-panel-elevated hover:text-foreground"
         >
           <Settings className="h-4 w-4" />
         </button>
         <button
           type="button"
           title="Profile"
-          className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-panel-elevated hover:text-foreground"
+          className="relative flex h-9 w-9 items-center justify-center text-muted-foreground transition-colors hover:bg-panel-elevated hover:text-foreground"
         >
           <User className="h-4 w-4" />
           <span className="absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full bg-success ring-2 ring-surface" />

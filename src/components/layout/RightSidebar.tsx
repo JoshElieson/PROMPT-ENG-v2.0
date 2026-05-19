@@ -3,7 +3,8 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import { ResizablePanels, ResizableSidebar } from "@/components/ui/resizable-panels";
+import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import { useRoundTable } from "@/context/RoundTableContext";
 import { cn } from "@/lib/utils";
 
@@ -56,53 +57,82 @@ function SkeletonLines() {
   );
 }
 
-export function RightSidebar() {
+function RoundTableSection() {
   const [roundTableEnabled, setRoundTableEnabled] = useState(true);
   const { roundTableModels } = useRoundTable();
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l border-border-subtle bg-panel">
-      <ScrollArea className="flex-1">
+    <SidebarPanel
+      title="Round Table"
+      active
+      headerExtra={
+        <Switch
+          checked={roundTableEnabled}
+          onCheckedChange={setRoundTableEnabled}
+        />
+      }
+    >
+      <ScrollArea className="h-full">
         <section className="p-4">
-          <section className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Round Table</h2>
-            <Switch
-              checked={roundTableEnabled}
-              onCheckedChange={setRoundTableEnabled}
-            />
-          </section>
-
-          {roundTableEnabled && (
-            <section className="mt-2">
+          {roundTableEnabled ? (
+            <>
               {roundTableModels.map((model) => (
                 <ModelRow key={model.id} {...model} />
               ))}
               <p className="border-t border-border-subtle pt-3 text-right text-xs text-muted">
-                Total: <span className="font-medium text-foreground">100%</span>
+                Total:{" "}
+                <span className="font-medium text-foreground">100%</span>
               </p>
-            </section>
+            </>
+          ) : (
+            <p className="text-xs text-muted">Round Table is off</p>
           )}
         </section>
+      </ScrollArea>
+    </SidebarPanel>
+  );
+}
 
-        <Separator />
-
+function ResponseSection() {
+  return (
+    <SidebarPanel title="Response" active>
+      <ScrollArea className="h-full">
         <section className="p-4">
           <section className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Response</h2>
-            <button
-              type="button"
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-panel-elevated"
-            >
+            <span className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground">
               <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
               Streaming
               <ChevronDown className="h-3 w-3" />
-            </button>
+            </span>
           </section>
-
           <p className="mt-3 text-xs text-muted">Synthesizing response...</p>
           <SkeletonLines />
         </section>
       </ScrollArea>
+    </SidebarPanel>
+  );
+}
+
+export function RightSidebar() {
+  return (
+    <ResizableSidebar
+      side="right"
+      defaultWidth={288}
+      minWidth={240}
+      maxWidth={480}
+      storageKey="prompt:right-sidebar-width"
+      className="min-h-0"
+    >
+      <ResizablePanels
+        direction="vertical"
+        storageKey="prompt:right-panels"
+        defaultSizes={[0.55, 0.45]}
+        className="min-h-0 flex-1"
+        panels={[
+          { id: "round-table", minSize: 120, content: <RoundTableSection /> },
+          { id: "response", minSize: 100, content: <ResponseSection /> },
+        ]}
+      />
 
       <footer className="shrink-0 border-t border-border-subtle p-4">
         <section className="grid grid-cols-3 gap-2 text-center">
@@ -136,6 +166,6 @@ export function RightSidebar() {
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
       </footer>
-    </aside>
+    </ResizableSidebar>
   );
 }

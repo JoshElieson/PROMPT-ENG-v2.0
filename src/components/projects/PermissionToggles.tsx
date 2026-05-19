@@ -1,69 +1,45 @@
-import type { NodePermissions } from "@/types/project";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface PermissionTogglesProps {
-  permissions: NodePermissions;
-  onChange: (patch: Partial<NodePermissions>) => void;
-  compact?: boolean;
+interface AccessCheckboxProps {
+  enabled: boolean;
+  onChange: (enabled: boolean) => void;
 }
 
-export function PermissionToggles({
-  permissions,
-  onChange,
-  compact = true,
-}: PermissionTogglesProps) {
+export function AccessCheckbox({ enabled, onChange }: AccessCheckboxProps) {
   return (
-    <span
+    <label
+      title="Give AI full access — context, read & write"
       className={cn(
-        "flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100",
-        (permissions.inContext || permissions.canRead || permissions.canWrite) &&
-          "opacity-100",
+        "relative flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center",
+        "opacity-0 transition-all group-hover:opacity-100",
+        enabled && "opacity-100",
       )}
       onClick={(e) => e.stopPropagation()}
     >
-      <label
-        title="Include in AI context"
+      <input
+        type="checkbox"
+        checked={enabled}
+        onChange={(e) => onChange(e.target.checked)}
+        className="peer sr-only"
+      />
+      <span
         className={cn(
-          "flex cursor-pointer items-center rounded px-0.5",
-          compact && "text-[9px] font-semibold",
+          "flex h-4 w-4 items-center justify-center border transition-all",
+          "border-border bg-panel-elevated",
+          "peer-focus-visible:outline peer-focus-visible:outline-1 peer-focus-visible:outline-offset-0 peer-focus-visible:outline-foreground",
+          "peer-hover:border-muted-foreground/50",
+          "peer-checked:border-foreground peer-checked:bg-foreground",
         )}
       >
-        <input
-          type="checkbox"
-          checked={permissions.inContext}
-          onChange={(e) => onChange({ inContext: e.target.checked })}
-          className="h-3 w-3 rounded border-border bg-panel accent-accent"
+        <Check
+          className={cn(
+            "h-2.5 w-2.5 text-black transition-all duration-150",
+            enabled ? "scale-100 opacity-100" : "scale-75 opacity-0",
+          )}
+          strokeWidth={3}
         />
-        {!compact && <span className="ml-1 text-muted">Ctx</span>}
-      </label>
-      <label
-        title="Allow read access"
-        className={cn(
-          "flex cursor-pointer items-center rounded px-0.5 text-[9px] font-semibold text-muted-foreground",
-        )}
-      >
-        <input
-          type="checkbox"
-          checked={permissions.canRead}
-          onChange={(e) => onChange({ canRead: e.target.checked })}
-          className="h-3 w-3 rounded border-border bg-panel accent-accent"
-        />
-        <span className="ml-0.5">R</span>
-      </label>
-      <label
-        title="Allow write access"
-        className={cn(
-          "flex cursor-pointer items-center rounded px-0.5 text-[9px] font-semibold text-muted-foreground",
-        )}
-      >
-        <input
-          type="checkbox"
-          checked={permissions.canWrite}
-          onChange={(e) => onChange({ canWrite: e.target.checked })}
-          className="h-3 w-3 rounded border-border bg-panel accent-accent"
-        />
-        <span className="ml-0.5">W</span>
-      </label>
-    </span>
+      </span>
+    </label>
   );
 }

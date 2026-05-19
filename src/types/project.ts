@@ -11,20 +11,15 @@ export interface FsEntry {
   isDirectory: boolean;
 }
 
+/** Full AI access: context, read, and write */
 export interface NodePermissions {
-  inContext: boolean;
-  canRead: boolean;
-  canWrite: boolean;
+  enabled: boolean;
 }
 
 export const DEFAULT_PERMISSIONS: NodePermissions = {
-  inContext: false,
-  canRead: false,
-  canWrite: false,
+  enabled: false,
 };
 
 export const DEFAULT_ROOT_PERMISSIONS: NodePermissions = {
-  inContext: true,
-  canRead: true,
-  canWrite: false,
+  enabled: true,
 };

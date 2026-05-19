@@ -1,93 +1,286 @@
-import { ShoppingCart } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ChevronRight, Search, ShoppingCart, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { popularAiModels, useRoundTable } from "@/context/RoundTableContext";
+import { SidebarPanel } from "@/components/layout/SidebarPanel";
+import {
+  filterModelsGroupedByOrg,
+  getModelsGroupedByOrg,
+  type AiModel,
+  type ModelOrg,
+} from "@/data/ai-models";
+import { useRoundTable } from "@/context/RoundTableContext";
 import { cn } from "@/lib/utils";
 
-function ModelCartItem({
-  name,
-  provider,
-  role,
-  color,
-  initial,
+const allGroupedOrgs = getModelsGroupedByOrg();
+
+function FlyoutModelItem({
+  model,
   selected,
   onToggle,
 }: {
-  name: string;
-  provider: string;
-  role: string;
-  color: string;
-  initial: string;
+  model: AiModel;
   selected: boolean;
   onToggle: () => void;
 }) {
   return (
     <label
       className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition-colors",
-        selected
-          ? "border-accent/40 bg-accent-muted"
-          : "border-transparent hover:border-border-subtle hover:bg-panel-elevated",
+        "flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors",
+        selected ? "bg-panel-elevated" : "hover:bg-panel-elevated/80",
       )}
     >
       <input
         type="checkbox"
         checked={selected}
         onChange={onToggle}
-        className="mt-1 h-3.5 w-3.5 shrink-0 rounded border-border bg-panel accent-accent"
+        className="h-3.5 w-3.5 shrink-0 border-border bg-panel accent-foreground"
       />
-      <span
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
-        style={{ backgroundColor: color }}
-      >
-        {initial}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{name}</span>
-          <span className="shrink-0 rounded bg-panel-elevated px-1.5 py-0.5 text-[10px] text-muted">
-            {provider}
-          </span>
-        </span>
-        <span className="mt-0.5 block truncate text-xs text-muted">{role}</span>
-      </span>
+      <span className="min-w-0 flex-1 truncate font-medium">{model.name}</span>
+      <span className="shrink-0 text-[10px] text-muted">{model.role}</span>
     </label>
   );
 }
 
-export function AgentCartPanel() {
-  const { selectedIds, isSelected, toggleModel } = useRoundTable();
+function OrgFlyout({
+  org,
+  models,
+  anchor,
+  isSelected,
+  toggleModel,
+  onPointerEnter,
+  onPointerLeave,
+}: {
+  org: ModelOrg;
+  models: AiModel[];
+  anchor: DOMRect;
+  isSelected: (id: string) => boolean;
+  toggleModel: (id: string) => void;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+}) {
+  const selectedCount = models.filter((m) => isSelected(m.id)).length;
 
-  return (
-    <section className="flex min-h-0 flex-1 flex-col">
-      <header className="border-b border-border-subtle px-3 py-3">
-        <section className="flex items-center gap-2">
-          <ShoppingCart className="h-4 w-4 text-accent" />
-          <h2 className="text-sm font-semibold">Model Cart</h2>
-        </section>
-        <p className="mt-1 text-xs text-muted">
-          Check models to add them to the Round Table
+  return createPortal(
+    <section
+      className="fixed z-50 min-w-[220px] border border-border bg-panel shadow-lg"
+      style={{
+        top: anchor.top,
+        left: anchor.right + 6,
+        maxHeight: `min(360px, calc(100vh - ${anchor.top}px - 12px))`,
+      }}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+    >
+      <header className="border-b border-border-subtle px-3 py-2">
+        <p className="text-xs font-semibold text-foreground">{org.name}</p>
+        <p className="text-[10px] text-muted">
+          {selectedCount} of {models.length} in Round Table
         </p>
       </header>
-
-      <ScrollArea className="flex-1">
-        <section className="space-y-1 p-2">
-          {popularAiModels.map((model) => (
-            <ModelCartItem
-              key={model.id}
-              {...model}
+      <ul className="overflow-y-auto py-1">
+        {models.map((model) => (
+          <li key={model.id}>
+            <FlyoutModelItem
+              model={model}
               selected={isSelected(model.id)}
               onToggle={() => toggleModel(model.id)}
             />
-          ))}
+          </li>
+        ))}
+      </ul>
+    </section>,
+    document.body,
+  );
+}
+
+function OrgCartRow({
+  org,
+  models,
+  isSelected,
+  isOpen,
+  onOpen,
+  onClose,
+}: {
+  org: ModelOrg;
+  models: AiModel[];
+  isSelected: (id: string) => boolean;
+  isOpen: boolean;
+  onOpen: (anchor: DOMRect) => void;
+  onClose: () => void;
+}) {
+  const rowRef = useRef<HTMLButtonElement>(null);
+  const selectedCount = models.filter((m) => isSelected(m.id)).length;
+
+  const handleOpen = useCallback(() => {
+    const rect = rowRef.current?.getBoundingClientRect();
+    if (rect) onOpen(rect);
+  }, [onOpen]);
+
+  return (
+    <button
+      ref={rowRef}
+      type="button"
+      className={cn(
+        "flex w-full items-center gap-2.5 border px-3 py-2.5 text-left transition-colors",
+        isOpen || selectedCount > 0
+          ? "border-foreground/30 bg-panel-elevated"
+          : "border-transparent hover:border-border-subtle hover:bg-panel-elevated",
+      )}
+      onPointerEnter={handleOpen}
+      onPointerLeave={onClose}
+      onFocus={handleOpen}
+      onBlur={onClose}
+    >
+      <span
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
+        style={{ backgroundColor: org.color }}
+      >
+        {org.initial}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{org.name}</span>
+        <span className="mt-0.5 block truncate text-[11px] text-muted">
+          {models.length} {models.length === 1 ? "model" : "models"}
+          {selectedCount > 0 && (
+            <span className="text-muted-foreground">
+              {" "}
+              · {selectedCount} selected
+            </span>
+          )}
+        </span>
+      </span>
+      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted" />
+    </button>
+  );
+}
+
+interface AgentCartPanelProps {
+  active?: boolean;
+}
+
+export function AgentCartPanel({ active }: AgentCartPanelProps) {
+  const { selectedIds, isSelected, toggleModel } = useRoundTable();
+  const [search, setSearch] = useState("");
+  const [openOrgId, setOpenOrgId] = useState<string | null>(null);
+  const [flyoutAnchor, setFlyoutAnchor] = useState<DOMRect | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const filteredGroups = useMemo(
+    () => filterModelsGroupedByOrg(allGroupedOrgs, search),
+    [search],
+  );
+
+  const isSearching = search.trim().length > 0;
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleClose = useCallback(() => {
+    clearCloseTimer();
+    closeTimerRef.current = setTimeout(() => {
+      setOpenOrgId(null);
+      setFlyoutAnchor(null);
+    }, 120);
+  }, [clearCloseTimer]);
+
+  const openOrg = useCallback(
+    (orgId: string, anchor: DOMRect) => {
+      clearCloseTimer();
+      setOpenOrgId(orgId);
+      setFlyoutAnchor(anchor);
+    },
+    [clearCloseTimer],
+  );
+
+  const openGroup = filteredGroups.find((g) => g.org.id === openOrgId);
+
+  return (
+    <SidebarPanel
+      title="Model Cart"
+      active={active}
+      headerExtra={<ShoppingCart className="h-3.5 w-3.5 text-accent" />}
+    >
+      <section className="shrink-0 border-b border-border-subtle px-2 py-2">
+        <label className="relative flex items-center">
+          <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setOpenOrgId(null);
+              setFlyoutAnchor(null);
+            }}
+            placeholder="Search models or providers…"
+            className="w-full border border-border bg-surface py-1.5 pr-8 pl-8 text-xs text-foreground placeholder:text-muted outline-none focus:border-foreground/40"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setOpenOrgId(null);
+                setFlyoutAnchor(null);
+              }}
+              className="absolute right-2 flex h-5 w-5 items-center justify-center text-muted hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </label>
+        {!isSearching && (
+          <p className="mt-2 px-1 text-[11px] text-muted">
+            Hover a provider to pick models for the Round Table
+          </p>
+        )}
+      </section>
+
+      <ScrollArea className="h-full">
+        <section className="space-y-1 p-2">
+          {filteredGroups.length === 0 ? (
+            <p className="px-2 py-6 text-center text-xs text-muted">
+              No models or providers match &ldquo;{search.trim()}&rdquo;
+            </p>
+          ) : (
+            filteredGroups.map(({ org, models }) => (
+              <OrgCartRow
+                key={org.id}
+                org={org}
+                models={models}
+                isSelected={isSelected}
+                isOpen={openOrgId === org.id}
+                onOpen={(anchor) => openOrg(org.id, anchor)}
+                onClose={scheduleClose}
+              />
+            ))
+          )}
         </section>
       </ScrollArea>
 
-      <footer className="shrink-0 border-t border-border-subtle px-3 py-2.5">
+      {openGroup && flyoutAnchor && (
+        <OrgFlyout
+          org={openGroup.org}
+          models={openGroup.models}
+          anchor={flyoutAnchor}
+          isSelected={isSelected}
+          toggleModel={toggleModel}
+          onPointerEnter={clearCloseTimer}
+          onPointerLeave={scheduleClose}
+        />
+      )}
+
+      <footer className="shrink-0 border-t border-border-subtle px-3 py-2">
         <p className="text-xs text-muted-foreground">
           <span className="font-medium text-foreground">{selectedIds.length}</span>
-          {selectedIds.length === 1 ? " model" : " models"} in Round Table
+          {selectedIds.length === 1 ? " model" : " models"} selected
         </p>
       </footer>
-    </section>
+    </SidebarPanel>
   );
 }
