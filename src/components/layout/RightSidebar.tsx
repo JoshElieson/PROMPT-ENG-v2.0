@@ -7,7 +7,7 @@ import { ResizableSidebar } from "@/components/ui/resizable-panels";
 import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import { ModelLogo } from "@/components/models/ModelLogo";
 import { popularAiModels } from "@/data/ai-models";
-import { useRoundTable } from "@/context/RoundTableContext";
+import { useRoundTable } from "@/contexts/RoundTableContext";
 import { useLayout, type RightPanelId } from "@/contexts/LayoutContext";
 import { cn } from "@/lib/utils";
 

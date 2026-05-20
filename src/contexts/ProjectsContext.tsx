@@ -7,8 +7,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { defaultPermissionsForProjects } from "@/lib/project-ai-paths";
 import { basename, listDescendantPaths, pickProjectDirectory } from "@/lib/fs";
-import { loadPermissions, loadProjects, savePermissions, saveProjects } from "@/lib/storage";
+import { loadProjects, saveProjects } from "@/lib/storage";
+import { useChats } from "@/contexts/ChatsContext";
 import {
   DEFAULT_PERMISSIONS,
   DEFAULT_ROOT_PERMISSIONS,
@@ -16,9 +18,20 @@ import {
   type Project,
 } from "@/types/project";
 
+function pathsUnderRoot(
+  permissions: Record<string, NodePermissions>,
+  rootPath: string,
+): string[] {
+  return Object.keys(permissions).filter(
+    (key) =>
+      key === rootPath ||
+      key.startsWith(`${rootPath}\\`) ||
+      key.startsWith(`${rootPath}/`),
+  );
+}
+
 interface ProjectsContextValue {
   projects: Project[];
-  permissions: Record<string, NodePermissions>;
   isAdding: boolean;
   error: string | null;
   addProject: () => Promise<void>;
@@ -35,39 +48,64 @@ interface ProjectsContextValue {
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
 
 export function ProjectsProvider({ children }: { children: ReactNode }) {
+  const {
+    activeChatId,
+    chats,
+    updateChatPermissions,
+    setChatPermissions,
+  } = useChats();
   const [projects, setProjects] = useState<Project[]>(() => loadProjects());
-  const [permissions, setPermissionsState] = useState<Record<string, NodePermissions>>(
-    () => loadPermissions(),
-  );
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const activeChat = useMemo(
+    () => chats.find((c) => c.id === activeChatId) ?? null,
+    [chats, activeChatId],
+  );
+
+  const activePermissions = activeChat?.permissions ?? {};
 
   useEffect(() => {
     saveProjects(projects);
   }, [projects]);
 
   useEffect(() => {
-    savePermissions(permissions);
-  }, [permissions]);
+    if (!activeChatId || projects.length === 0) return;
+    const chat = chats.find((c) => c.id === activeChatId);
+    if (!chat) return;
+    if (chat.permissions && Object.keys(chat.permissions).length > 0) return;
+    setChatPermissions(activeChatId, defaultPermissionsForProjects(projects));
+  }, [activeChatId, chats, projects, setChatPermissions]);
+
+  const patchActivePermissions = useCallback(
+    (updater: (prev: Record<string, NodePermissions>) => Record<string, NodePermissions>) => {
+      if (!activeChatId) return;
+      updateChatPermissions(activeChatId, updater);
+    },
+    [activeChatId, updateChatPermissions],
+  );
 
   const getPermissions = useCallback(
     (path: string): NodePermissions => {
-      return permissions[path] ?? DEFAULT_PERMISSIONS;
+      return activePermissions[path] ?? DEFAULT_PERMISSIONS;
     },
-    [permissions],
+    [activePermissions],
   );
 
-  const setPermissions = useCallback((path: string, patch: Partial<NodePermissions>) => {
-    setPermissionsState((prev) => ({
-      ...prev,
-      [path]: { ...(prev[path] ?? DEFAULT_PERMISSIONS), ...patch },
-    }));
-  }, []);
+  const setPermissions = useCallback(
+    (path: string, patch: Partial<NodePermissions>) => {
+      patchActivePermissions((prev) => ({
+        ...prev,
+        [path]: { ...(prev[path] ?? DEFAULT_PERMISSIONS), ...patch },
+      }));
+    },
+    [patchActivePermissions],
+  );
 
   const setDirectoryPermissions = useCallback(
     async (dirPath: string, patch: Partial<NodePermissions>) => {
       const descendants = await listDescendantPaths(dirPath);
-      setPermissionsState((prev) => {
+      patchActivePermissions((prev) => {
         const next = { ...prev };
         const apply = (path: string) => {
           next[path] = { ...(prev[path] ?? DEFAULT_PERMISSIONS), ...patch };
@@ -77,7 +115,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    [],
+    [patchActivePermissions],
   );
 
   const addProject = useCallback(async () => {
@@ -103,43 +141,45 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       };
 
       setProjects((prev) => [...prev, project]);
-      setPermissionsState((prev) => ({
-        ...prev,
-        [rootPath]: { ...DEFAULT_ROOT_PERMISSIONS },
-      }));
+
+      if (activeChatId) {
+        patchActivePermissions((prev) => ({
+          ...prev,
+          [rootPath]: { ...DEFAULT_ROOT_PERMISSIONS },
+        }));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add project folder.");
     } finally {
       setIsAdding(false);
     }
-  }, [projects]);
+  }, [projects, activeChatId, patchActivePermissions]);
 
-  const removeProject = useCallback((id: string) => {
-    setProjects((prev) => {
-      const target = prev.find((p) => p.id === id);
-      if (!target) return prev;
+  const removeProject = useCallback(
+    (id: string) => {
+      const target = projects.find((p) => p.id === id);
+      if (!target) return;
 
-      setPermissionsState((perms) => {
-        const next = { ...perms };
-        const prefix = target.rootPath;
-        for (const key of Object.keys(next)) {
-          if (key === prefix || key.startsWith(`${prefix}\\`) || key.startsWith(`${prefix}/`)) {
-            delete next[key];
-          }
+      const prefix = target.rootPath;
+      for (const chat of chats) {
+        if (!chat.permissions) continue;
+        const next = { ...chat.permissions };
+        for (const key of pathsUnderRoot(next, prefix)) {
+          delete next[key];
         }
-        return next;
-      });
+        setChatPermissions(chat.id, next);
+      }
 
-      return prev.filter((p) => p.id !== id);
-    });
-  }, []);
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+    },
+    [projects, chats, setChatPermissions],
+  );
 
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo(
     () => ({
       projects,
-      permissions,
       isAdding,
       error,
       addProject,
@@ -151,7 +191,6 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     }),
     [
       projects,
-      permissions,
       isAdding,
       error,
       addProject,

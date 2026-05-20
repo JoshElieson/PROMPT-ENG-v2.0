@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LayoutMenu } from "@/components/layout/LayoutMenu";
 import { ModelLogo } from "@/components/models/ModelLogo";
-import { useRoundTable } from "@/context/RoundTableContext";
+import { useRoundTable } from "@/contexts/RoundTableContext";
 import { getModelById, type AiModel } from "@/data/ai-models";
 import {
   WORKSPACE_HEADER_SURFACE,

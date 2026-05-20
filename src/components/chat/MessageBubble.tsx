@@ -5,7 +5,6 @@ import { getModelById } from "@/data/ai-models";
 import { AttachmentChips } from "@/components/chat/AttachmentChips";
 import { ModelContributionHover } from "@/components/chat/ModelContributionHover";
 import { Button } from "@/components/ui/button";
-import { formatChatTime } from "@/lib/chat-utils";
 import { cn } from "@/lib/utils";
 
 function MessageContent({ content }: { content: string }) {
@@ -65,10 +64,9 @@ function CopyResponseButton({ content }: { content: string }) {
 
 interface MessageBubbleProps {
   message: ChatMessage;
-  showTime?: boolean;
 }
 
-export function MessageBubble({ message, showTime = false }: MessageBubbleProps) {
+export function MessageBubble({ message }: MessageBubbleProps) {
   const isSent = message.role === "user";
   const showModelBlend =
     !isSent &&
@@ -78,22 +76,10 @@ export function MessageBubble({ message, showTime = false }: MessageBubbleProps)
   return (
     <article
       className={cn(
-        "flex w-full flex-col",
-        showTime ? "gap-2" : "gap-0",
+        "flex w-full flex-col gap-0",
         isSent ? "items-end" : "items-start",
       )}
     >
-      {showTime && (
-        <p
-          className={cn(
-            "text-xs text-muted-foreground",
-            isSent ? "text-right" : "text-left",
-          )}
-        >
-          {formatChatTime(message.createdAt)}
-        </p>
-      )}
-
       <section
         className={cn(
           "relative max-w-[85%] rounded-2xl border px-4 py-3",

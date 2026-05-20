@@ -17,7 +17,7 @@ const hoverHighlight =
 export function LayoutThumbnail({
   presetId,
   active,
-  disabled,
+  disabled: _disabled,
   className,
 }: LayoutThumbnailProps) {
   if (presetId === "create") {

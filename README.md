@@ -63,6 +63,9 @@ Output: `src-tauri/target/release/bundle/`
 | Path | Role |
 |------|------|
 | `src/` | React UI (`@/` alias → `src/`) |
+| `src/contexts/` | App-wide React context (chats, projects, layout, git, auth, Round Table) |
+| `src/lib/` | Tauri bridges, storage, chat helpers, filesystem utilities |
+| `src/types/` | Shared TypeScript types |
 | `src-tauri/` | Rust / Tauri config |
 | `scripts/tauri-dev.ps1` | Windows-friendly `tauri dev` launcher |
 
@@ -76,14 +79,14 @@ Default window: **1280×800** (`src-tauri/tauri.conf.json`).
 - **Left sidebar** — chats, projects, file tree with context checkboxes
 - **Center** — welcome, history, prompt input
 - **Right sidebar** — Round Table weights, streaming, metrics
-- **Projects** — pick a folder (+), lazy tree, per-file R/W/context flags (`localStorage`); needs the Tauri app for folder picker
+- **Projects** — pick a folder (+), lazy tree, per-node **AI access** checkboxes (`localStorage`); needs the Tauri app for folder picker
+- **AI chat (Tauri)** — OpenAI, Anthropic, and Gemini with optional **workspace tools** when AI access is enabled on project paths: `read_file`, `write_file`, `list_directory` (scoped to those paths; UTF-8 text only; read cap 512KB per file)
 
 ---
 
 ## Roadmap
 
-- Model providers (OpenRouter, OpenAI, Anthropic, Gemini, Ollama)
+- Model providers (OpenRouter, Ollama, …)
 - SQLite + FTS5 for chats/projects
-- Permissions → AI context injection
-- Round Table multi-model synthesis
+- Streaming responses and richer attachments in prompts
 - Keyboard shortcuts (Ctrl+1–4, `/`, `@`)

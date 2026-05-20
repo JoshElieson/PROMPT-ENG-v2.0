@@ -11,7 +11,7 @@ import {
   type ModelOrg,
 } from "@/data/ai-models";
 import { ModelLogo } from "@/components/models/ModelLogo";
-import { useRoundTable } from "@/context/RoundTableContext";
+import { useRoundTable } from "@/contexts/RoundTableContext";
 import { cn } from "@/lib/utils";
 
 const allGroupedOrgs = getModelsGroupedByOrg();

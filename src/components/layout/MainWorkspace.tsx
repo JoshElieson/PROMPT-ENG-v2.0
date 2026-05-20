@@ -8,10 +8,9 @@ import { ResponseLoadingView } from "@/components/chat/ResponseLoadingView";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-import { useRoundTable } from "@/context/RoundTableContext";
+import { useRoundTable } from "@/contexts/RoundTableContext";
 import { useChats } from "@/contexts/ChatsContext";
 import { buildModelKeyboardShortcuts } from "@/data/mock";
-import { shouldShowMessageTime } from "@/lib/chat-utils";
 import { cn } from "@/lib/utils";
 
 const SLOGAN_SENTENCES = [
@@ -139,15 +138,8 @@ export function MainWorkspace() {
 
           <section className="mx-auto max-w-2xl space-y-4 px-6 py-4">
 
-            {messages.map((message, index) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                showTime={shouldShowMessageTime(
-                  message.createdAt,
-                  messages[index - 1]?.createdAt,
-                )}
-              />
+            {messages.map((message) => (
+              <MessageBubble key={message.id} message={message} />
             ))}
 
             {responseLoading && (

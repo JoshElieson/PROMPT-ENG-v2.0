@@ -1,3 +1,5 @@
+import type { NodePermissions } from "@/types/project";
+
 export type MessageRole = "user" | "assistant";
 
 /** Share of an assistant response attributed to each model (sums to 100). */
@@ -31,6 +33,13 @@ export interface Chat {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  /** Per-chat file/folder access toggles from the projects tree */
+  permissions?: Record<string, NodePermissions>;
+}
+
+export interface AiWorkspacePayload {
+  /** Absolute paths enabled for AI file tools (from project tree). */
+  enabledPaths: string[];
 }
 
 export interface SendMessagePayload {
@@ -38,6 +47,8 @@ export interface SendMessagePayload {
   attachments?: ChatAttachment[];
   targetModelIds: string[];
   modelContributions?: ModelContribution[];
+  /** When set and non-empty, models may use read_file / write_file / list_directory tools. */
+  workspace?: AiWorkspacePayload;
 }
 
 export type ResponseLoadingPhase = "roundtable" | "synthesizing";

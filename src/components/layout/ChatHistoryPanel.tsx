@@ -3,49 +3,67 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import { useChats } from "@/contexts/ChatsContext";
-import { formatChatTime, groupChatsByDate } from "@/lib/chat-utils";
+import { getOutermostEnabledContextRoots } from "@/lib/project-ai-paths";
+import type { Chat } from "@/types/chat";
+import { truncateChatTitle } from "@/lib/chat-utils";
 import { cn } from "@/lib/utils";
 
 function ChatListItem({
   title,
-  time,
+  contextRoots,
   active,
   onSelect,
   onDelete,
 }: {
   title: string;
-  time: string;
+  contextRoots: { path: string; label: string }[];
   active?: boolean;
   onSelect: () => void;
   onDelete: () => void;
 }) {
+  const contextLine =
+    contextRoots.length > 0
+      ? contextRoots.map((r) => r.label).join(" · ")
+      : null;
+  const contextTooltip = contextRoots.map((r) => r.path).join("\n");
+
   return (
     <div
       className={cn(
-        "group relative flex w-full items-center rounded-lg border border-transparent transition-colors hover:bg-panel-elevated",
-        active && "border-foreground bg-panel-elevated",
+        "group relative box-border w-full max-w-full min-w-0 rounded-lg border transition-colors hover:bg-panel-elevated",
+        active
+          ? "border-foreground/45 bg-panel-elevated"
+          : "border-transparent",
       )}
     >
       <button
         type="button"
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 py-2 pr-9 pl-3 text-left text-sm"
+        className="flex w-full min-w-0 max-w-full flex-col items-stretch gap-0.5 overflow-hidden py-2 pr-9 pl-3 text-left outline-none focus-visible:ring-0"
       >
         <span
           className={cn(
-            "min-w-0 flex-1 truncate",
+            "block min-w-0 max-w-full truncate text-sm",
             active ? "text-foreground" : "text-muted-foreground",
           )}
+          title={title}
         >
-          {title}
+          {truncateChatTitle(title)}
         </span>
-        <span className="shrink-0 text-xs text-muted">{time}</span>
+        {contextLine ? (
+          <p
+            className="mb-0 block min-w-0 max-w-full truncate text-[10px] leading-snug text-orange-400/90"
+            title={contextTooltip}
+          >
+            {contextLine}
+          </p>
+        ) : null}
       </button>
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="absolute top-1/2 right-1 h-7 w-7 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400"
+        className="absolute right-1 top-2 h-7 w-7 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400"
         title="Delete chat"
         aria-label={`Delete ${title}`}
         onClick={(e) => {
@@ -59,25 +77,19 @@ function ChatListItem({
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="px-3 py-1.5 text-xs font-medium text-muted">{children}</p>
-  );
-}
-
 interface ChatHistoryPanelProps {
   active?: boolean;
 }
 
 export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
   const { chats, activeChatId, createChat, selectChat, deleteChat } = useChats();
-  const grouped = groupChatsByDate(chats);
+  const sortedChats = [...chats].sort((a, b) => b.updatedAt - a.updatedAt);
 
-  const renderChat = (chat: (typeof chats)[number]) => (
+  const renderChat = (chat: Chat) => (
     <ChatListItem
       key={chat.id}
       title={chat.title}
-      time={formatChatTime(chat.updatedAt)}
+      contextRoots={getOutermostEnabledContextRoots(chat.permissions)}
       active={chat.id === activeChatId}
       onSelect={() => selectChat(chat.id)}
       onDelete={() => deleteChat(chat.id)}
@@ -100,32 +112,15 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
         </Button>
       }
     >
-      <ScrollArea className="h-full">
+      <ScrollArea className="h-full min-w-0">
         {chats.length === 0 ? (
           <p className="px-3 py-6 text-center text-xs text-muted">
             No chats yet. Start a new conversation.
           </p>
         ) : (
-          <>
-            {grouped.today.length > 0 && (
-              <>
-                <SectionLabel>Today</SectionLabel>
-                {grouped.today.map(renderChat)}
-              </>
-            )}
-            {grouped.yesterday.length > 0 && (
-              <>
-                <SectionLabel>Yesterday</SectionLabel>
-                {grouped.yesterday.map(renderChat)}
-              </>
-            )}
-            {grouped.older.length > 0 && (
-              <>
-                <SectionLabel>Older</SectionLabel>
-                {grouped.older.map(renderChat)}
-              </>
-            )}
-          </>
+          <div className="box-border min-w-0 max-w-full space-y-0.5 pl-2.5 pr-3 pb-2 pt-0.5">
+            {sortedChats.map(renderChat)}
+          </div>
         )}
       </ScrollArea>
     </SidebarPanel>

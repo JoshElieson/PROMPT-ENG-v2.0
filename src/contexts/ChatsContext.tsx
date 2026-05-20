@@ -8,25 +8,30 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { titleFromMessage } from "@/lib/chat-utils";
+import { getModelById } from "@/data/ai-models";
 import {
-  buildMockAssistantReply,
-  delay,
-  evenContributions,
-} from "@/lib/mock-chat-response";
+  aiChatComplete,
+  aiChatSynthesize,
+  isAiModelSupported,
+  type ChatTurn,
+} from "@/lib/ai-chat";
+import { titleFromMessage } from "@/lib/chat-utils";
+import { evenContributions } from "@/lib/mock-chat-response";
+import { isTauri } from "@/lib/tauri";
 import {
   loadActiveChatId,
   loadChats,
   saveActiveChatId,
   saveChats,
 } from "@/lib/storage";
+import type { NodePermissions } from "@/types/project";
 import type {
+  AiWorkspacePayload,
   Chat,
   ChatMessage,
   ResponseLoadingState,
   SendMessagePayload,
 } from "@/types/chat";
-import { RESPONSE_TURN_MS } from "@/types/chat";
 
 interface ChatsContextValue {
   chats: Chat[];
@@ -38,6 +43,16 @@ interface ChatsContextValue {
   selectChat: (id: string) => void;
   deleteChat: (id: string) => void;
   sendMessage: (payload: SendMessagePayload) => void;
+  updateChatPermissions: (
+    chatId: string,
+    updater: (
+      prev: Record<string, NodePermissions>,
+    ) => Record<string, NodePermissions>,
+  ) => void;
+  setChatPermissions: (
+    chatId: string,
+    permissions: Record<string, NodePermissions>,
+  ) => void;
 }
 
 const ChatsContext = createContext<ChatsContextValue | null>(null);
@@ -99,13 +114,21 @@ function appendAssistantMessage(
 }
 
 export function ChatsProvider({ children }: { children: ReactNode }) {
-  const [chats, setChats] = useState<Chat[]>(() => loadChats());
-  const [activeChatId, setActiveChatId] = useState<string | null>(() =>
-    resolveActiveId(loadChats(), loadActiveChatId()),
+  const boot = useMemo(() => {
+    const loaded = loadChats();
+    return {
+      chats: loaded,
+      activeChatId: resolveActiveId(loaded, loadActiveChatId()),
+    };
+  }, []);
+
+  const [chats, setChats] = useState<Chat[]>(boot.chats);
+  const [activeChatId, setActiveChatId] = useState<string | null>(
+    boot.activeChatId,
   );
   const [responseLoading, setResponseLoading] =
     useState<ResponseLoadingState | null>(null);
-  const simulationRef = useRef(0);
+  const responseRunRef = useRef(0);
 
   useEffect(() => {
     saveChats(chats);
@@ -143,56 +166,140 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     setChats((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
-  const runResponseSimulation = useCallback(
+  const updateChatPermissions = useCallback(
+    (
+      chatId: string,
+      updater: (
+        prev: Record<string, NodePermissions>,
+      ) => Record<string, NodePermissions>,
+    ) => {
+      setChats((prev) =>
+        prev.map((chat) => {
+          if (chat.id !== chatId) return chat;
+          const next = updater(chat.permissions ?? {});
+          return { ...chat, permissions: next };
+        }),
+      );
+    },
+    [],
+  );
+
+  const setChatPermissions = useCallback(
+    (chatId: string, permissions: Record<string, NodePermissions>) => {
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.id === chatId ? { ...chat, permissions } : chat,
+        ),
+      );
+    },
+    [],
+  );
+
+  const runAiResponse = useCallback(
     async (
       runId: number,
       chatId: string,
       userContent: string,
+      history: ChatTurn[],
       targetModelIds: string[],
       contributions: { modelId: string; percentage: number }[],
+      workspace: AiWorkspacePayload | undefined,
     ) => {
-      const modelCount = Math.max(targetModelIds.length, 1);
+      const finish = (content: string) => {
+        if (responseRunRef.current !== runId) return;
+        const assistantMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content,
+          createdAt: Date.now(),
+          modelContributions:
+            targetModelIds.length > 1 ? contributions : undefined,
+        };
+        setChats((prev) => appendAssistantMessage(prev, chatId, assistantMessage));
+        setResponseLoading(null);
+      };
 
-      for (let i = 0; i < modelCount; i++) {
-        if (simulationRef.current !== runId) return;
+      const fail = (message: string) => {
+        finish(`**Could not get a response**\n\n${message}`);
+      };
+
+      if (!isTauri()) {
+        fail(
+          "AI chat requires the desktop app. Run with `npm run tauri:dev` and ensure API keys are in `.env`.",
+        );
+        return;
+      }
+
+      const unsupported = targetModelIds.filter((id) => !isAiModelSupported(id));
+      if (unsupported.length > 0) {
+        const names = unsupported
+          .map((id) => getModelById(id)?.name ?? id)
+          .join(", ");
+        fail(
+          `${names} ${unsupported.length === 1 ? "is" : "are"} not connected to a provider yet. Use GPT-4o, Claude, or Gemini models.`,
+        );
+        return;
+      }
+
+      try {
+        if (targetModelIds.length === 1) {
+          setResponseLoading({
+            chatId,
+            targetModelIds,
+            phase: "roundtable",
+            speakingModelIndex: 0,
+          });
+
+          const content = await aiChatComplete(
+            targetModelIds[0],
+            history,
+            workspace,
+          );
+          finish(content);
+          return;
+        }
+
+        const perModel: { modelId: string; content: string }[] = [];
+
+        for (let i = 0; i < targetModelIds.length; i++) {
+          if (responseRunRef.current !== runId) return;
+
+          const modelId = targetModelIds[i];
+          setResponseLoading({
+            chatId,
+            targetModelIds,
+            phase: "roundtable",
+            speakingModelIndex: i,
+          });
+
+          const content = await aiChatComplete(modelId, history, workspace);
+          perModel.push({ modelId, content });
+        }
+
+        if (responseRunRef.current !== runId) return;
 
         setResponseLoading({
           chatId,
           targetModelIds,
-          phase: "roundtable",
-          speakingModelIndex: i,
+          phase: "synthesizing",
+          speakingModelIndex: -1,
         });
 
-        await delay(RESPONSE_TURN_MS);
-      }
-
-      if (simulationRef.current !== runId) return;
-
-      setResponseLoading({
-        chatId,
-        targetModelIds,
-        phase: "synthesizing",
-        speakingModelIndex: -1,
-      });
-
-      await delay(RESPONSE_TURN_MS);
-
-      if (simulationRef.current !== runId) return;
-
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: buildMockAssistantReply(
+        const synthesized = await aiChatSynthesize(
           userContent,
-          targetModelIds,
-          contributions,
-        ),
-        createdAt: Date.now(),
-        modelContributions: contributions,
-      };
+          perModel.map((entry) => ({
+            modelId: entry.modelId,
+            modelName: getModelById(entry.modelId)?.name,
+            content: entry.content,
+          })),
+        );
 
-      setChats((prev) => appendAssistantMessage(prev, chatId, assistantMessage));
-      setResponseLoading(null);
+        finish(synthesized);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "An unexpected error occurred.";
+        fail(message);
+      }
     },
     [],
   );
@@ -210,7 +317,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       const contributions =
         payload.modelContributions ?? evenContributions(targetModelIds);
 
-      const runId = ++simulationRef.current;
+      const runId = ++responseRunRef.current;
       const now = Date.now();
 
       const userMessage: ChatMessage = {
@@ -238,6 +345,23 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
       setActiveChatId(resolvedChatId);
 
+      const sourceChatId =
+        activeChatId != null && chats.some((c) => c.id === activeChatId)
+          ? activeChatId
+          : null;
+      const priorMessages =
+        sourceChatId != null
+          ? (chats.find((c) => c.id === sourceChatId)?.messages ?? [])
+          : [];
+
+      const history: ChatTurn[] = [
+        ...priorMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        { role: "user", content: trimmed },
+      ];
+
       setResponseLoading({
         chatId: resolvedChatId,
         targetModelIds,
@@ -245,15 +369,17 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         speakingModelIndex: 0,
       });
 
-      void runResponseSimulation(
+      void runAiResponse(
         runId,
         resolvedChatId,
         trimmed,
+        history,
         targetModelIds,
         contributions,
+        payload.workspace,
       );
     },
-    [activeChatId, runResponseSimulation],
+    [chats, activeChatId, runAiResponse],
   );
 
   const activeChat = useMemo(
@@ -276,6 +402,8 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       selectChat,
       deleteChat,
       sendMessage,
+      updateChatPermissions,
+      setChatPermissions,
     }),
     [
       chats,
@@ -287,6 +415,8 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       selectChat,
       deleteChat,
       sendMessage,
+      updateChatPermissions,
+      setChatPermissions,
     ],
   );
 

@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
   type SyntheticEvent,
 } from "react";
-import { ArrowUp, AtSign, Paperclip } from "lucide-react";
+import { ArrowUp, AtSign, Paperclip, Sparkles } from "lucide-react";
 import { AttachmentChips } from "@/components/chat/AttachmentChips";
 import {
   ComposerTextarea,
@@ -16,7 +16,7 @@ import {
 import { MentionAutocomplete } from "@/components/chat/MentionAutocomplete";
 import { SlashCommandAutocomplete } from "@/components/chat/SlashCommandAutocomplete";
 import { Button } from "@/components/ui/button";
-import { useRoundTable } from "@/context/RoundTableContext";
+import { useRoundTable } from "@/contexts/RoundTableContext";
 import { useChats } from "@/contexts/ChatsContext";
 import { pickAttachmentsFromDialog } from "@/lib/attachments";
 import {
@@ -41,6 +41,8 @@ import type { ChatAttachment } from "@/types/chat";
 import { buildModelContributions } from "@/lib/round-table-weights";
 import { cn } from "@/lib/utils";
 
+const OPTIMIZE_PROMPT_AI_TOOLTIP = "Optimize prompt using AI";
+
 interface ChatComposerProps {
   onSent?: () => void;
 }
@@ -54,8 +56,17 @@ function readSelection(
 }
 
 export function ChatComposer({ onSent }: ChatComposerProps) {
-  const { sendMessage, isResponding } = useChats();
+  const { sendMessage, isResponding, chats, activeChatId } = useChats();
   const { selectedIds, activeIds, roundTableModels } = useRoundTable();
+
+  const aiWorkspace = useMemo(() => {
+    const chat = chats.find((c) => c.id === activeChatId);
+    const enabledPaths = Object.entries(chat?.permissions ?? {})
+      .filter(([, p]) => p.enabled)
+      .map(([path]) => path);
+    if (enabledPaths.length === 0) return undefined;
+    return { enabledPaths };
+  }, [chats, activeChatId]);
 
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -105,6 +116,19 @@ export function ChatComposer({ onSent }: ChatComposerProps) {
     requestAnimationFrame(() => {
       textareaRef.current?.focus();
       textareaRef.current?.setSelectionRange(start, end);
+    });
+  }, []);
+
+  const handleOptimizePromptWithAi = useCallback(() => {
+    const text = "test 2";
+    setInput(text);
+    setSelection({ start: text.length, end: text.length });
+    setMentionDismissed(false);
+    setSlashDismissed(false);
+    setError(null);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(text.length, text.length);
     });
   }, []);
 
@@ -345,6 +369,7 @@ export function ChatComposer({ onSent }: ChatComposerProps) {
       attachments: attachments.length > 0 ? attachments : undefined,
       targetModelIds: targets,
       modelContributions,
+      workspace: aiWorkspace,
     });
     setInput("");
     setAttachments([]);
@@ -559,18 +584,33 @@ export function ChatComposer({ onSent }: ChatComposerProps) {
             }
           />
 
-          <ComposerTextarea
-            ref={textareaRef}
-            value={input}
-            cartIds={selectedIds}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onKeyUp={(e) => syncSelection(e.currentTarget)}
-            onSelect={(e) => syncSelection(e.currentTarget)}
-            onClick={(e) => syncSelection(e.currentTarget)}
-            rows={2}
-            placeholder="Ask anything… / for commands, @ for models"
-          />
+          <div className="relative">
+            <div className="pr-9">
+              <ComposerTextarea
+                ref={textareaRef}
+                value={input}
+                cartIds={selectedIds}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                onKeyUp={(e) => syncSelection(e.currentTarget)}
+                onSelect={(e) => syncSelection(e.currentTarget)}
+                onClick={(e) => syncSelection(e.currentTarget)}
+                rows={2}
+                placeholder="Ask anything… / for commands, @ for models"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1 z-10 h-6 w-6 text-muted-foreground hover:text-accent"
+              title={OPTIMIZE_PROMPT_AI_TOOLTIP}
+              disabled={isResponding}
+              onClick={handleOptimizePromptWithAi}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+            </Button>
+          </div>
 
           {error && (
             <p className="px-4 pb-2 text-xs text-red-400">{error}</p>

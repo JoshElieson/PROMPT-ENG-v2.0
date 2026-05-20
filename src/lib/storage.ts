@@ -71,13 +71,36 @@ function isChat(value: unknown): value is Chat {
   );
 }
 
+function normalizeChatPermissions(
+  raw: unknown,
+): Record<string, NodePermissions> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const result: Record<string, NodePermissions> = {};
+  for (const [path, value] of Object.entries(raw as Record<string, unknown>)) {
+    result[path] = normalizePermission(value);
+  }
+  return result;
+}
+
 export function loadChats(): Chat[] {
   try {
     const raw = localStorage.getItem(CHATS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isChat);
+
+    const legacyPermissions = loadPermissions();
+    const hasLegacy = Object.keys(legacyPermissions).length > 0;
+
+    return parsed.filter(isChat).map((chat) => {
+      const record = chat as Chat;
+      const permissions =
+        normalizeChatPermissions(
+          (record as unknown as Record<string, unknown>).permissions,
+        ) ??
+        (hasLegacy ? { ...legacyPermissions } : undefined);
+      return permissions ? { ...record, permissions } : record;
+    });
   } catch {
     return [];
   }

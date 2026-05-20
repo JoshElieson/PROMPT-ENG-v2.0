@@ -1,3 +1,6 @@
+mod ai_chat;
+mod ai_config;
+mod ai_workspace;
 mod fs;
 mod git;
 mod github_auth;
@@ -6,6 +9,8 @@ use fs::list_directory;
 use git::{
     git_clone, git_commit, git_fetch, git_init, git_pull, git_push, git_status,
 };
+use ai_chat::{ai_chat_complete, ai_chat_synthesize};
+use ai_config::load_dotenv;
 use github_auth::{
     github_complete_device_login, github_fetch_user, github_poll_device_token,
     github_start_device_flow, github_wait_for_device_token,
@@ -32,8 +37,11 @@ pub fn run() {
             github_wait_for_device_token,
             github_complete_device_login,
             github_fetch_user,
+            ai_chat_complete,
+            ai_chat_synthesize,
         ])
         .setup(|app| {
+            load_dotenv();
             let icon = app.default_window_icon().cloned();
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_theme(Some(tauri::Theme::Dark));
