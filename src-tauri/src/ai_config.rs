@@ -22,10 +22,12 @@ pub fn load_dotenv() {
 }
 
 pub fn provider_for_model(model_id: &str) -> Option<Provider> {
+    if model_id.starts_with("gemini") {
+        return Some(Provider::Google);
+    }
     match model_id {
         "gpt4o" | "gpt4-turbo" | "o1" => Some(Provider::OpenAi),
         "claude" | "claude-opus" => Some(Provider::Anthropic),
-        "gemini" | "gemini-flash" => Some(Provider::Google),
         "deepseek" => Some(Provider::DeepSeek),
         _ => None,
     }
@@ -119,8 +121,11 @@ fn resolve_gemini_model(model_id: &str) -> String {
     {
         return m;
     }
+    if model_id.starts_with("gemini-") {
+        return model_id.to_string();
+    }
     match model_id {
-        "gemini" => "gemini-1.5-pro".to_string(),
+        "gemini" => "gemini-2.5-pro".to_string(),
         "gemini-flash" => "gemini-2.0-flash".to_string(),
         _ => "gemini-2.0-flash".to_string(),
     }

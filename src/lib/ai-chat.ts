@@ -29,7 +29,7 @@ export const SUPPORTED_AI_MODEL_IDS = new Set([
 ]);
 
 export function isAiModelSupported(modelId: string): boolean {
-  return SUPPORTED_AI_MODEL_IDS.has(modelId);
+  return SUPPORTED_AI_MODEL_IDS.has(modelId) || modelId.startsWith("gemini");
 }
 
 function requireTauri(): void {
