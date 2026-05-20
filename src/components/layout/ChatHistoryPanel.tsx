@@ -92,7 +92,7 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+          className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:bg-zinc-700 hover:text-foreground"
           onClick={() => createChat()}
         >
           <Plus className="h-3 w-3" />

@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { ActivityBar, type SidebarView } from "@/components/layout/ActivityBar";
+import { ActivityBar } from "@/components/layout/ActivityBar";
 import { LeftSidebar } from "@/components/layout/LeftSidebar";
 import { MainWorkspace } from "@/components/layout/MainWorkspace";
 import { RightSidebar } from "@/components/layout/RightSidebar";
@@ -10,16 +9,13 @@ import { ChatsProvider } from "@/contexts/ChatsContext";
 import { GitProvider } from "@/contexts/GitContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProjectsProvider } from "@/contexts/ProjectsContext";
+import { LayoutProvider, useLayout } from "@/contexts/LayoutContext";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
-function App() {
-  const [sidebarView, setSidebarView] = useState<SidebarView>("explorer");
+function AppShell() {
+  const { sidebarView, setSidebarView } = useLayout();
 
   return (
-    <AuthProvider>
-    <RoundTableProvider>
-      <ChatsProvider>
-      <ProjectsProvider>
-      <GitProvider>
       <section className="flex h-full w-full flex-col overflow-hidden border-0 bg-black outline-none ring-0">
         <TitleBar />
         <section className="flex min-h-0 flex-1">
@@ -30,10 +26,25 @@ function App() {
         </section>
         <StatusBar />
       </section>
-      </GitProvider>
-      </ProjectsProvider>
-      </ChatsProvider>
-    </RoundTableProvider>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <LayoutProvider>
+        <RoundTableProvider>
+          <ChatsProvider>
+            <ProjectsProvider>
+              <GitProvider>
+                <TooltipProvider delayDuration={200}>
+                  <AppShell />
+                </TooltipProvider>
+              </GitProvider>
+            </ProjectsProvider>
+          </ChatsProvider>
+        </RoundTableProvider>
+      </LayoutProvider>
     </AuthProvider>
   );
 }

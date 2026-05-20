@@ -1,14 +1,22 @@
 import { memo, useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { WeightSlider } from "@/components/ui/weight-slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ResizablePanels, ResizableSidebar } from "@/components/ui/resizable-panels";
+import { ResizableSidebar } from "@/components/ui/resizable-panels";
 import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import { ModelLogo } from "@/components/models/ModelLogo";
 import { popularAiModels } from "@/data/ai-models";
 import { useRoundTable } from "@/context/RoundTableContext";
+import { useLayout, type RightPanelId } from "@/contexts/LayoutContext";
 import { cn } from "@/lib/utils";
+
+const ROUND_TABLE_DESCRIPTION =
+  "Send one prompt to several models at once. Adjust each model’s weight, then blend their answers into a single response.";
+
+const WORKFLOW_DESCRIPTION =
+  "Build a step-by-step pipeline of models and tools that run in order on your prompt.";
 
 const ModelRow = memo(function ModelRow({
   modelId,
@@ -74,8 +82,15 @@ const ModelRow = memo(function ModelRow({
   );
 });
 
-function RoundTableSection() {
-  const [roundTableEnabled, setRoundTableEnabled] = useState(true);
+function RoundTableSection({
+  enabled,
+  onEnabledChange,
+  onClose,
+}: {
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  onClose: () => void;
+}) {
   const {
     selectedIds,
     activeIds,
@@ -93,18 +108,21 @@ function RoundTableSection() {
   return (
     <SidebarPanel
       title="Round Table"
-      active
+      titleDescription={ROUND_TABLE_DESCRIPTION}
+      active={enabled}
+      fill={enabled}
+      onClose={onClose}
       headerExtra={
         <Switch
-          checked={roundTableEnabled}
-          onCheckedChange={setRoundTableEnabled}
+          checked={enabled}
+          onCheckedChange={onEnabledChange}
           aria-label="Toggle Round Table"
         />
       }
     >
-      <ScrollArea className="h-full">
+      <ScrollArea className={cn(enabled && "h-full")}>
         <section className="p-4">
-          {roundTableEnabled ? (
+          {enabled ? (
             tableModels.length === 0 ? (
               <p className="text-xs text-muted">
                 Add models in the Model Cart to use the Round Table.
@@ -157,17 +175,42 @@ function RoundTableSection() {
   );
 }
 
-function WorkflowSection() {
+function WorkflowSection({ onClose }: { onClose: () => void }) {
   return (
-    <SidebarPanel title="Workflow">
-      <section className="flex min-h-0 flex-1 flex-col p-3" aria-label="Workflow">
-        <section className="min-h-0 flex-1 rounded-lg border border-dashed border-border-subtle bg-surface/50" />
+    <SidebarPanel
+      title="Workflow"
+      titleDescription={WORKFLOW_DESCRIPTION}
+      active
+      fill={false}
+      onClose={onClose}
+      headerExtra={
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-xs text-muted-foreground hover:bg-zinc-700 hover:text-foreground"
+        >
+          Edit
+        </Button>
+      }
+    >
+      <section className="shrink-0 p-2" aria-label="Workflow">
+        <section className="h-48 min-h-48 max-h-48 w-full shrink-0 rounded-lg border border-dashed border-border-subtle bg-surface/50" />
       </section>
     </SidebarPanel>
   );
 }
 
 export function RightSidebar() {
+  const { rightPanels, setRightPanelVisible } = useLayout();
+  const [roundTableEnabled, setRoundTableEnabled] = useState(true);
+  const showRoundTable = rightPanels.roundTable;
+  const showWorkflow = rightPanels.workflow;
+  const closePanel = (id: RightPanelId) => setRightPanelVisible(id, false);
+
+  const roundTableExpanded = showRoundTable && roundTableEnabled;
+  const workflowExpanded = showWorkflow && (!showRoundTable || !roundTableEnabled);
+
   return (
     <ResizableSidebar
       side="right"
@@ -177,16 +220,42 @@ export function RightSidebar() {
       storageKey="prompt:right-sidebar-width"
       className="min-h-0"
     >
-      <ResizablePanels
-        direction="vertical"
-        storageKey="prompt:right-panels"
-        defaultSizes={[0.5, 0.5]}
-        className="min-h-0 flex-1"
-        panels={[
-          { id: "round-table", minSize: 120, content: <RoundTableSection /> },
-          { id: "workflow", minSize: 100, content: <WorkflowSection /> },
-        ]}
-      />
+      <div className="flex min-h-0 flex-1 flex-col">
+        {showRoundTable && (
+          <div
+            className={cn(
+              "flex min-h-0 flex-col overflow-hidden",
+              roundTableExpanded && showWorkflow
+                ? "min-h-0 flex-1"
+                : roundTableExpanded
+                  ? "flex-1"
+                  : "shrink-0",
+            )}
+          >
+            <RoundTableSection
+              enabled={roundTableEnabled}
+              onEnabledChange={setRoundTableEnabled}
+              onClose={() => closePanel("roundTable")}
+            />
+          </div>
+        )}
+        {showWorkflow && (
+          <div
+            className={cn(
+              "flex min-h-0 flex-col overflow-hidden",
+              workflowExpanded ? "min-h-0 flex-1" : "shrink-0",
+              showRoundTable && "border-t border-border-subtle",
+            )}
+          >
+            <WorkflowSection onClose={() => closePanel("workflow")} />
+          </div>
+        )}
+        {!showRoundTable && !showWorkflow && (
+          <p className="flex flex-1 items-center justify-center px-4 text-center text-xs text-muted">
+            Use View to select a panel.
+          </p>
+        )}
+      </div>
 
       <footer className="shrink-0 border-t border-border-subtle p-4">
         <section className="grid grid-cols-3 gap-2 text-center">

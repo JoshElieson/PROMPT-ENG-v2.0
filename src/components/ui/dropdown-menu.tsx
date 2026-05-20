@@ -3,6 +3,10 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Shared hover/focus surface for app menu rows (File, Edit, View, …). */
+const menuItemSurface =
+  "rounded-md outline-none transition-colors duration-150 ease-out data-[highlighted]:bg-menu-hover data-[highlighted]:text-foreground focus-visible:bg-menu-hover focus-visible:text-foreground";
+
 const DropdownMenu = DropdownMenuPrimitive.Root;
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 const DropdownMenuGroup = DropdownMenuPrimitive.Group;
@@ -19,7 +23,9 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      "flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-panel-elevated data-[state=open]:bg-panel-elevated",
+      "flex cursor-default select-none items-center px-2.5 py-1.5 text-[13px] text-foreground/90",
+      menuItemSurface,
+      "data-[state=open]:bg-menu-hover-strong data-[state=open]:text-foreground",
       inset && "pl-8",
       className,
     )}
@@ -77,7 +83,8 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-panel-elevated data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
+      "relative flex cursor-default select-none items-center px-2.5 py-1.5 text-[13px] text-foreground/90 data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
+      menuItemSurface,
       inset && "pl-8",
       className,
     )}
@@ -93,7 +100,8 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-panel-elevated data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
+      "relative flex cursor-default select-none items-center py-1.5 pl-8 pr-2.5 text-[13px] text-foreground/90 data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
+      menuItemSurface,
       className,
     )}
     checked={checked}
@@ -117,7 +125,8 @@ const DropdownMenuRadioItem = React.forwardRef<
   <DropdownMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-panel-elevated data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
+      "relative flex cursor-default select-none items-center py-1.5 pl-8 pr-2.5 text-[13px] text-foreground/90 data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
+      menuItemSurface,
       className,
     )}
     {...props}
@@ -167,7 +176,7 @@ const DropdownMenuShortcut = ({
   ...props
 }: React.HTMLAttributes<HTMLSpanElement>) => (
   <span
-    className={cn("ml-auto pl-4 text-xs tracking-widest text-muted", className)}
+    className={cn("ml-auto pl-4 text-[11px] tracking-widest text-muted", className)}
     {...props}
   />
 );

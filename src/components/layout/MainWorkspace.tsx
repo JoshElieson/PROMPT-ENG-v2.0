@@ -1,13 +1,10 @@
 import { useEffect, useRef } from "react";
 
-import { LayoutGrid } from "lucide-react";
-
+import { ForgeWordmark } from "@/components/brand/ForgeWordmark";
 import { ActiveModelsBar } from "@/components/chat/ActiveModelsBar";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { ResponseLoadingView } from "@/components/chat/ResponseLoadingView";
-
-import { MenuBar } from "@/components/layout/MenuBar";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -48,26 +45,6 @@ export function MainWorkspace() {
 
     <main className="flex min-w-0 flex-1 flex-col bg-background">
 
-      <header className="flex h-11 shrink-0 items-center justify-between border-b border-border-subtle px-2">
-
-        <MenuBar />
-
-        <button
-
-          type="button"
-
-          title="Layout"
-
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-panel-elevated hover:text-foreground"
-
-        >
-
-          <LayoutGrid className="h-4 w-4" />
-
-        </button>
-
-      </header>
-
       <ActiveModelsBar />
 
       <ScrollArea className="relative flex-1">
@@ -76,9 +53,9 @@ export function MainWorkspace() {
 
           <section className="flex flex-col items-center px-8 pt-24 pb-8">
 
-            <h1 className="text-3xl font-semibold tracking-tight">
+            <h1 className="flex items-center gap-3 text-3xl font-semibold tracking-tight">
 
-              Welcome to <span className="text-accent">Prompt</span>
+              Welcome to <ForgeWordmark height={40} className="translate-y-px" />
 
             </h1>
 

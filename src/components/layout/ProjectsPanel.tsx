@@ -12,7 +12,7 @@ export function ProjectsPanel({ active }: ProjectsPanelProps) {
   const { projects, addProject, error, clearError } = useProjects();
 
   return (
-    <SidebarPanel title="Projects" active={active}>
+    <SidebarPanel active={active}>
       <ScrollArea className="h-full">
         {error && (
           <div className="mx-2 mt-2 flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-300">

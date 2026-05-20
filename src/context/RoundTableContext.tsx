@@ -56,6 +56,7 @@ interface RoundTableContextValue {
   isSelected: (id: string) => boolean;
   isActive: (id: string) => boolean;
   toggleModel: (id: string) => void;
+  deselectModels: (ids: string[]) => void;
   toggleActive: (id: string) => void;
   setModelWeight: (id: string, weight: number) => void;
 }
@@ -106,6 +107,30 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
         return next;
       });
       return [...prev, id];
+    });
+  }, []);
+
+  const deselectModels = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+
+    setSelectedIds((prev) => {
+      const toRemove = ids.filter((id) => prev.includes(id));
+      if (toRemove.length === 0) return prev;
+
+      let next = prev.filter((id) => !toRemove.includes(id));
+      let removed = toRemove;
+
+      if (next.length === 0) {
+        const keepId = prev[0];
+        next = [keepId];
+        removed = toRemove.filter((id) => id !== keepId);
+      }
+
+      if (removed.length > 0) {
+        setActiveIds((active) => active.filter((id) => !removed.includes(id)));
+      }
+
+      return next;
     });
   }, []);
 
@@ -167,6 +192,7 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
       isSelected,
       isActive,
       toggleModel,
+      deselectModels,
       toggleActive,
       setModelWeight,
     }),
@@ -177,6 +203,7 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
       isSelected,
       isActive,
       toggleModel,
+      deselectModels,
       toggleActive,
       setModelWeight,
     ],

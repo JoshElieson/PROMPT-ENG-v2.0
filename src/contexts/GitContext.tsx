@@ -84,9 +84,13 @@ export function GitProvider({ children }: { children: ReactNode }) {
     try {
       const result = await git.gitStatus(repoPath);
       setStatus(result);
+      setLastMessage(null);
     } catch (e) {
-      setStatus(EMPTY_STATUS);
-      setMessage(false, e instanceof Error ? e.message : "Failed to read git status.");
+      setStatus((prev) => prev ?? EMPTY_STATUS);
+      setMessage(
+        false,
+        git.formatInvokeError(e, "Failed to read git status."),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -106,7 +110,7 @@ export function GitProvider({ children }: { children: ReactNode }) {
         setMessage(result.success, result.output || label);
         await refresh();
       } catch (e) {
-        setMessage(false, e instanceof Error ? e.message : `${label} failed.`);
+        setMessage(false, git.formatInvokeError(e, `${label} failed.`));
       } finally {
         setIsOperating(false);
       }
@@ -143,7 +147,7 @@ export function GitProvider({ children }: { children: ReactNode }) {
         setMessage(result.success, result.output || "Clone complete.");
         return result;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Clone failed.";
+        const msg = git.formatInvokeError(e, "Clone failed.");
         setMessage(false, msg);
         return { success: false, output: msg };
       } finally {

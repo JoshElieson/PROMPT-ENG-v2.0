@@ -6,6 +6,7 @@ import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import {
   filterModelsGroupedByOrg,
   getModelsGroupedByOrg,
+  getTopModelForOrg,
   type AiModel,
   type ModelOrg,
 } from "@/data/ai-models";
@@ -103,6 +104,7 @@ function OrgCartRow({
   isOpen,
   onOpen,
   onClose,
+  onToggleOrg,
 }: {
   org: ModelOrg;
   models: AiModel[];
@@ -110,8 +112,9 @@ function OrgCartRow({
   isOpen: boolean;
   onOpen: (anchor: DOMRect) => void;
   onClose: () => void;
+  onToggleOrg: () => void;
 }) {
-  const rowRef = useRef<HTMLButtonElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const selectedCount = models.filter((m) => isSelected(m.id)).length;
 
   const handleOpen = useCallback(() => {
@@ -119,10 +122,17 @@ function OrgCartRow({
     if (rect) onOpen(rect);
   }, [onOpen]);
 
+  const handleOrgClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onToggleOrg();
+    },
+    [onToggleOrg],
+  );
+
   return (
-    <button
+    <div
       ref={rowRef}
-      type="button"
       className={cn(
         "flex w-full items-center gap-2.5 border px-3 py-2.5 text-left transition-colors",
         isOpen || selectedCount > 0
@@ -131,24 +141,33 @@ function OrgCartRow({
       )}
       onPointerEnter={handleOpen}
       onPointerLeave={onClose}
-      onFocus={handleOpen}
-      onBlur={onClose}
     >
-      <ModelLogo orgId={org.id} size="md" />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{org.name}</span>
-        <span className="mt-0.5 block truncate text-[11px] text-muted">
-          {models.length} {models.length === 1 ? "model" : "models"}
-          {selectedCount > 0 && (
-            <span className="text-muted-foreground">
-              {" "}
-              · {selectedCount} selected
-            </span>
-          )}
+      <button
+        type="button"
+        onClick={handleOrgClick}
+        title={
+          selectedCount > 0
+            ? `Remove all selected ${org.name} models from cart`
+            : `Add top ${org.name} model to cart`
+        }
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left hover:opacity-80"
+      >
+        <ModelLogo orgId={org.id} size="md" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">{org.name}</span>
+          <span className="mt-0.5 block truncate text-[11px] text-muted">
+            {models.length} {models.length === 1 ? "model" : "models"}
+            {selectedCount > 0 && (
+              <span className="text-muted-foreground">
+                {" "}
+                · {selectedCount} selected
+              </span>
+            )}
+          </span>
         </span>
-      </span>
-      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted" />
-    </button>
+      </button>
+      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
+    </div>
   );
 }
 
@@ -157,7 +176,7 @@ interface AgentCartPanelProps {
 }
 
 export function AgentCartPanel({ active }: AgentCartPanelProps) {
-  const { selectedIds, isSelected, toggleModel } = useRoundTable();
+  const { selectedIds, isSelected, toggleModel, deselectModels } = useRoundTable();
   const [search, setSearch] = useState("");
   const [openOrgId, setOpenOrgId] = useState<string | null>(null);
   const [flyoutAnchor, setFlyoutAnchor] = useState<DOMRect | null>(null);
@@ -251,6 +270,15 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
                 isOpen={openOrgId === org.id}
                 onOpen={(anchor) => openOrg(org.id, anchor)}
                 onClose={scheduleClose}
+                onToggleOrg={() => {
+                  const selected = models.filter((m) => isSelected(m.id));
+                  if (selected.length > 0) {
+                    deselectModels(selected.map((m) => m.id));
+                    return;
+                  }
+                  const top = getTopModelForOrg(org.id);
+                  if (top && !isSelected(top.id)) toggleModel(top.id);
+                }}
               />
             ))
           )}

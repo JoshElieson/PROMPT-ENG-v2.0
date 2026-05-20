@@ -1,17 +1,12 @@
 import { useCallback, useRef, useState } from "react";
-import { ArrowUp, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  GENERATE_COMMIT_AI_TOOLTIP,
-  generateCommitMessageWithAi,
-  replyToCommitChat,
-  type CommitChatMessage,
-} from "@/lib/commit-message";
+import { replyToCommitChat, type CommitChatMessage } from "@/lib/commit-message";
 import type { GitFileChange } from "@/types/git";
 import { cn } from "@/lib/utils";
 
@@ -57,40 +52,10 @@ export function CommitMessageChat({
     [changes, draft, pushAssistant],
   );
 
-  const generate = useCallback(() => {
-    setOpen(true);
-    const suggested = generateCommitMessageWithAi(changes);
-    setMessages((prev) => {
-      if (prev.some((m) => m.role === "assistant" && m.suggestedCommit === suggested)) {
-        return prev;
-      }
-      return [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: "user",
-          content: "Generate a commit message from my changes",
-        },
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content:
-            changes.length === 0
-              ? "No pending changes yet. Edit files in your project first."
-              : "Suggested commit message from your changes:",
-          suggestedCommit: changes.length > 0 ? suggested : undefined,
-        },
-      ];
-    });
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-    });
-  }, [changes]);
-
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border-b border-border-subtle">
-      <div className="flex items-center justify-between px-2 py-1">
-        <CollapsibleTrigger className="flex flex-1 items-center gap-1 px-1 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground">
+    <Collapsible open={open} onOpenChange={setOpen} className="shrink-0 border-t border-border-subtle">
+      <div className="px-2 py-1">
+        <CollapsibleTrigger className="flex items-center gap-1 px-1 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground">
           {open ? (
             <ChevronDown className="h-3 w-3" />
           ) : (
@@ -98,17 +63,6 @@ export function CommitMessageChat({
           )}
           Commit assistant
         </CollapsibleTrigger>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 text-muted-foreground hover:text-accent"
-          title={GENERATE_COMMIT_AI_TOOLTIP}
-          disabled={disabled}
-          onClick={generate}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-        </Button>
       </div>
       <CollapsibleContent>
         <div
@@ -117,8 +71,7 @@ export function CommitMessageChat({
         >
           {messages.length === 0 ? (
             <p className="text-[11px] leading-relaxed text-muted">
-              Ask for a message, or click{" "}
-              <Sparkles className="inline h-3 w-3 text-accent" /> Generate using AI.
+              Ask for a commit message based on your changes.
             </p>
           ) : (
             messages.map((msg) => (
@@ -164,7 +117,7 @@ export function CommitMessageChat({
                 send(input);
               }
             }}
-            placeholder="Ask about your commit…"
+            placeholder="Ask me to run git commands"
             disabled={disabled}
             className="min-w-0 flex-1 rounded border border-border-subtle bg-panel px-2 py-1 text-[11px] text-foreground outline-none focus:border-accent"
           />

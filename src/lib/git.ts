@@ -10,6 +10,22 @@ function requireTauri(): void {
   }
 }
 
+/** Tauri invoke errors are often plain strings, not Error instances. */
+export function formatInvokeError(error: unknown, fallback: string): string {
+  if (typeof error === "string") return error.trim() || fallback;
+  if (error instanceof Error) return error.message.trim() || fallback;
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof (error as { message: unknown }).message === "string"
+  ) {
+    const message = (error as { message: string }).message.trim();
+    return message || fallback;
+  }
+  return fallback;
+}
+
 export async function gitStatus(path: string): Promise<GitStatusResult> {
   requireTauri();
   return invoke<GitStatusResult>("git_status", { path });

@@ -29,7 +29,7 @@ function ActivityButton({
       title={title}
       onClick={onClick}
       className={cn(
-        "relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+        "relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg transition-colors",
         active
           ? "text-accent"
           : "text-muted-foreground hover:bg-panel-elevated/60",
@@ -81,7 +81,7 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
         <button
           type="button"
           title="Settings"
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-panel-elevated hover:text-foreground"
+          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-panel-elevated hover:text-foreground"
         >
           <Settings className="h-4 w-4" />
         </button>

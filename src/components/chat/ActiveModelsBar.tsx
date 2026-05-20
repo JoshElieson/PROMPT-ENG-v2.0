@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { LayoutMenu } from "@/components/layout/LayoutMenu";
 import { ModelLogo } from "@/components/models/ModelLogo";
 import { useRoundTable } from "@/context/RoundTableContext";
 import { getModelById } from "@/data/ai-models";
@@ -14,11 +15,9 @@ export function ActiveModelsBar() {
     [activeIds],
   );
 
-  if (models.length === 0) return null;
-
   return (
-    <section className="shrink-0 border-b border-border-subtle bg-background px-6 py-2.5">
-      <div className="mx-auto flex max-w-2xl flex-wrap justify-center gap-1.5">
+    <section className="flex shrink-0 items-center gap-2 border-b border-border-subtle bg-background px-2 py-2">
+      <span className="mx-auto flex min-w-0 flex-1 flex-wrap justify-center gap-1.5 px-2">
         {models.map((model) => (
           <span
             key={model.id}
@@ -28,7 +27,8 @@ export function ActiveModelsBar() {
             {model.name}
           </span>
         ))}
-      </div>
+      </span>
+      <LayoutMenu />
     </section>
   );
 }

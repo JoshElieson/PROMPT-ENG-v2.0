@@ -1,4 +1,4 @@
-# Prompt
+# FORGE
 
 Desktop prompt-engineering IDE — multi-model chat, project file context, and Round Table orchestration.
 
@@ -86,4 +86,4 @@ Default window: **1280×800** (`src-tauri/tauri.conf.json`).
 - SQLite + FTS5 for chats/projects
 - Permissions → AI context injection
 - Round Table multi-model synthesis
-- Keyboard shortcuts (⌘1–4, `/`, `@`)
+- Keyboard shortcuts (Ctrl+1–4, `/`, `@`)

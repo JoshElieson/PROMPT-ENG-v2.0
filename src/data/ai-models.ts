@@ -190,6 +190,11 @@ export function getModelById(id: string): AiModel | undefined {
   return popularAiModels.find((m) => m.id.toLowerCase() === normalized);
 }
 
+/** First listed model for a provider (e.g. GPT-4o for ChatGPT). */
+export function getTopModelForOrg(orgId: string): AiModel | undefined {
+  return popularAiModels.find((m) => m.orgId === orgId);
+}
+
 export function buildRoundTableModels(selectedIds: string[]): RoundTableModel[] {
   const selected = popularAiModels.filter((m) => selectedIds.includes(m.id));
   if (selected.length === 0) return [];

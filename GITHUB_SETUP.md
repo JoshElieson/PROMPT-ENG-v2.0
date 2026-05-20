@@ -1,11 +1,11 @@
 # GitHub sign-in setup
 
-Prompt uses GitHub’s **device flow** so you can sign in from the desktop app without a backend or client secret.
+FORGE uses GitHub’s **device flow** so you can sign in from the desktop app without a backend or client secret.
 
 ## 1. Create a GitHub OAuth app
 
 1. Open [New OAuth App](https://github.com/settings/applications/new).
-2. Set **Application name** (e.g. `Prompt local`).
+2. Set **Application name** (e.g. `FORGE local`).
 3. **Homepage URL** can be `http://localhost:1420` (used for local dev).
 4. Leave **Authorization callback URL** empty (not used for device flow).
 5. Click **Register application**.

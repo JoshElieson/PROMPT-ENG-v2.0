@@ -308,7 +308,7 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser> 
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${accessToken}`,
       "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "PromptEng/2.0",
+      "User-Agent": "FORGE/2.0",
     },
   });
 

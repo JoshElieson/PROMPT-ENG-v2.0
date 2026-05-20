@@ -55,7 +55,7 @@ export function AccountMenu() {
                 : "Account"
           }
           className={cn(
-            "relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors",
+            "relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors",
             "hover:bg-panel-elevated hover:text-foreground",
             "data-[state=open]:bg-panel-elevated data-[state=open]:text-foreground",
           )}

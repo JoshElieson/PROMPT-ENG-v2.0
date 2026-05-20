@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Serialize, Clone)]
@@ -28,12 +28,43 @@ pub struct GitCommandResult {
     pub output: String,
 }
 
+fn git_executable() -> PathBuf {
+    if let Ok(path) = std::env::var("GIT_EXECUTABLE") {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            return path;
+        }
+    }
+
+    if cfg!(windows) {
+        const CANDIDATES: &[&str] = &[
+            r"C:\Program Files\Git\cmd\git.exe",
+            r"C:\Program Files\Git\bin\git.exe",
+            r"C:\Program Files (x86)\Git\cmd\git.exe",
+        ];
+        for candidate in CANDIDATES {
+            let path = PathBuf::from(candidate);
+            if path.is_file() {
+                return path;
+            }
+        }
+    }
+
+    PathBuf::from("git")
+}
+
 fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
+    let git = git_executable();
+    let output = Command::new(&git)
         .args(args)
         .current_dir(cwd)
         .output()
-        .map_err(|e| format!("Failed to run git: {e}. Is Git installed and on PATH?"))?;
+        .map_err(|e| {
+            format!(
+                "Failed to run git at {}: {e}. Install Git for Windows or set GIT_EXECUTABLE.",
+                git.display()
+            )
+        })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();

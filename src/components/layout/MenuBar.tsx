@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -10,10 +11,29 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { appMenuGroups, type MenuEntry } from "@/data/menu-items";
+import {
+  appMenuGroups,
+  getMenuDisplayLabel,
+  type MenuActionId,
+  type MenuEntry,
+} from "@/data/menu-items";
+import { menuActionChecked, useLayout } from "@/contexts/LayoutContext";
 import { cn } from "@/lib/utils";
 
+function menuActionToRightPanel(
+  action: MenuActionId,
+): "roundTable" | "workflow" | null {
+  if (action === "view.roundTablePanel") return "roundTable";
+  if (action === "view.workflowPanel") return "workflow";
+  return null;
+}
+
 function MenuEntries({ items }: { items: MenuEntry[] }) {
+  const {
+    rightPanels,
+    setRightPanelVisible,
+    dispatchMenuAction,
+  } = useLayout();
   return (
     <>
       {items.map((entry, index) => {
@@ -24,7 +44,9 @@ function MenuEntries({ items }: { items: MenuEntry[] }) {
         if (entry.type === "submenu") {
           return (
             <DropdownMenuSub key={entry.label}>
-              <DropdownMenuSubTrigger>{entry.label}</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger>
+                {getMenuDisplayLabel(entry)}
+              </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <MenuEntries items={entry.items} />
               </DropdownMenuSubContent>
@@ -32,13 +54,37 @@ function MenuEntries({ items }: { items: MenuEntry[] }) {
           );
         }
 
+        if (entry.checkable && entry.action) {
+          const panel = menuActionToRightPanel(entry.action);
+          const checked = menuActionChecked(entry.action, rightPanels) ?? false;
+
+          return (
+            <DropdownMenuCheckboxItem
+              key={entry.label}
+              checked={checked}
+              disabled={entry.disabled}
+              onCheckedChange={(next) => {
+                if (panel) setRightPanelVisible(panel, next);
+              }}
+              onSelect={(e) => e.preventDefault()}
+            >
+              {getMenuDisplayLabel(entry)}
+              {entry.shortcut && (
+                <DropdownMenuShortcut>{entry.shortcut}</DropdownMenuShortcut>
+              )}
+            </DropdownMenuCheckboxItem>
+          );
+        }
+
         return (
           <DropdownMenuItem
             key={entry.label}
             disabled={entry.disabled}
-            onSelect={(e) => e.preventDefault()}
+            onSelect={() => {
+              if (entry.action) dispatchMenuAction(entry.action);
+            }}
           >
-            {entry.label}
+            {getMenuDisplayLabel(entry)}
             {entry.shortcut && (
               <DropdownMenuShortcut>{entry.shortcut}</DropdownMenuShortcut>
             )}
@@ -71,9 +117,10 @@ function MenuGroupDropdown({
           type="button"
           data-menu-trigger={label}
           className={cn(
-            "rounded px-2.5 py-1 text-[13px] text-muted-foreground outline-none",
-            "hover:bg-panel-elevated hover:text-foreground",
-            "data-[state=open]:bg-panel-elevated data-[state=open]:text-foreground",
+            "rounded-md px-2.5 py-1 text-[13px] text-muted-foreground outline-none",
+            "transition-colors duration-150 ease-out",
+            "hover:bg-menu-hover hover:text-foreground",
+            "data-[state=open]:bg-menu-hover-strong data-[state=open]:text-foreground",
           )}
           onMouseDown={onTriggerMouseDown}
           onMouseEnter={onTriggerMouseEnter}
@@ -109,7 +156,11 @@ function MenuGroupDropdown({
   );
 }
 
-export function MenuBar() {
+interface MenuBarProps {
+  className?: string;
+}
+
+export function MenuBar({ className }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuSession = useRef(false);
   const openMenuRef = useRef<string | null>(null);
@@ -151,7 +202,7 @@ export function MenuBar() {
   return (
     <nav
       ref={navRef}
-      className="flex min-w-0 flex-1 items-center gap-0.5"
+      className={cn("flex min-w-0 items-center gap-0.5", className)}
       aria-label="Application menu"
     >
       {appMenuGroups.map((group) => (

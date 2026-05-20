@@ -13,6 +13,8 @@
   --color-accent: #ff6b35;
   --color-accent-muted: #ff6b3520;
   --color-accent-hover: #ff8555;
+  --color-menu-hover: rgb(255 255 255 / 0.1);
+  --color-menu-hover-strong: rgb(255 255 255 / 0.14);
   --color-success: #22c55e;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --radius-xs: 0.25rem;

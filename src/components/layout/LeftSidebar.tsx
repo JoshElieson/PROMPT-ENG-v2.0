@@ -52,14 +52,6 @@ export function LeftSidebar({ activeSection }: LeftSidebarProps) {
           <AgentCartPanel active />
         </section>
       ) : null}
-
-      <footer className="shrink-0 border-t border-border-subtle px-3 py-2">
-        <p className="text-xs text-muted-foreground">
-          <span className="text-foreground">Claude 3.5</span>
-          <span className="mx-1 text-muted">·</span>
-          <span className="text-muted">⌘ 2 to switch</span>
-        </p>
-      </footer>
     </ResizableSidebar>
   );
 }

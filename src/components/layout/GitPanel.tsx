@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Loader2,
   MoreHorizontal,
   Sparkles,
   X,
@@ -26,6 +27,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import { useGit } from "@/contexts/GitContext";
+import { useLayout } from "@/contexts/LayoutContext";
 import { useProjects } from "@/contexts/ProjectsContext";
 import {
   GENERATE_COMMIT_AI_TOOLTIP,
@@ -120,7 +122,8 @@ interface GitPanelProps {
 }
 
 export function GitPanel({ active }: GitPanelProps) {
-  const { projects } = useProjects();
+  const { dispatchMenuAction } = useLayout();
+  const { projects, addProject, isAdding } = useProjects();
   const {
     repoPath,
     projectId,
@@ -222,9 +225,28 @@ export function GitPanel({ active }: GitPanelProps) {
     >
       <div className="flex min-h-0 flex-1 flex-col">
         {projects.length === 0 ? (
-          <p className="px-3 py-4 text-center text-xs text-muted">
-            Add a project folder to use Git.
-          </p>
+          <div className="flex flex-1 flex-col items-center justify-center px-3 py-8">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isAdding}
+              className="border-border-subtle bg-surface/80 text-foreground hover:bg-menu-hover hover:text-foreground"
+              onClick={() => {
+                dispatchMenuAction("view.explorer");
+                void addProject();
+              }}
+            >
+              {isAdding ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Opening…
+                </>
+              ) : (
+                "Add Project"
+              )}
+            </Button>
+          </div>
         ) : (
           <>
             {projects.length > 1 && (
@@ -314,15 +336,6 @@ export function GitPanel({ active }: GitPanelProps) {
               </div>
             )}
 
-            {isRepo && (
-              <CommitMessageChat
-                changes={allChanges}
-                draft={commitMessage}
-                onApply={setCommitMessage}
-                disabled={busy}
-              />
-            )}
-
             {lastMessage && (
               <div
                 className={cn(
@@ -406,6 +419,15 @@ export function GitPanel({ active }: GitPanelProps) {
                 </>
               )}
             </ScrollArea>
+
+            {isRepo && (
+              <CommitMessageChat
+                changes={allChanges}
+                draft={commitMessage}
+                onApply={setCommitMessage}
+                disabled={busy}
+              />
+            )}
           </>
         )}
       </div>

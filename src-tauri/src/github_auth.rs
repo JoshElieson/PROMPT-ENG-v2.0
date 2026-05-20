@@ -5,7 +5,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const DEVICE_CODE_URL: &str = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
 const USER_API_URL: &str = "https://api.github.com/user";
-const GITHUB_USER_AGENT: &str = "PromptEng/2.0 (Tauri; +https://github.com/login/device)";
+const GITHUB_USER_AGENT: &str = "FORGE/2.0 (Tauri; +https://github.com/login/device)";
 
 fn github_http_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
