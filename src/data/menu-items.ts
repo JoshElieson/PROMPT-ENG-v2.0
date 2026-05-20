@@ -3,6 +3,8 @@ export type MenuActionId =
   | "view.agentCart"
   | "view.roundTablePanel"
   | "view.workflowPanel"
+  | "view.workspaceTerminal"
+  | "view.workspaceBrowser"
   | "view.toggleLeftSidebar"
   | "view.toggleRightSidebar";
 
@@ -14,7 +16,7 @@ export type MenuEntry =
       shortcut?: string;
       disabled?: boolean;
       action?: MenuActionId;
-      /** Show a checkmark when the action maps to visible UI (e.g. a panel). */
+      /** Click toggles visibility (e.g. a panel); no checkmark in the menu. */
       checkable?: boolean;
     }
   | {
@@ -29,6 +31,8 @@ export const implementedMenuActions = new Set<MenuActionId>([
   "view.agentCart",
   "view.roundTablePanel",
   "view.workflowPanel",
+  "view.workspaceTerminal",
+  "view.workspaceBrowser",
   "view.toggleLeftSidebar",
   "view.toggleRightSidebar",
 ]);
@@ -138,27 +142,41 @@ export const appMenuGroups: MenuGroup[] = [
       { type: "separator" },
       {
         type: "item",
-        label: "Explorer",
+        label: "Workspaces",
         shortcut: "Ctrl+Shift+E",
         action: "view.explorer",
+        checkable: true,
       },
       {
         type: "item",
         label: "Agent Cart",
         shortcut: "Ctrl+Shift+A",
         action: "view.agentCart",
+        checkable: true,
       },
       {
         type: "item",
-        label: "Round Table Panel",
+        label: "Models",
         action: "view.roundTablePanel",
         checkable: true,
       },
       {
         type: "item",
-        label: "Workflow Panel",
+        label: "Workflows",
         action: "view.workflowPanel",
         checkable: true,
+      },
+      {
+        type: "item",
+        label: "Terminal",
+        shortcut: "Ctrl+`",
+        action: "view.workspaceTerminal",
+        checkable: true,
+      },
+      {
+        type: "item",
+        label: "Browser",
+        action: "view.workspaceBrowser",
       },
       { type: "separator" },
       {

@@ -1,5 +1,5 @@
 /** Maximum number of simultaneous chat panes in the center workspace. */
-export const MAX_WORKSPACE_PANES = 4;
+export const MAX_WORKSPACE_PANES = 7;
 
 /** Per-pane model cart + round table snapshot (independent from sidebar global cart). */
 export interface PaneModelSession {
@@ -56,6 +56,8 @@ export type QuadWorkspaceRoot = {
   topRight: WorkspaceLeafNode;
   bottomLeft: WorkspaceLeafNode;
   bottomRight: WorkspaceLeafNode;
+  /** Extra agent tabs beyond the 2×2 base layout (up to MAX_WORKSPACE_PANES). */
+  overflow?: WorkspaceLeafNode[];
 };
 
 export type CenterWorkspaceRoot =

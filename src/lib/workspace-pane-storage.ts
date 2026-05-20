@@ -154,6 +154,11 @@ function parseV2Root(raw: unknown): CenterWorkspaceRoot | null {
         topRight,
         bottomLeft,
         bottomRight,
+        overflow: Array.isArray(raw.overflow)
+          ? raw.overflow
+              .map(parseLeaf)
+              .filter((leaf): leaf is WorkspaceLeafNode => leaf != null)
+          : undefined,
       };
       return q;
     }
@@ -196,6 +201,7 @@ function collectLeafIdsFromRoot(root: CenterWorkspaceRoot): string[] {
         root.topRight.id,
         root.bottomLeft.id,
         root.bottomRight.id,
+        ...(root.overflow?.map((leaf) => leaf.id) ?? []),
       ];
     default:
       return [];

@@ -12,7 +12,7 @@ export function GitFileIcon({ path, className }: { path: string; className?: str
     return <FileCode2 className={cn(iconClass, "text-sky-300")} />;
   }
   if (ext === "rs") {
-    return <Settings className={cn(iconClass, "text-orange-400")} />;
+    return <Settings className={cn(iconClass, "text-violet-400")} />;
   }
   if (ext === "json") {
     return <FileJson className={cn(iconClass, "text-amber-400")} />;

@@ -23,7 +23,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      "flex cursor-default select-none items-center px-2.5 py-1.5 text-[13px] text-foreground/90",
+      "flex cursor-pointer select-none items-center px-2.5 py-1.5 text-[13px] text-foreground/90 data-[disabled]:cursor-not-allowed",
       menuItemSurface,
       "data-[state=open]:bg-menu-hover-strong data-[state=open]:text-foreground",
       inset && "pl-8",
@@ -45,7 +45,7 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      "z-50 min-w-[10rem] overflow-hidden rounded-md border border-border bg-panel p-1 text-foreground shadow-lg",
+      "z-50 min-w-[10rem] overflow-hidden rounded-lg border border-border bg-panel/95 p-1 text-foreground shadow-[0_8px_24px_rgba(2,6,23,0.34)] backdrop-blur-md",
       "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
       className,
     )}
@@ -64,7 +64,7 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 min-w-[12rem] overflow-hidden rounded-md border border-border bg-panel p-1 text-foreground shadow-lg",
+        "z-50 min-w-[12rem] overflow-hidden rounded-lg border border-border bg-panel/95 p-1 text-foreground shadow-[0_8px_24px_rgba(2,6,23,0.34)] backdrop-blur-md",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className,
       )}
@@ -83,7 +83,7 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center px-2.5 py-1.5 text-[13px] text-foreground/90 data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
+      "relative flex cursor-pointer select-none items-center px-2.5 py-1.5 text-[13px] text-foreground/90 data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40",
       menuItemSurface,
       inset && "pl-8",
       className,
@@ -96,25 +96,31 @@ DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
 const DropdownMenuCheckboxItem = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.CheckboxItem>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem>
->(({ className, children, checked, ...props }, ref) => (
-  <DropdownMenuPrimitive.CheckboxItem
-    ref={ref}
-    className={cn(
-      "relative flex cursor-default select-none items-center py-1.5 pl-8 pr-2.5 text-[13px] text-foreground/90 data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
-      menuItemSurface,
-      className,
-    )}
-    checked={checked}
-    {...props}
-  >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-      <DropdownMenuPrimitive.ItemIndicator>
-        <Check className="h-3.5 w-3.5" />
-      </DropdownMenuPrimitive.ItemIndicator>
-    </span>
-    {children}
-  </DropdownMenuPrimitive.CheckboxItem>
-));
+>(({ className, children, checked, ...props }, ref) => {
+  const isChecked = checked === true;
+  return (
+    <DropdownMenuPrimitive.CheckboxItem
+      ref={ref}
+      className={cn(
+        "relative flex cursor-pointer select-none items-center py-1.5 pr-2.5 text-[13px] text-foreground/90 data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40",
+        isChecked ? "pl-8" : "pl-2.5",
+        menuItemSurface,
+        className,
+      )}
+      checked={checked}
+      {...props}
+    >
+      {isChecked && (
+        <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+          <DropdownMenuPrimitive.ItemIndicator>
+            <Check className="h-3.5 w-3.5" />
+          </DropdownMenuPrimitive.ItemIndicator>
+        </span>
+      )}
+      {children}
+    </DropdownMenuPrimitive.CheckboxItem>
+  );
+});
 DropdownMenuCheckboxItem.displayName =
   DropdownMenuPrimitive.CheckboxItem.displayName;
 
@@ -125,7 +131,7 @@ const DropdownMenuRadioItem = React.forwardRef<
   <DropdownMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center py-1.5 pl-8 pr-2.5 text-[13px] text-foreground/90 data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
+      "relative flex cursor-pointer select-none items-center py-1.5 pl-8 pr-2.5 text-[13px] text-foreground/90 data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40",
       menuItemSurface,
       className,
     )}

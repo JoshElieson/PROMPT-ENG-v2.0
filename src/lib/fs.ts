@@ -9,7 +9,9 @@ export function basename(path: string): string {
   return parts[parts.length - 1] || normalized;
 }
 
-export async function pickProjectDirectory(): Promise<string | null> {
+export async function pickProjectDirectory(
+  title = "Add project folder",
+): Promise<string | null> {
   if (!isTauri()) {
     throw new Error(
       "Adding local folders requires the desktop app. Run with: npm run tauri dev",
@@ -19,11 +21,18 @@ export async function pickProjectDirectory(): Promise<string | null> {
   const selected = await open({
     directory: true,
     multiple: false,
-    title: "Add project folder",
+    title,
   });
 
   if (selected === null) return null;
   return Array.isArray(selected) ? selected[0] : selected;
+}
+
+export async function getUserHomeDir(): Promise<string> {
+  if (!isTauri()) {
+    throw new Error("Home directory requires the desktop app.");
+  }
+  return invoke<string>("get_user_home_dir");
 }
 
 export async function listDirectory(path: string): Promise<FsEntry[]> {

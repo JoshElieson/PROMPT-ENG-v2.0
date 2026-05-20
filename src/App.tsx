@@ -5,6 +5,7 @@ import { RightSidebar } from "@/components/layout/RightSidebar";
 import { StatusBar } from "@/components/layout/StatusBar";
 import { TitleBar } from "@/components/layout/TitleBar";
 import { AppSelectionProvider } from "@/contexts/AppSelectionContext";
+import { ApiUsageProvider } from "@/contexts/ApiUsageContext";
 import { ChatsProvider } from "@/contexts/ChatsContext";
 import { FocusedWorkspacePaneRoundTableProvider } from "@/contexts/FocusedWorkspacePaneRoundTableProvider";
 import { RoundTableProvider } from "@/contexts/RoundTableContext";
@@ -18,7 +19,7 @@ function AppShell() {
   const { sidebarView, setSidebarView } = useLayout();
 
   return (
-    <section className="flex h-full w-full flex-col overflow-hidden border-0 bg-black outline-none ring-0">
+    <section className="flex h-full w-full flex-col overflow-hidden border-0 bg-background outline-none ring-0">
       <TitleBar />
       <section className="flex min-h-0 flex-1">
         <ActivityBar activeView={sidebarView} onViewChange={setSidebarView} />
@@ -36,9 +37,10 @@ function App() {
     <AuthProvider>
       <LayoutProvider>
         <RoundTableProvider>
+          <ApiUsageProvider>
           <ChatsProvider>
-            <FocusedWorkspacePaneRoundTableProvider>
-              <ProjectsProvider>
+            <ProjectsProvider>
+              <FocusedWorkspacePaneRoundTableProvider>
                 <AppSelectionProvider>
                   <GitProvider>
                     <TooltipProvider delayDuration={200}>
@@ -46,9 +48,10 @@ function App() {
                     </TooltipProvider>
                   </GitProvider>
                 </AppSelectionProvider>
-              </ProjectsProvider>
-            </FocusedWorkspacePaneRoundTableProvider>
+              </FocusedWorkspacePaneRoundTableProvider>
+            </ProjectsProvider>
           </ChatsProvider>
+          </ApiUsageProvider>
         </RoundTableProvider>
       </LayoutProvider>
     </AuthProvider>

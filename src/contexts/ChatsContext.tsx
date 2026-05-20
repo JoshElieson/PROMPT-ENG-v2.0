@@ -15,9 +15,18 @@ import {
   isAiModelSupported,
   type ChatTurn,
 } from "@/lib/ai-chat";
-import { titleFromMessage } from "@/lib/chat-utils";
+import {
+  chatHasMessages,
+  defaultThreadTitle,
+  titleFromMessage,
+} from "@/lib/chat-utils";
+import { useApiUsage } from "@/contexts/ApiUsageContext";
 import { evenContributions } from "@/lib/mock-chat-response";
 import { isTauri } from "@/lib/tauri";
+import {
+  recordResponseEstimates,
+  recordSendEstimates,
+} from "@/lib/token-usage";
 import {
   loadActiveChatId,
   loadChats,
@@ -57,8 +66,15 @@ interface ChatsContextValue {
   isResponding: boolean;
   createChat: () => string;
   selectChat: (id: string) => void;
+  renameChat: (id: string, title: string) => void;
+  renameThread: (threadId: string, title: string) => void;
+  /** Stops the in-flight AI response for this thread without closing the tab. */
+  forceKillThread: (threadId: string) => void;
+  togglePinChat: (id: string) => void;
   deleteChat: (id: string) => void;
   sendMessage: (payload: SendMessagePayload) => void;
+  /** Messages waiting to send after the current response on this thread. */
+  getQueuedMessageCount: (chatId: string, threadId: string) => number;
   updateChatPermissions: (
     chatId: string,
     updater: (
@@ -69,6 +85,7 @@ interface ChatsContextValue {
     chatId: string,
     permissions: Record<string, NodePermissions>,
   ) => void;
+  setChatGitProject: (chatId: string, projectId: string | null) => void;
 }
 
 const ChatsContext = createContext<ChatsContextValue | null>(null);
@@ -79,10 +96,84 @@ function resolveActiveId(chats: Chat[], storedId: string | null): string | null 
   return chats[0].id;
 }
 
+function buildEmptyChat(): Chat {
+  const now = Date.now();
+  const tid = crypto.randomUUID();
+  return {
+    id: crypto.randomUUID(),
+    title: "New Chat",
+    threads: [{ id: tid, messages: [], createdAt: now, updatedAt: now }],
+    nextAgentNumber: 2,
+    createdAt: now,
+    updatedAt: now,
+    permissions: {},
+    gitProjectId: null,
+    workspace: createDefaultWorkspaceLayout(tid),
+  };
+}
+
+function partitionLoadedChats(
+  loaded: Chat[],
+  storedActiveId: string | null,
+): { chats: Chat[]; draftChat: Chat | null; activeChatId: string | null } {
+  const chats = loaded.filter(chatHasMessages);
+  const empty = loaded.filter((c) => !chatHasMessages(c));
+  const draftFromActive = storedActiveId
+    ? (empty.find((c) => c.id === storedActiveId) ?? null)
+    : null;
+  const draftChat = draftFromActive ?? empty[0] ?? null;
+  const activeChatId = draftChat?.id ?? resolveActiveId(chats, storedActiveId);
+  return { chats, draftChat, activeChatId };
+}
+
 function resolveThreadId(chat: Chat, threadId: string | null | undefined): string {
   if (threadId && chat.threads.some((t) => t.id === threadId)) return threadId;
   return chat.threads[0]!.id;
 }
+
+function inferNextAgentNumber(chat: Chat): number {
+  let max = 1;
+  for (const thread of chat.threads) {
+    const title = thread.title?.trim();
+    if (!title) continue;
+    const match = /^Agent\s+(\d+)$/i.exec(title);
+    if (!match) continue;
+    const n = Number(match[1]);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return Math.max(max + 1, chat.threads.length + 1);
+}
+
+function threadResponseKey(chatId: string, threadId: string): string {
+  return `${chatId}:${threadId}`;
+}
+
+function findChatSnapshot(
+  chats: Chat[],
+  draftChat: Chat | null,
+  chatId: string,
+): Chat | null {
+  if (draftChat?.id === chatId) return draftChat;
+  return chats.find((c) => c.id === chatId) ?? null;
+}
+
+function buildThreadHistory(chat: Chat, threadId: string): ChatTurn[] {
+  const thread = chat.threads.find((t) => t.id === threadId);
+  return (thread?.messages ?? []).map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+}
+
+type CommittedSend = {
+  resolvedChatId: string;
+  finalThreadId: string;
+  trimmed: string;
+  history: ChatTurn[];
+  targetModelIds: string[];
+  contributions: { modelId: string; percentage: number }[];
+  workspace?: AiWorkspacePayload;
+};
 
 function appendUserMessageToThread(
   list: Chat[],
@@ -108,6 +199,7 @@ function appendUserMessageToThread(
       ],
       createdAt: now,
       updatedAt: now,
+      nextAgentNumber: 2,
       permissions: {},
       workspace: createDefaultWorkspaceLayout(tid),
     };
@@ -169,24 +261,74 @@ function appendAssistantToThread(
 }
 
 export function ChatsProvider({ children }: { children: ReactNode }) {
+  const { addUsage } = useApiUsage();
   const boot = useMemo(() => {
     const loaded = loadChats();
-    return {
-      chats: loaded,
-      activeChatId: resolveActiveId(loaded, loadActiveChatId()),
-    };
+    return partitionLoadedChats(loaded, loadActiveChatId());
   }, []);
 
   const [chats, setChats] = useState<Chat[]>(boot.chats);
+  const [draftChat, setDraftChat] = useState<Chat | null>(boot.draftChat);
   const [activeChatId, setActiveChatId] = useState<string | null>(
     boot.activeChatId,
   );
   const [responseLoading, setResponseLoading] =
     useState<ResponseLoadingState | null>(null);
   const responseRunRef = useRef(0);
+  const inFlightThreadsRef = useRef(new Set<string>());
+  const queuedSendsRef = useRef(new Map<string, SendMessagePayload[]>());
+  const chatsRef = useRef(chats);
+  const draftChatRef = useRef(draftChat);
+  const flushQueueRef = useRef<(chatId: string, threadId: string) => void>(
+    () => {},
+  );
+  const [queuedCountByKey, setQueuedCountByKey] = useState<
+    Record<string, number>
+  >({});
+
+  chatsRef.current = chats;
+  draftChatRef.current = draftChat;
+
+  const syncQueueCount = useCallback((key: string, count: number) => {
+    setQueuedCountByKey((prev) => {
+      if (count <= 0) {
+        if (!(key in prev)) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      if (prev[key] === count) return prev;
+      return { ...prev, [key]: count };
+    });
+  }, []);
+
+  const clearMessageQueue = useCallback(
+    (chatId: string, threadId: string) => {
+      const key = threadResponseKey(chatId, threadId);
+      queuedSendsRef.current.delete(key);
+      syncQueueCount(key, 0);
+    },
+    [syncQueueCount],
+  );
+
+  const enqueueMessage = useCallback(
+    (key: string, payload: SendMessagePayload) => {
+      const queue = queuedSendsRef.current.get(key) ?? [];
+      queue.push(payload);
+      queuedSendsRef.current.set(key, queue);
+      syncQueueCount(key, queue.length);
+    },
+    [syncQueueCount],
+  );
+
+  const getQueuedMessageCount = useCallback(
+    (chatId: string, threadId: string) =>
+      queuedCountByKey[threadResponseKey(chatId, threadId)] ?? 0,
+    [queuedCountByKey],
+  );
 
   useEffect(() => {
-    saveChats(chats);
+    saveChats(chats.filter(chatHasMessages));
   }, [chats]);
 
   useEffect(() => {
@@ -194,13 +336,18 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
   }, [activeChatId]);
 
   useEffect(() => {
-    if (activeChatId && !chats.some((c) => c.id === activeChatId)) {
-      setActiveChatId(chats[0]?.id ?? null);
+    if (!activeChatId) return;
+    const isDraft = draftChat?.id === activeChatId;
+    const isSaved = chats.some((c) => c.id === activeChatId);
+    if (!isDraft && !isSaved) {
+      setActiveChatId(draftChat?.id ?? chats[0]?.id ?? null);
     }
-  }, [chats, activeChatId]);
+  }, [chats, activeChatId, draftChat]);
 
   const activeWorkspaceLayout = useMemo(() => {
-    const c = chats.find((x) => x.id === activeChatId);
+    const c =
+      (draftChat?.id === activeChatId ? draftChat : null) ??
+      chats.find((x) => x.id === activeChatId);
     if (!c?.threads[0]) return null;
     const t0 = c.threads[0].id;
     const base = c.workspace ?? createDefaultWorkspaceLayout(t0);
@@ -208,60 +355,77 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     return ensureFocusedLeafExists(
       reconcileWorkspaceThreads(base, valid, t0),
     );
-  }, [chats, activeChatId]);
+  }, [chats, activeChatId, draftChat]);
+
+  const patchActiveChat = useCallback(
+    (updater: (chat: Chat) => Chat) => {
+      if (!activeChatId) return;
+      if (draftChat?.id === activeChatId) {
+        setDraftChat((prev) => (prev ? updater(prev) : null));
+        return;
+      }
+      setChats((prev) =>
+        prev.map((c) => (c.id === activeChatId ? updater(c) : c)),
+      );
+    },
+    [activeChatId, draftChat?.id],
+  );
 
   const patchActiveWorkspaceLayout = useCallback(
     (fn: (prev: WorkspacePaneLayout) => WorkspacePaneLayout) => {
-      if (!activeChatId) return;
-      setChats((prev) =>
-        prev.map((c) => {
-          if (c.id !== activeChatId) return c;
-          const t0 = c.threads[0]?.id;
-          if (!t0) return c;
-          const base = c.workspace ?? createDefaultWorkspaceLayout(t0);
-          const valid = new Set(c.threads.map((t) => t.id));
-          const reconciled = ensureFocusedLeafExists(
-            reconcileWorkspaceThreads(base, valid, t0),
-          );
-          const next = ensureFocusedLeafExists(fn(reconciled));
-          return { ...c, workspace: next, updatedAt: Date.now() };
-        }),
-      );
+      patchActiveChat((c) => {
+        const t0 = c.threads[0]?.id;
+        if (!t0) return c;
+        const base = c.workspace ?? createDefaultWorkspaceLayout(t0);
+        const valid = new Set(c.threads.map((t) => t.id));
+        const reconciled = ensureFocusedLeafExists(
+          reconcileWorkspaceThreads(base, valid, t0),
+        );
+        const next = ensureFocusedLeafExists(fn(reconciled));
+        return { ...c, workspace: next, updatedAt: Date.now() };
+      });
     },
-    [activeChatId],
+    [patchActiveChat],
   );
 
   const expandActiveWorkspaceLayout = useCallback(
     (aspectWide: boolean): boolean => {
       if (!activeChatId) return false;
       let ok = false;
-      setChats((prev) =>
-        prev.map((c) => {
-          if (c.id !== activeChatId) return c;
-          const newTid = crypto.randomUUID();
-          const t0 = c.threads[0]?.id;
-          if (!t0) return c;
-          const base = c.workspace ?? createDefaultWorkspaceLayout(t0);
-          const expanded = expandWorkspaceLayout(base, aspectWide, newTid);
-          if (!expanded) return c;
-          ok = true;
-          const newThread: ChatThread = {
-            id: newTid,
-            messages: [],
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-          return {
-            ...c,
-            threads: [...c.threads, newThread],
-            workspace: ensureFocusedLeafExists(expanded),
-            updatedAt: Date.now(),
-          };
-        }),
-      );
+      const expand = (c: Chat): Chat => {
+        const newTid = crypto.randomUUID();
+        const t0 = c.threads[0]?.id;
+        if (!t0) return c;
+        const base = c.workspace ?? createDefaultWorkspaceLayout(t0);
+        const expanded = expandWorkspaceLayout(base, aspectWide, newTid);
+        if (!expanded) return c;
+        ok = true;
+        const nextAgentNumber = c.nextAgentNumber ?? inferNextAgentNumber(c);
+        const newThread: ChatThread = {
+          id: newTid,
+          title: defaultThreadTitle(nextAgentNumber - 1),
+          messages: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        return {
+          ...c,
+          threads: [...c.threads, newThread],
+          nextAgentNumber: nextAgentNumber + 1,
+          workspace: ensureFocusedLeafExists(expanded),
+          updatedAt: Date.now(),
+        };
+      };
+      if (draftChat?.id === activeChatId) {
+        setDraftChat((prev) => (prev ? expand(prev) : null));
+      } else {
+        setChats((prev) =>
+          prev.map((c) => (c.id === activeChatId ? expand(c) : c)),
+        );
+      }
       return ok;
     },
-    [activeChatId],
+    [activeChatId, draftChat?.id],
   );
 
   const closeActiveWorkspaceLeaf = useCallback(
@@ -271,39 +435,42 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       let didMutate = false;
       let removedThreadId: string | null = null;
 
-      setChats((prev) => {
-        const chat = prev.find((c) => c.id === activeChatId);
-        if (!chat?.threads[0]) return prev;
-
+      const applyClose = (chat: Chat): Chat | null => {
+        if (!chat.threads[0]) return null;
         const t0 = chat.threads[0].id;
         const base = chat.workspace ?? createDefaultWorkspaceLayout(t0);
         const valid = new Set(chat.threads.map((t) => t.id));
         const reconciled = ensureFocusedLeafExists(
           reconcileWorkspaceThreads(base, valid, t0),
         );
-
         const collapsed = collapseWorkspaceByLeaf(reconciled, leafId);
-        if (!collapsed) return prev;
-
+        if (!collapsed) return null;
         const threads = chat.threads.filter(
           (t) => t.id !== collapsed.removedThreadId,
         );
-        if (threads.length === 0) return prev;
-
+        if (threads.length === 0) return null;
         didMutate = true;
         removedThreadId = collapsed.removedThreadId;
+        return {
+          ...chat,
+          threads,
+          workspace: ensureFocusedLeafExists(collapsed.layout),
+          updatedAt: Date.now(),
+        };
+      };
 
-        return prev.map((c) =>
-          c.id === activeChatId
-            ? {
-                ...c,
-                threads,
-                workspace: ensureFocusedLeafExists(collapsed.layout),
-                updatedAt: Date.now(),
-              }
-            : c,
-        );
-      });
+      if (draftChat?.id === activeChatId) {
+        const next = applyClose(draftChat);
+        if (next) setDraftChat(next);
+      } else {
+        setChats((prev) => {
+          const chat = prev.find((c) => c.id === activeChatId);
+          if (!chat) return prev;
+          const next = applyClose(chat);
+          if (!next) return prev;
+          return prev.map((c) => (c.id === activeChatId ? next : c));
+        });
+      }
 
       if (!didMutate) return false;
 
@@ -315,6 +482,10 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           rl.threadId === removedThreadId
         ) {
           responseRunRef.current += 1;
+          clearMessageQueue(rl.chatId, removedThreadId);
+          inFlightThreadsRef.current.delete(
+            threadResponseKey(rl.chatId, removedThreadId),
+          );
           return null;
         }
         return rl;
@@ -322,29 +493,99 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
       return true;
     },
-    [activeChatId],
+    [activeChatId, draftChat, clearMessageQueue],
   );
 
   const createChat = useCallback((): string => {
-    const now = Date.now();
-    const tid = crypto.randomUUID();
-    const chat: Chat = {
-      id: crypto.randomUUID(),
-      title: "New Chat",
-      threads: [{ id: tid, messages: [], createdAt: now, updatedAt: now }],
-      createdAt: now,
-      updatedAt: now,
-      permissions: {},
-      workspace: createDefaultWorkspaceLayout(tid),
-    };
-    setChats((prev) => [chat, ...prev]);
+    const chat = buildEmptyChat();
+    setDraftChat(chat);
     setActiveChatId(chat.id);
     return chat.id;
   }, []);
 
   const selectChat = useCallback((id: string) => {
+    if (draftChat && id !== draftChat.id) {
+      setDraftChat(null);
+    }
     setActiveChatId(id);
-  }, []);
+  }, [draftChat]);
+
+  const patchChatById = useCallback(
+    (chatId: string, updater: (chat: Chat) => Chat) => {
+      if (draftChat?.id === chatId) {
+        setDraftChat((prev) => (prev ? updater(prev) : null));
+        return;
+      }
+      setChats((prev) =>
+        prev.map((chat) => (chat.id === chatId ? updater(chat) : chat)),
+      );
+    },
+    [draftChat?.id],
+  );
+
+  const renameChat = useCallback(
+    (id: string, title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      patchChatById(id, (chat) => ({
+        ...chat,
+        title: trimmed,
+        updatedAt: Date.now(),
+      }));
+    },
+    [patchChatById],
+  );
+
+  const renameThread = useCallback(
+    (threadId: string, title: string) => {
+      if (!activeChatId) return;
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      patchChatById(activeChatId, (chat) => ({
+        ...chat,
+        threads: chat.threads.map((t) =>
+          t.id === threadId
+            ? { ...t, title: trimmed, updatedAt: Date.now() }
+            : t,
+        ),
+        updatedAt: Date.now(),
+      }));
+    },
+    [activeChatId, patchChatById],
+  );
+
+  const forceKillThread = useCallback(
+    (threadId: string) => {
+      if (!activeChatId) return;
+      setResponseLoading((rl) => {
+        if (
+          rl &&
+          rl.chatId === activeChatId &&
+          rl.threadId === threadId
+        ) {
+          responseRunRef.current += 1;
+          clearMessageQueue(activeChatId, threadId);
+          inFlightThreadsRef.current.delete(
+            threadResponseKey(activeChatId, threadId),
+          );
+          return null;
+        }
+        return rl;
+      });
+    },
+    [activeChatId, clearMessageQueue],
+  );
+
+  const togglePinChat = useCallback(
+    (id: string) => {
+      patchChatById(id, (chat) => ({
+        ...chat,
+        pinned: !chat.pinned,
+        updatedAt: Date.now(),
+      }));
+    },
+    [patchChatById],
+  );
 
   const deleteChat = useCallback((id: string) => {
     setChats((prev) => prev.filter((c) => c.id !== id));
@@ -357,26 +598,26 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         prev: Record<string, NodePermissions>,
       ) => Record<string, NodePermissions>,
     ) => {
-      setChats((prev) =>
-        prev.map((chat) => {
-          if (chat.id !== chatId) return chat;
-          const next = updater(chat.permissions ?? {});
-          return { ...chat, permissions: next };
-        }),
-      );
+      patchChatById(chatId, (chat) => ({
+        ...chat,
+        permissions: updater(chat.permissions ?? {}),
+      }));
     },
-    [],
+    [patchChatById],
   );
 
   const setChatPermissions = useCallback(
     (chatId: string, permissions: Record<string, NodePermissions>) => {
-      setChats((prev) =>
-        prev.map((chat) =>
-          chat.id === chatId ? { ...chat, permissions } : chat,
-        ),
-      );
+      patchChatById(chatId, (chat) => ({ ...chat, permissions }));
     },
-    [],
+    [patchChatById],
+  );
+
+  const setChatGitProject = useCallback(
+    (chatId: string, projectId: string | null) => {
+      patchChatById(chatId, (chat) => ({ ...chat, gitProjectId: projectId }));
+    },
+    [patchChatById],
   );
 
   const runAiResponse = useCallback(
@@ -390,8 +631,18 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       contributions: { modelId: string; percentage: number }[],
       workspace: AiWorkspacePayload | undefined,
     ) => {
+      let modelOutputs: { modelId: string; content: string }[] = [];
+
       const finish = (content: string) => {
         if (responseRunRef.current !== runId) return;
+        addUsage(
+          recordResponseEstimates(
+            targetModelIds,
+            userContent,
+            modelOutputs,
+            content,
+          ),
+        );
         const assistantMessage: ChatMessage = {
           id: crypto.randomUUID(),
           role: "assistant",
@@ -400,10 +651,19 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           modelContributions:
             targetModelIds.length > 1 ? contributions : undefined,
         };
-        setChats((prev) =>
-          appendAssistantToThread(prev, chatId, threadId, assistantMessage),
-        );
+        setChats((prev) => {
+          const next = appendAssistantToThread(
+            prev,
+            chatId,
+            threadId,
+            assistantMessage,
+          );
+          chatsRef.current = next;
+          return next;
+        });
+        inFlightThreadsRef.current.delete(threadResponseKey(chatId, threadId));
         setResponseLoading(null);
+        flushQueueRef.current(chatId, threadId);
       };
 
       const fail = (message: string) => {
@@ -428,6 +688,17 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const workspaceEnabled =
+        (workspace?.enabledPaths.length ?? 0) > 0;
+      addUsage(
+        recordSendEstimates(
+          history,
+          userContent,
+          targetModelIds,
+          workspaceEnabled,
+        ),
+      );
+
       try {
         if (targetModelIds.length === 1) {
           setResponseLoading({
@@ -443,11 +714,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             history,
             workspace,
           );
+          modelOutputs = [{ modelId: targetModelIds[0], content }];
           finish(content);
           return;
         }
 
-        const perModel: { modelId: string; content: string }[] = [];
+        modelOutputs = [];
 
         for (let i = 0; i < targetModelIds.length; i++) {
           if (responseRunRef.current !== runId) return;
@@ -462,7 +734,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           });
 
           const content = await aiChatComplete(modelId, history, workspace);
-          perModel.push({ modelId, content });
+          modelOutputs.push({ modelId, content });
         }
 
         if (responseRunRef.current !== runId) return;
@@ -477,7 +749,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
         const synthesized = await aiChatSynthesize(
           userContent,
-          perModel.map((entry) => ({
+          modelOutputs.map((entry) => ({
             modelId: entry.modelId,
             modelName: getModelById(entry.modelId)?.name,
             content: entry.content,
@@ -491,8 +763,83 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         fail(message);
       }
     },
-    [],
+    [addUsage],
   );
+
+  const startThreadAiRun = useCallback(
+    (committed: CommittedSend) => {
+      const { resolvedChatId, finalThreadId, trimmed, history, targetModelIds } =
+        committed;
+      const key = threadResponseKey(resolvedChatId, finalThreadId);
+      inFlightThreadsRef.current.add(key);
+
+      setResponseLoading({
+        chatId: resolvedChatId,
+        threadId: finalThreadId,
+        targetModelIds,
+        phase: "roundtable",
+        speakingModelIndex: 0,
+      });
+
+      const runId = ++responseRunRef.current;
+      void runAiResponse(
+        runId,
+        resolvedChatId,
+        finalThreadId,
+        trimmed,
+        history,
+        targetModelIds,
+        committed.contributions,
+        committed.workspace,
+      );
+    },
+    [runAiResponse],
+  );
+
+  const flushMessageQueue = useCallback(
+    (chatId: string, threadId: string) => {
+      const key = threadResponseKey(chatId, threadId);
+      if (inFlightThreadsRef.current.has(key)) return;
+
+      const queue = queuedSendsRef.current.get(key);
+      if (!queue?.length) return;
+
+      const payload = queue.shift()!;
+      syncQueueCount(key, queue.length);
+
+      const trimmed = payload.content.trim();
+      const targetModelIds = payload.targetModelIds;
+      if (!trimmed || targetModelIds.length === 0) {
+        flushMessageQueue(chatId, threadId);
+        return;
+      }
+
+      const chat = findChatSnapshot(
+        chatsRef.current,
+        draftChatRef.current,
+        chatId,
+      );
+      if (!chat) return;
+
+      const finalThreadId = resolveThreadId(chat, payload.threadId ?? threadId);
+      const history = buildThreadHistory(chat, finalThreadId);
+      const contributions =
+        payload.modelContributions ?? evenContributions(targetModelIds);
+
+      startThreadAiRun({
+        resolvedChatId: chatId,
+        finalThreadId,
+        trimmed,
+        history,
+        targetModelIds,
+        contributions,
+        workspace: payload.workspace,
+      });
+    },
+    [startThreadAiRun, syncQueueCount],
+  );
+
+  flushQueueRef.current = flushMessageQueue;
 
   const sendMessage = useCallback(
     (payload: SendMessagePayload) => {
@@ -504,12 +851,14 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       const targetModelIds = payload.targetModelIds;
       if (targetModelIds.length === 0) return;
 
+      const requestedChatId = payload.chatId ?? activeChatId ?? null;
+      const requestedThreadId = payload.threadId ?? null;
+      if (!requestedChatId || !requestedThreadId) return;
+
       const contributions =
         payload.modelContributions ?? evenContributions(targetModelIds);
 
-      const runId = ++responseRunRef.current;
       const now = Date.now();
-
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "user",
@@ -521,75 +870,78 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           targetModelIds.length > 1 ? contributions : undefined,
       };
 
-      const requestedChatId = payload.chatId ?? activeChatId ?? null;
-      const requestedThreadId = payload.threadId ?? null;
-
-      let resolvedChatId = requestedChatId ?? "";
+      let resolvedChatId = requestedChatId;
       let resolvedThreadId = "";
+      const committingDraft =
+        draftChatRef.current != null &&
+        (requestedChatId === draftChatRef.current.id ||
+          ((!requestedChatId || requestedChatId === activeChatId) &&
+            activeChatId === draftChatRef.current.id));
 
-      setChats((prev) => {
-        const result = appendUserMessageToThread(
-          prev,
-          requestedChatId,
-          requestedThreadId,
-          userMessage,
-          trimmed,
-          now,
-        );
-        resolvedChatId = result.resolvedChatId;
-        resolvedThreadId = result.resolvedThreadId;
-        return result.chats;
-      });
+      let nextChats = chatsRef.current;
+      if (committingDraft && !nextChats.some((c) => c.id === draftChatRef.current!.id)) {
+        nextChats = [draftChatRef.current!, ...nextChats];
+      }
+      const appendResult = appendUserMessageToThread(
+        nextChats,
+        committingDraft ? draftChatRef.current!.id : requestedChatId,
+        requestedThreadId,
+        userMessage,
+        trimmed,
+        now,
+      );
+      resolvedChatId = appendResult.resolvedChatId;
+      resolvedThreadId = appendResult.resolvedThreadId;
+
+      chatsRef.current = appendResult.chats;
+      setChats(appendResult.chats);
+
+      if (committingDraft) {
+        setDraftChat(null);
+        draftChatRef.current = null;
+      }
 
       setActiveChatId(resolvedChatId);
 
-      const chat = chats.find((c) => c.id === requestedChatId) ?? null;
+      const chatAfterCommit = findChatSnapshot(
+        chatsRef.current,
+        draftChatRef.current,
+        resolvedChatId,
+      );
       const stableThreadId =
-        requestedThreadId && chat?.threads.some((t) => t.id === requestedThreadId)
+        requestedThreadId &&
+        chatAfterCommit?.threads.some((t) => t.id === requestedThreadId)
           ? requestedThreadId
-          : (chat?.threads[0]?.id ?? resolvedThreadId);
-
-      const priorMessages =
-        chat != null
-          ? (chat.threads.find((t) => t.id === stableThreadId)?.messages ?? [])
-          : [];
-
-      const history: ChatTurn[] = [
-        ...priorMessages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        { role: "user", content: trimmed },
-      ];
-
+          : (chatAfterCommit?.threads[0]?.id ?? resolvedThreadId);
       const finalThreadId = resolvedThreadId || stableThreadId;
 
-      setResponseLoading({
-        chatId: resolvedChatId,
-        threadId: finalThreadId,
-        targetModelIds,
-        phase: "roundtable",
-        speakingModelIndex: 0,
-      });
+      const history = chatAfterCommit
+        ? buildThreadHistory(chatAfterCommit, finalThreadId)
+        : [{ role: "user" as const, content: trimmed }];
 
-      void runAiResponse(
-        runId,
+      const inFlightKey = threadResponseKey(resolvedChatId, finalThreadId);
+      if (inFlightThreadsRef.current.has(inFlightKey)) {
+        enqueueMessage(inFlightKey, payload);
+        return;
+      }
+
+      startThreadAiRun({
         resolvedChatId,
         finalThreadId,
         trimmed,
         history,
         targetModelIds,
         contributions,
-        payload.workspace,
-      );
+        workspace: payload.workspace,
+      });
     },
-    [chats, activeChatId, runAiResponse],
+    [activeChatId, enqueueMessage, startThreadAiRun],
   );
 
-  const activeChat = useMemo(
-    () => chats.find((c) => c.id === activeChatId) ?? null,
-    [chats, activeChatId],
-  );
+  const activeChat = useMemo(() => {
+    if (draftChat?.id === activeChatId) return draftChat;
+    return chats.find((c) => c.id === activeChatId) ?? null;
+  }, [chats, activeChatId, draftChat]);
 
   const isResponding =
     responseLoading != null && responseLoading.chatId === activeChatId;
@@ -607,10 +959,16 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       isResponding,
       createChat,
       selectChat,
+      renameChat,
+      renameThread,
+      forceKillThread,
+      togglePinChat,
       deleteChat,
       sendMessage,
+      getQueuedMessageCount,
       updateChatPermissions,
       setChatPermissions,
+      setChatGitProject,
     }),
     [
       chats,
@@ -624,10 +982,16 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       isResponding,
       createChat,
       selectChat,
+      renameChat,
+      renameThread,
+      forceKillThread,
+      togglePinChat,
       deleteChat,
       sendMessage,
+      getQueuedMessageCount,
       updateChatPermissions,
       setChatPermissions,
+      setChatGitProject,
     ],
   );
 

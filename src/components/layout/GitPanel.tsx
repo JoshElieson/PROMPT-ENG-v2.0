@@ -249,23 +249,29 @@ export function GitPanel({ active }: GitPanelProps) {
           </div>
         ) : (
           <>
-            {projects.length > 1 && (
-              <div className="border-b border-border-subtle px-2 py-1.5">
-                <select
-                  className="w-full rounded border border-border-subtle bg-surface px-2 py-1 text-xs text-foreground outline-none focus:border-accent"
-                  value={projectId ?? projects[0]?.id ?? ""}
-                  onChange={(e) => setActiveProject(e.target.value || null)}
-                >
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="border-b border-border-subtle px-2 py-1.5">
+              <select
+                className="w-full rounded border border-border-subtle bg-surface px-2 py-1 text-xs text-foreground outline-none focus:border-accent"
+                value={projectId ?? ""}
+                onChange={(e) => setActiveProject(e.target.value || null)}
+                aria-label="Repository for this workspace"
+              >
+                <option value="">Select repository…</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {!projectId && (
+              <p className="px-3 py-4 text-center text-xs text-muted">
+                Choose a repository for this workspace.
+              </p>
             )}
 
-            {isRepo && (
+            {projectId && isRepo && (
               <div className="shrink-0 border-b border-border-subtle px-3 pb-2 pt-2">
                 <div className="relative">
                   <textarea
@@ -391,7 +397,7 @@ export function GitPanel({ active }: GitPanelProps) {
             )}
 
             <ScrollArea className="min-h-0 flex-1">
-              {!isRepo && repoPath && (
+              {projectId && !isRepo && repoPath && (
                 <div className="px-3 py-6 text-center">
                   <p className="text-xs text-muted">No repository found.</p>
                   <Button
@@ -406,13 +412,13 @@ export function GitPanel({ active }: GitPanelProps) {
                 </div>
               )}
 
-              {isRepo && status?.clean && (
+              {projectId && isRepo && status?.clean && (
                 <p className="px-3 py-4 text-center text-xs text-muted">
                   No changes. Working tree clean.
                 </p>
               )}
 
-              {isRepo && (
+              {projectId && isRepo && (
                 <>
                   <ChangesSection title="Staged Changes" changes={staged} />
                   <ChangesSection title="Changes" changes={unstaged} />
@@ -420,7 +426,7 @@ export function GitPanel({ active }: GitPanelProps) {
               )}
             </ScrollArea>
 
-            {isRepo && (
+            {projectId && isRepo && (
               <CommitMessageChat
                 changes={allChanges}
                 draft={commitMessage}

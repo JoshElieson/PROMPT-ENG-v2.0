@@ -29,7 +29,7 @@ export function ProjectsPanel({ active }: ProjectsPanelProps) {
 
 
   return (
-    <SidebarPanel active={active} className="min-h-0">
+    <SidebarPanel active={active} className="min-h-0 select-none">
       {error && (
         <div className="mx-2 mt-2 flex shrink-0 items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-300">
           <span className="flex-1 leading-snug">{error}</span>

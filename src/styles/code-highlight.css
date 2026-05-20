@@ -1,0 +1,83 @@
+/**
+ * VS Code Dark+ token colors (scoped to chat code blocks).
+ * @see https://github.com/microsoft/vscode/blob/main/extensions/theme-defaults/themes/dark_plus.json
+ */
+.code-snippet.hljs,
+.code-snippet .hljs {
+  color: #d4d4d4;
+  background: transparent;
+}
+
+.code-snippet .hljs-keyword,
+.code-snippet .hljs-selector-tag,
+.code-snippet .hljs-literal,
+.code-snippet .hljs-section,
+.code-snippet .hljs-link {
+  color: #569cd6;
+}
+
+.code-snippet .hljs-string,
+.code-snippet .hljs-regexp,
+.code-snippet .hljs-addition,
+.code-snippet .hljs-attribute,
+.code-snippet .hljs-meta .hljs-string {
+  color: #ce9178;
+}
+
+.code-snippet .hljs-comment,
+.code-snippet .hljs-quote,
+.code-snippet .hljs-deletion {
+  color: #6a9955;
+  font-style: italic;
+}
+
+.code-snippet .hljs-number,
+.code-snippet .hljs-meta .hljs-number {
+  color: #b5cea8;
+}
+
+.code-snippet .hljs-title,
+.code-snippet .hljs-title.function_,
+.code-snippet .hljs-title.class_,
+.code-snippet .hljs-title.class_.inherited__,
+.code-snippet .hljs-function .hljs-title,
+.code-snippet .hljs-built_in,
+.code-snippet .hljs-builtin-name {
+  color: #dcdcaa;
+}
+
+.code-snippet .hljs-type,
+.code-snippet .hljs-class .hljs-title,
+.code-snippet .hljs-name,
+.code-snippet .hljs-tag {
+  color: #4ec9b0;
+}
+
+.code-snippet .hljs-variable,
+.code-snippet .hljs-template-variable,
+.code-snippet .hljs-params,
+.code-snippet .hljs-subst,
+.code-snippet .hljs-attr,
+.code-snippet .hljs-property {
+  color: #9cdcfe;
+}
+
+.code-snippet .hljs-symbol,
+.code-snippet .hljs-bullet,
+.code-snippet .hljs-selector-id,
+.code-snippet .hljs-selector-class {
+  color: #d7ba7d;
+}
+
+.code-snippet .hljs-meta,
+.code-snippet .hljs-meta .hljs-keyword {
+  color: #9cdcfe;
+}
+
+.code-snippet .hljs-emphasis {
+  font-style: italic;
+}
+
+.code-snippet .hljs-strong {
+  font-weight: bold;
+}

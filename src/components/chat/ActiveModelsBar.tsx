@@ -9,9 +9,21 @@ const MAX_VISIBLE_MODELS = 3;
 
 function ModelChip({ model }: { model: AiModel }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] text-foreground/90">
+    <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border/75 bg-panel-elevated/62 px-2 py-1 text-[11px] text-foreground/85">
       <ModelLogo orgId={model.orgId} size="xs" />
       {model.name}
+    </span>
+  );
+}
+
+function OverlayModelBadge({ model }: { model: AiModel }) {
+  return (
+    <span
+      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/75 bg-panel/90 shadow-[0_6px_16px_rgba(2,6,23,0.28)] backdrop-blur-sm"
+      title={model.name}
+      aria-label={model.name}
+    >
+      <ModelLogo orgId={model.orgId} size="sm" />
     </span>
   );
 }
@@ -22,7 +34,7 @@ export function ActiveModelsBar({
   overlay = false,
 }: {
   trailing?: ReactNode;
-  /** When false, hides the layouts menu (used inside split panes). */
+  /** When false, hides the layouts menu (used inside chat thread tabs). */
   showLayoutMenu?: boolean;
   /** When true, floats over chat content without a header background. */
   overlay?: boolean;
@@ -44,19 +56,28 @@ export function ActiveModelsBar({
   const visibleModels = models.slice(0, MAX_VISIBLE_MODELS);
   const hiddenCount = Math.max(0, models.length - MAX_VISIBLE_MODELS);
 
+  if (overlay) {
+    return (
+      <section className="pointer-events-none absolute bottom-[calc(var(--spacing-workspace-dock)+0.5rem)] left-0 z-10 p-2">
+        <div className="pointer-events-auto flex flex-col-reverse gap-1.5">
+          {models.map((model) => (
+            <OverlayModelBadge key={model.id} model={model} />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       className={cn(
         "flex w-full items-center gap-2",
-        overlay
-          ? "pointer-events-none absolute inset-x-0 top-0 z-10 px-2 pt-2"
-          : "h-9 shrink-0 px-2",
+        "h-10 shrink-0 border-b border-border-subtle bg-panel/80 px-2 backdrop-blur-sm",
       )}
     >
       <span
         className={cn(
           "flex min-w-0 flex-1 items-center justify-center gap-1.5 overflow-hidden",
-          overlay && "pointer-events-none",
         )}
       >
         {visibleModels.map((model) => (

@@ -22,7 +22,7 @@ export function LayoutMenu() {
           variant="ghost"
           size="icon"
           title="Layouts"
-          className="group h-7 w-7 shrink-0 text-muted-foreground hover:bg-zinc-700 hover:text-foreground"
+          className="group h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground"
         >
           <LayoutGrid className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
         </Button>
@@ -39,7 +39,7 @@ export function LayoutMenu() {
                 key={preset.id}
                 className={cn(
                   "group flex h-auto w-[5.5rem] cursor-pointer flex-col items-center gap-1.5 rounded-md border border-transparent p-2 transition-colors",
-                  "data-[highlighted]:border-border data-[highlighted]:bg-zinc-700",
+                  "data-[highlighted]:border-border data-[highlighted]:bg-panel-elevated/85",
                   "data-[highlighted]:text-foreground",
                   isActive && "border-accent/30 bg-panel-elevated/80",
                   preset.disabled && "cursor-default opacity-80",

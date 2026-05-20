@@ -253,6 +253,7 @@ export function ResizableSidebar({
     registerLeftSidebarToggle,
     registerRightSidebarToggle,
     notifyRightSidebarCollapsed,
+    notifyLeftSidebarCollapsed,
   } = useLayout();
   const collapsedKey = `${storageKey}:collapsed`;
   const [width, setWidth] = useState(() => loadLayoutPx(storageKey, defaultWidth));
@@ -277,8 +278,10 @@ export function ResizableSidebar({
   useEffect(() => {
     if (side === "right") {
       notifyRightSidebarCollapsed(collapsed);
+    } else {
+      notifyLeftSidebarCollapsed(collapsed);
     }
-  }, [collapsed, side, notifyRightSidebarCollapsed]);
+  }, [collapsed, side, notifyRightSidebarCollapsed, notifyLeftSidebarCollapsed]);
 
   useEffect(() => {
     if (layoutResetNonce === 0) return;
@@ -445,7 +448,7 @@ export function ResizableSidebar({
           className={cn(
             "transition-colors duration-150",
             snapHighlight
-              ? "h-full w-0.5 bg-accent shadow-[0_0_6px_var(--color-accent)]"
+              ? "h-full w-0.5 bg-accent"
               : "h-full w-0.5 bg-transparent opacity-0 hover:bg-muted-foreground/40 hover:opacity-100 active:bg-muted-foreground/60",
           )}
         />

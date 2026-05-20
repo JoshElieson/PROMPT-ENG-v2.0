@@ -12,6 +12,7 @@ import type { MenuActionId } from "@/data/menu-items";
 import {
   clearWindowLayoutStorage,
   DEFAULT_RIGHT_PANELS,
+  LEFT_SIDEBAR_COLLAPSED_KEY,
   RIGHT_SIDEBAR_COLLAPSED_KEY,
   type LayoutPresetId,
   type RightPanelId,
@@ -20,12 +21,16 @@ import {
 import {
   loadLayoutBool,
   loadLayoutBoolMap,
+  saveLayoutBool,
   saveLayoutBoolMap,
 } from "@/lib/layout-storage";
 
 export type { RightPanelId, RightPanelVisibility };
 
 const RIGHT_PANELS_KEY = "prompt:right-panels-visibility";
+const WORKSPACE_BOTTOM_PANEL_KEY = "prompt:workspace-terminal-open";
+
+export type BottomPanelBootTab = "terminal" | "browser";
 
 type SidebarControlFn = () => void;
 
@@ -43,7 +48,15 @@ interface LayoutContextValue {
   registerRightSidebarToggle: (fn: SidebarControlFn) => () => void;
   registerLeftSidebarToggle: (fn: SidebarControlFn) => () => void;
   notifyRightSidebarCollapsed: (collapsed: boolean) => void;
+  notifyLeftSidebarCollapsed: (collapsed: boolean) => void;
+  leftSidebarCollapsed: boolean;
+  setLeftSidebarViewVisible: (view: "explorer" | "agents", visible: boolean) => void;
   dispatchMenuAction: (action: MenuActionId) => void;
+  workspaceBottomPanelOpen: boolean;
+  setWorkspaceBottomPanelOpen: (open: boolean) => void;
+  bottomPanelBoot: BottomPanelBootTab | null;
+  requestBottomPanelTab: (kind: BottomPanelBootTab) => void;
+  clearBottomPanelBoot: () => void;
 }
 
 const LayoutContext = createContext<LayoutContextValue | null>(null);
@@ -73,6 +86,14 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   const [activeLayoutId, setActiveLayoutId] = useState<LayoutPresetId>("default");
   const [layoutResetNonce, setLayoutResetNonce] = useState(0);
   const [rightPanels, setRightPanels] = useState<RightPanelVisibility>(loadRightPanels);
+  const [workspaceBottomPanelOpen, setWorkspaceBottomPanelOpen] = useState(() =>
+    loadLayoutBool(WORKSPACE_BOTTOM_PANEL_KEY, false),
+  );
+  const [bottomPanelBoot, setBottomPanelBoot] =
+    useState<BottomPanelBootTab | null>(null);
+  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() =>
+    loadLayoutBool(LEFT_SIDEBAR_COLLAPSED_KEY, false),
+  );
 
   const rightSidebarExpandRef = useRef<SidebarControlFn | null>(null);
   const leftSidebarExpandRef = useRef<SidebarControlFn | null>(null);
@@ -82,6 +103,10 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     saveLayoutBoolMap(RIGHT_PANELS_KEY, rightPanels);
   }, [rightPanels]);
+
+  useEffect(() => {
+    saveLayoutBool(WORKSPACE_BOTTOM_PANEL_KEY, workspaceBottomPanelOpen);
+  }, [workspaceBottomPanelOpen]);
 
   const expandRightSidebar = useCallback(() => {
     rightSidebarExpandRef.current?.();
@@ -154,9 +179,53 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const notifyLeftSidebarCollapsed = useCallback((collapsed: boolean) => {
+    setLeftSidebarCollapsed(collapsed);
+  }, []);
+
+  const setLeftSidebarViewVisible = useCallback(
+    (view: "explorer" | "agents", visible: boolean) => {
+      if (visible) {
+        setSidebarView(view);
+        expandLeftSidebar();
+        return;
+      }
+      if (sidebarView === view && !leftSidebarCollapsed) {
+        leftSidebarToggleRef.current?.();
+      }
+    },
+    [sidebarView, leftSidebarCollapsed, expandLeftSidebar],
+  );
+
+  const requestBottomPanelTab = useCallback((kind: BottomPanelBootTab) => {
+    setBottomPanelBoot(kind);
+    setWorkspaceBottomPanelOpen(true);
+  }, []);
+
+  const clearBottomPanelBoot = useCallback(() => {
+    setBottomPanelBoot(null);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (!e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key !== "`" && e.code !== "Backquote") return;
+      e.preventDefault();
+      if (workspaceBottomPanelOpen) {
+        setWorkspaceBottomPanelOpen(false);
+      } else {
+        requestBottomPanelTab("terminal");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [workspaceBottomPanelOpen, requestBottomPanelTab]);
+
   const applyDefaultLayout = useCallback(() => {
     clearWindowLayoutStorage();
     setRightPanels(DEFAULT_RIGHT_PANELS);
+    setLeftSidebarCollapsed(false);
     setActiveLayoutId("default");
     setLayoutResetNonce((n) => n + 1);
   }, []);
@@ -170,6 +239,12 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
       }
 
       switch (action) {
+        case "view.workspaceTerminal":
+          requestBottomPanelTab("terminal");
+          break;
+        case "view.workspaceBrowser":
+          requestBottomPanelTab("browser");
+          break;
         case "view.explorer":
           setSidebarView("explorer");
           expandLeftSidebar();
@@ -193,6 +268,7 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
       setRightPanelVisible,
       toggleLeftSidebar,
       toggleRightSidebar,
+      requestBottomPanelTab,
     ],
   );
 
@@ -212,7 +288,15 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
         registerRightSidebarToggle,
         registerLeftSidebarToggle,
         notifyRightSidebarCollapsed,
+        notifyLeftSidebarCollapsed,
+        leftSidebarCollapsed,
+        setLeftSidebarViewVisible,
         dispatchMenuAction,
+        workspaceBottomPanelOpen,
+        setWorkspaceBottomPanelOpen,
+        bottomPanelBoot,
+        requestBottomPanelTab,
+        clearBottomPanelBoot,
       }}
     >
       {children}
@@ -231,8 +315,18 @@ export function useLayout() {
 export function menuActionChecked(
   action: MenuActionId,
   rightPanels: RightPanelVisibility,
+  workspaceBottomPanelOpen: boolean,
+  sidebarView: SidebarView,
+  leftSidebarCollapsed: boolean,
 ): boolean | undefined {
   const panel = menuActionToRightPanel(action);
   if (panel) return rightPanels[panel];
+  if (action === "view.workspaceTerminal") return workspaceBottomPanelOpen;
+  if (action === "view.explorer") {
+    return sidebarView === "explorer" && !leftSidebarCollapsed;
+  }
+  if (action === "view.agentCart") {
+    return sidebarView === "agents" && !leftSidebarCollapsed;
+  }
   return undefined;
 }

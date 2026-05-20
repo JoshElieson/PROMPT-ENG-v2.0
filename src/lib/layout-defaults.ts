@@ -24,6 +24,7 @@ export const DEFAULT_RIGHT_PANELS: RightPanelVisibility = {
   workflow: true,
 };
 
+export const LEFT_SIDEBAR_COLLAPSED_KEY = "prompt:left-sidebar-width:collapsed";
 export const RIGHT_SIDEBAR_COLLAPSED_KEY = "prompt:right-sidebar-width:collapsed";
 
 import { LEGACY_WORKSPACE_LAYOUT_KEY, WORKSPACE_LAYOUT_KEY } from "@/lib/workspace-pane-storage";

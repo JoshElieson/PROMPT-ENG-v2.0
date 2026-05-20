@@ -34,26 +34,31 @@ export function countPanes(root: CenterWorkspaceRoot): number {
     case "triple":
       return 3;
     case "quad":
-      return 4;
+      return 4 + (root.overflow?.length ?? 0);
     default:
       return 1;
   }
 }
 
 export function collectLeafIds(root: CenterWorkspaceRoot): string[] {
+  return collectLeaves(root).map((leaf) => leaf.id);
+}
+
+export function collectLeaves(root: CenterWorkspaceRoot): WorkspaceLeafNode[] {
   switch (root.kind) {
     case "single":
-      return [root.leaf.id];
+      return [root.leaf];
     case "double":
-      return [root.first.id, root.second.id];
+      return [root.first, root.second];
     case "triple":
-      return [root.topLeft.id, root.topRight.id, root.bottom.id];
+      return [root.topLeft, root.topRight, root.bottom];
     case "quad":
       return [
-        root.topLeft.id,
-        root.topRight.id,
-        root.bottomLeft.id,
-        root.bottomRight.id,
+        root.topLeft,
+        root.topRight,
+        root.bottomLeft,
+        root.bottomRight,
+        ...(root.overflow ?? []),
       ];
     default:
       return [];
@@ -81,7 +86,7 @@ export function findLeaf(
       if (root.topRight.id === leafId) return root.topRight;
       if (root.bottomLeft.id === leafId) return root.bottomLeft;
       if (root.bottomRight.id === leafId) return root.bottomRight;
-      return null;
+      return root.overflow?.find((leaf) => leaf.id === leafId) ?? null;
     default:
       return null;
   }
@@ -138,6 +143,9 @@ export function assignLeafThreadId(
           topRight: mapLeaf(root.topRight, leafId, (l) => ({ ...l, threadId })),
           bottomLeft: mapLeaf(root.bottomLeft, leafId, (l) => ({ ...l, threadId })),
           bottomRight: mapLeaf(root.bottomRight, leafId, (l) => ({ ...l, threadId })),
+          overflow: root.overflow?.map((leaf) =>
+            mapLeaf(leaf, leafId, (l) => ({ ...l, threadId })),
+          ),
         },
       };
     default:
@@ -184,6 +192,7 @@ export function assignLeafModels(
           topRight: apply(root.topRight),
           bottomLeft: apply(root.bottomLeft),
           bottomRight: apply(root.bottomRight),
+          overflow: root.overflow?.map(apply),
         },
       };
     default:
@@ -230,6 +239,7 @@ export function assignLeafScrollTop(
           topRight: apply(root.topRight),
           bottomLeft: apply(root.bottomLeft),
           bottomRight: apply(root.bottomRight),
+          overflow: root.overflow?.map(apply),
         },
       };
     default:
@@ -448,6 +458,56 @@ export function collapseWorkspaceByLeaf(
     }
     case "quad": {
       const q = root;
+      const overflow = q.overflow ?? [];
+      const overflowIndex = overflow.findIndex((leaf) => leaf.id === leafId);
+      if (overflowIndex >= 0) {
+        const nextOverflow = overflow.filter((_, i) => i !== overflowIndex);
+        const newRoot: QuadWorkspaceRoot = {
+          ...q,
+          overflow: nextOverflow.length > 0 ? nextOverflow : undefined,
+        };
+        return {
+          layout: {
+            ...layout,
+            version: 2,
+            root: newRoot,
+            focusedLeafId: nextFocusedLeafId(
+              layout.focusedLeafId,
+              leafId,
+              newRoot,
+            ),
+          },
+          removedThreadId,
+        };
+      }
+
+      if (overflow.length > 0) {
+        const promoted = overflow[0]!;
+        const remaining = overflow.slice(1);
+        const nextRoot: QuadWorkspaceRoot = {
+          ...q,
+          overflow: remaining.length > 0 ? remaining : undefined,
+        };
+        if (q.topLeft.id === leafId) nextRoot.topLeft = promoted;
+        else if (q.topRight.id === leafId) nextRoot.topRight = promoted;
+        else if (q.bottomLeft.id === leafId) nextRoot.bottomLeft = promoted;
+        else if (q.bottomRight.id === leafId) nextRoot.bottomRight = promoted;
+        else return null;
+        return {
+          layout: {
+            ...layout,
+            version: 2,
+            root: nextRoot,
+            focusedLeafId: nextFocusedLeafId(
+              layout.focusedLeafId,
+              leafId,
+              nextRoot,
+            ),
+          },
+          removedThreadId,
+        };
+      }
+
       if (q.bottomRight.id === leafId) {
         const newRoot: TripleWorkspaceRoot = {
           kind: "triple",
@@ -627,8 +687,21 @@ export function expandWorkspaceLayout(
       };
       return { ...layout, version: 2, focusedLeafId: bottomRight.id, root };
     }
-    case "quad":
-      return null;
+    case "quad": {
+      const next = newLeaf(
+        newThreadId,
+        cloneModelSession(layout.root.bottomRight.models),
+      );
+      return {
+        ...layout,
+        version: 2,
+        focusedLeafId: next.id,
+        root: {
+          ...layout.root,
+          overflow: [...(layout.root.overflow ?? []), next],
+        },
+      };
+    }
   }
 }
 
@@ -680,6 +753,7 @@ export function reconcileWorkspaceThreads(
         topRight: fix(root.topRight),
         bottomLeft: fix(root.bottomLeft),
         bottomRight: fix(root.bottomRight),
+        overflow: root.overflow?.map(fix),
       };
       break;
     default:

@@ -6,7 +6,7 @@ import type { PaneModelSession } from "@/types/workspace-pane";
 
 /**
  * Mirrors the focused center workspace pane's model session for any UI outside
- * the pane tree (sidebars). Split panes still use their own nested
+ * the pane tree (sidebars). Inactive thread tabs still use their own nested
  * {@link PaneRoundTableProvider}, which wins for `useChatRoundTable` there.
  */
 export function FocusedWorkspacePaneRoundTableProvider({

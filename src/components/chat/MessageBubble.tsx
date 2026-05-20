@@ -3,11 +3,13 @@ import { Check, Copy } from "lucide-react";
 import type { ChatMessage } from "@/types/chat";
 import { getModelById } from "@/data/ai-models";
 import { AttachmentChips } from "@/components/chat/AttachmentChips";
+import { CodeSnippetBlock } from "@/components/chat/CodeSnippetBlock";
 import { ModelContributionHover } from "@/components/chat/ModelContributionHover";
 import { Button } from "@/components/ui/button";
+import { parseMessageContent } from "@/lib/parse-message-content";
 import { cn } from "@/lib/utils";
 
-function MessageContent({
+function TextWithMentions({
   content,
   isSent,
 }: {
@@ -38,6 +40,46 @@ function MessageContent({
         return <span key={i}>{part}</span>;
       })}
     </p>
+  );
+}
+
+function MessageContent({
+  content,
+  isSent,
+}: {
+  content: string;
+  isSent?: boolean;
+}) {
+  const segments = parseMessageContent(content);
+  const hasCode = segments.some((s) => s.type === "code");
+
+  if (!hasCode) {
+    return <TextWithMentions content={content} isSent={isSent} />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {segments.map((segment, index) => {
+        if (segment.type === "code") {
+          return (
+            <CodeSnippetBlock
+              key={`code-${index}`}
+              language={segment.language}
+              code={segment.content}
+            />
+          );
+        }
+        const text = segment.content.trim();
+        if (!text) return null;
+        return (
+          <TextWithMentions
+            key={`text-${index}`}
+            content={segment.content}
+            isSent={isSent}
+          />
+        );
+      })}
+    </div>
   );
 }
 
@@ -94,8 +136,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         className={cn(
           "relative",
           isSent
-            ? "max-w-[85%] rounded-2xl border border-zinc-500/40 bg-zinc-600 px-4 py-3"
-            : "w-full max-w-2xl pr-10 pl-0 pt-0.5 pb-3",
+            ? "max-w-[85%] rounded-2xl border border-[#6366f1]/26 bg-[#2b3150]/55 px-4 py-3 shadow-[0_10px_20px_rgba(2,6,23,0.3)]"
+            : "w-full max-w-2xl rounded-xl border border-border/70 bg-panel/35 pr-10 pl-3 pt-2 pb-3",
         )}
       >
         {!isSent && <CopyResponseButton content={message.content} />}

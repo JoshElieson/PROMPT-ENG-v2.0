@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
@@ -15,12 +16,32 @@ import {
   Folder,
   FolderOpen,
   Loader2,
-  Trash2,
+  Minus,
 } from "lucide-react";
 import { listDirectory } from "@/lib/fs";
+import { renameFsEntry } from "@/lib/fs-ops";
+import {
+  listenProjectFsChanged,
+  syncProjectFsWatchers,
+} from "@/lib/fs-watch";
+import {
+  directoriesToReloadAfterChange,
+  expandedPathsToPrune,
+  parentDirectory,
+} from "@/lib/project-fs-refresh";
+import {
+  beginProjectDrag,
+  buildProjectDragPayload,
+  endProjectDrag,
+  writeProjectDragData,
+} from "@/lib/project-drag";
+import { startNativeFileDrag } from "@/lib/native-file-drag";
+import { isTauri } from "@/lib/tauri";
+import { pathsEqual, pathsToExpandToReveal } from "@/lib/project-paths";
 import { useAppSelection } from "@/contexts/AppSelectionContext";
 import { useProjects } from "@/contexts/ProjectsContext";
 import { AccessCheckbox } from "@/components/projects/PermissionToggles";
+import { ProjectFolderContextMenu } from "@/components/projects/ProjectFolderContextMenu";
 import { PanelTitleInfo } from "@/components/layout/PanelTitleInfo";
 import type { FsEntry, Project } from "@/types/project";
 import { cn } from "@/lib/utils";
@@ -36,6 +57,7 @@ interface VisibleRow {
   depth: number;
   isDirectory: boolean;
   projectId: string;
+  projectRootPath: string;
   isProjectRoot: boolean;
 }
 
@@ -62,20 +84,26 @@ function buildVisibleRows(
 ): VisibleRow[] {
   const out: VisibleRow[] = [];
 
-  const walk = (entry: FsEntry, depth: number, projectId: string) => {
+  const walk = (
+    entry: FsEntry,
+    depth: number,
+    projectId: string,
+    projectRootPath: string,
+  ) => {
     out.push({
       path: entry.path,
       name: entry.name,
       depth,
       isDirectory: entry.isDirectory,
       projectId,
+      projectRootPath,
       isProjectRoot: depth === 0,
     });
     if (!entry.isDirectory || !expanded.has(entry.path)) return;
     const kids = childrenByPath[entry.path];
     if (kids == null) return;
     for (const c of sortEntries(kids)) {
-      walk(c, depth + 1, projectId);
+      walk(c, depth + 1, projectId, projectRootPath);
     }
   };
 
@@ -84,6 +112,7 @@ function buildVisibleRows(
       { name: p.name, path: p.rootPath, isDirectory: true },
       0,
       p.id,
+      p.rootPath,
     );
   }
   return out;
@@ -96,6 +125,8 @@ export function ProjectTree({
   const {
     zone,
     projectFocusRootPath,
+    projectFocusPath,
+    clearProjectFocusPath,
     selectProject,
     registerFocusProjectTree,
     selectWorkspaceScreen,
@@ -112,6 +143,7 @@ export function ProjectTree({
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(() => new Set());
   const [loadErrors, setLoadErrors] = useState<Record<string, string>>({});
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [togglingAccessPath, setTogglingAccessPath] = useState<string | null>(
     null,
   );
@@ -137,6 +169,8 @@ export function ProjectTree({
 
   useLayoutEffect(() => {
     if (projectFocusRootPath) {
+      if (projectFocusPath) return;
+
       const projectChanged =
         lastProjectFocusRef.current !== projectFocusRootPath;
       lastProjectFocusRef.current = projectFocusRootPath;
@@ -163,15 +197,18 @@ export function ProjectTree({
     ) {
       setFocusedPath(null);
     }
-  }, [visibleRows, focusedPath, projectFocusRootPath]);
+  }, [visibleRows, focusedPath, projectFocusRootPath, projectFocusPath]);
 
   const focusedIndex = useMemo(() => {
     if (focusedPath == null) return -1;
     return visibleRows.findIndex((r) => r.path === focusedPath);
   }, [visibleRows, focusedPath]);
 
-  const loadChildren = useCallback(async (dirPath: string) => {
-    if (Object.prototype.hasOwnProperty.call(childrenByPathRef.current, dirPath)) {
+  const loadChildren = useCallback(async (dirPath: string, force = false) => {
+    if (
+      !force &&
+      Object.prototype.hasOwnProperty.call(childrenByPathRef.current, dirPath)
+    ) {
       return;
     }
     let alreadyLoading = false;
@@ -204,6 +241,139 @@ export function ProjectTree({
       });
     }
   }, []);
+
+  /** Drop cached listings only; keep folder expansion (pruned separately on delete). */
+  const invalidateDirectoryCache = useCallback((dirPath: string) => {
+    const prefix = dirPath.replace(/[/\\]+$/, "");
+    setChildrenByPath((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (
+          key === prefix ||
+          key.startsWith(`${prefix}\\`) ||
+          key.startsWith(`${prefix}/`)
+        ) {
+          delete next[key];
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  const reloadDirectory = useCallback(
+    async (dirPath: string) => {
+      const parent = dirPath.replace(/[/\\][^/\\]+$/, "");
+      if (parent && parent !== dirPath) {
+        invalidateDirectoryCache(parent);
+        await loadChildren(parent, true);
+      } else {
+        invalidateDirectoryCache(dirPath);
+        await loadChildren(dirPath, true);
+      }
+    },
+    [invalidateDirectoryCache, loadChildren],
+  );
+
+  const handleEntryRenamed = useCallback(
+    (oldPath: string, newPath: string) => {
+      const oldNorm = oldPath.replace(/[/\\]+$/, "");
+      const newNorm = newPath.replace(/[/\\]+$/, "");
+
+      setFocusedPath((current) =>
+        current != null && pathsEqual(current, oldNorm) ? newNorm : current,
+      );
+      setRenamingPath((current) =>
+        current != null && pathsEqual(current, oldNorm) ? null : current,
+      );
+
+      setExpandedPaths((prev) => {
+        const next = new Set<string>();
+        for (const key of prev) {
+          if (pathsEqual(key, oldNorm)) {
+            next.add(newNorm);
+          } else if (
+            key.startsWith(`${oldNorm}\\`) ||
+            key.startsWith(`${oldNorm}/`)
+          ) {
+            next.add(newNorm + key.slice(oldNorm.length));
+          } else {
+            next.add(key);
+          }
+        }
+        return next;
+      });
+
+      setChildrenByPath((prev) => {
+        const next: Record<string, FsEntry[] | undefined> = {};
+        for (const [key, value] of Object.entries(prev)) {
+          if (pathsEqual(key, oldNorm)) {
+            next[newNorm] = value;
+          } else if (
+            key.startsWith(`${oldNorm}\\`) ||
+            key.startsWith(`${oldNorm}/`)
+          ) {
+            next[newNorm + key.slice(oldNorm.length)] = value;
+          } else {
+            next[key] = value;
+          }
+        }
+        return next;
+      });
+
+      const parent = parentDirectory(newNorm);
+      void reloadDirectory(parent ?? newNorm);
+    },
+    [reloadDirectory],
+  );
+
+  const refreshFromExternalChange = useCallback(
+    async (changedPaths: string[]) => {
+      if (changedPaths.length === 0) return;
+
+      const prune = expandedPathsToPrune(changedPaths, expandedPaths);
+      if (prune.length > 0) {
+        setExpandedPaths((prev) => {
+          const next = new Set(prev);
+          for (const path of prune) next.delete(path);
+          return next;
+        });
+        for (const path of prune) {
+          invalidateDirectoryCache(path);
+        }
+      }
+
+      const loadedDirs = Object.keys(childrenByPathRef.current);
+      const dirsToReload = directoriesToReloadAfterChange(
+        changedPaths,
+        loadedDirs,
+      );
+      await Promise.all(dirsToReload.map((dir) => loadChildren(dir, true)));
+    },
+    [expandedPaths, invalidateDirectoryCache, loadChildren],
+  );
+
+  useEffect(() => {
+    const roots = projects.map((p) => p.rootPath);
+    void syncProjectFsWatchers(roots);
+  }, [projects]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+
+    void listenProjectFsChanged((event) => {
+      if (cancelled) return;
+      if (!projects.some((p) => pathsEqual(p.rootPath, event.rootPath))) return;
+      void refreshFromExternalChange(event.paths);
+    }).then((fn) => {
+      if (!cancelled) unlisten = fn;
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [projects, refreshFromExternalChange]);
 
   const toggleRowAccess = useCallback(
     async (row: VisibleRow) => {
@@ -276,6 +446,35 @@ export function ProjectTree({
       viewport.scrollTop += rowRect.bottom - viewRect.bottom;
     }
   }, [focusedPath]);
+
+  useEffect(() => {
+    if (!projectFocusPath || !projectFocusRootPath) return;
+
+    let cancelled = false;
+    void (async () => {
+      const toExpand = pathsToExpandToReveal(
+        projectFocusRootPath,
+        projectFocusPath,
+      );
+      for (const dir of toExpand) {
+        if (cancelled) return;
+        setExpandedPaths((prev) => new Set(prev).add(dir));
+        await loadChildren(dir);
+      }
+      if (cancelled) return;
+      setFocusedPath(projectFocusPath);
+      clearProjectFocusPath();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    projectFocusPath,
+    projectFocusRootPath,
+    loadChildren,
+    clearProjectFocusPath,
+  ]);
 
   useEffect(() => {
     scrollFocusedIntoView();
@@ -368,6 +567,7 @@ export function ProjectTree({
   const handleProjectsTreeKey = useCallback(
     (e: KeyboardEvent | globalThis.KeyboardEvent) => {
       if (zone !== "projects" || !projectFocusRootPath) return;
+      if (renamingPath) return;
 
       const target = e.target;
       if (target instanceof HTMLElement) {
@@ -448,6 +648,11 @@ export function ProjectTree({
         void toggleRowAccess(row);
         return;
       }
+      if (e.key === "F2" && !row.isProjectRoot && isTauri()) {
+        stopKey();
+        setRenamingPath(row.path);
+        return;
+      }
     },
     [
       zone,
@@ -462,6 +667,7 @@ export function ProjectTree({
       toggleRowAccess,
       editingProjects,
       projectRootPaths,
+      renamingPath,
       selectProject,
       selectWorkspaceScreen,
       focusComposer,
@@ -550,6 +756,15 @@ export function ProjectTree({
               if (row.isProjectRoot) selectProject(row.path);
               void toggleDirectory(row.path);
             }}
+            onFsChange={() => reloadDirectory(row.path)}
+            isRenaming={renamingPath != null && pathsEqual(renamingPath, row.path)}
+            onStartRename={
+              row.isProjectRoot
+                ? undefined
+                : () => setRenamingPath(row.path)
+            }
+            onFinishRename={() => setRenamingPath(null)}
+            onEntryRenamed={handleEntryRenamed}
           />
         );
       })}
@@ -571,6 +786,11 @@ function ProjectTreeRow({
   isAppProjectSelected,
   onRowBackgroundPointerDown,
   onToggleDirectory,
+  onFsChange,
+  isRenaming,
+  onStartRename,
+  onFinishRename,
+  onEntryRenamed,
 }: {
   row: VisibleRow;
   domId: string;
@@ -589,10 +809,70 @@ function ProjectTreeRow({
     e: MouseEvent,
   ) => void;
   onToggleDirectory: () => void;
+  onFsChange: () => void | Promise<void>;
+  isRenaming: boolean;
+  onStartRename?: () => void;
+  onFinishRename: () => void;
+  onEntryRenamed: (oldPath: string, newPath: string) => void;
 }) {
-  const { getPermissions, setPermissions, setDirectoryPermissions, removeProject } =
+  const { getPermissions, setPermissions, setDirectoryPermissions, removeProject, setError } =
     useProjects();
   const permissions = getPermissions(row.path);
+  const [draftName, setDraftName] = useState(row.name);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const skipCommitOnBlurRef = useRef(false);
+
+  useEffect(() => {
+    if (!isRenaming) return;
+    setDraftName(row.name);
+    const id = requestAnimationFrame(() => {
+      const input = renameInputRef.current;
+      input?.focus();
+      input?.select();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [isRenaming, row.name]);
+
+  const joinSiblingPath = useCallback((name: string) => {
+    const parent = parentDirectory(row.path);
+    if (!parent) return null;
+    const sep = parent.includes("\\") ? "\\" : "/";
+    return `${parent}${sep}${name}`;
+  }, [row.path]);
+
+  const commitRename = useCallback(async () => {
+    const trimmed = draftName.trim();
+    onFinishRename();
+    if (!trimmed || trimmed === row.name) return;
+
+    const toPath = joinSiblingPath(trimmed);
+    if (!toPath) return;
+
+    try {
+      await renameFsEntry(row.path, toPath);
+      onEntryRenamed(row.path, toPath);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : `Failed to rename ${row.isDirectory ? "folder" : "file"}.`,
+      );
+    }
+  }, [
+    draftName,
+    joinSiblingPath,
+    onEntryRenamed,
+    onFinishRename,
+    row.isDirectory,
+    row.name,
+    row.path,
+    setError,
+  ]);
+
+  const cancelRename = useCallback(() => {
+    skipCommitOnBlurRef.current = true;
+    onFinishRename();
+  }, [onFinishRename]);
 
   const handleAccessChange = async (enabled: boolean) => {
     if (isAccessToggling) return;
@@ -608,15 +888,55 @@ function ProjectTreeRow({
     onToggleDirectory();
   };
 
-  return (
-    <section>
-      <section
+  const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
+    if (isRenaming) {
+      e.preventDefault();
+      return;
+    }
+    const target = e.target as HTMLElement;
+    if (target.closest("button, input")) {
+      e.preventDefault();
+      return;
+    }
+    const { payload, dropText } = buildProjectDragPayload(
+      row.path,
+      row.projectRootPath,
+      row.name,
+      row.isDirectory,
+      row.isProjectRoot,
+    );
+
+    if (isTauri()) {
+      e.preventDefault();
+      beginProjectDrag(payload);
+      void (async () => {
+        try {
+          await startNativeFileDrag([payload.path]);
+        } finally {
+          endProjectDrag();
+        }
+      })();
+      return;
+    }
+
+    writeProjectDragData(e.dataTransfer, payload, dropText);
+  };
+
+  const handleDragEnd = () => {
+    endProjectDrag();
+  };
+
+  const rowBody = (
+    <div
         id={domId}
         role="treeitem"
         aria-selected={isTreeFocused || isAppProjectSelected}
         aria-expanded={row.isDirectory ? isExpanded : undefined}
         aria-level={row.depth + 1}
         tabIndex={-1}
+        draggable
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
         {...(row.isProjectRoot
           ? { "data-project-root-path": row.path }
           : {})}
@@ -624,6 +944,7 @@ function ProjectTreeRow({
           onRowBackgroundPointerDown(row.path, row.isProjectRoot, e)
         }
         className={cn(
+          "cursor-pointer",
           "group flex items-center gap-0.5 rounded-md py-0.5 pr-1 text-sm text-muted-foreground hover:bg-panel-elevated hover:text-foreground",
           isAppProjectSelected &&
             "bg-panel-elevated/80 text-foreground ring-1 ring-inset ring-accent/25",
@@ -673,9 +994,39 @@ function ProjectTreeRow({
           <File className="h-3.5 w-3.5 shrink-0 text-muted" />
         )}
 
-        <span className="min-w-0 flex-1 truncate" title={row.path}>
-          {row.name}
-        </span>
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            type="text"
+            value={draftName}
+            aria-label={`Rename ${row.isDirectory ? "folder" : "file"}`}
+            className="min-w-0 flex-1 rounded border border-accent/60 bg-background px-1.5 py-0.5 text-sm text-foreground outline-none ring-1 ring-accent/30 focus:border-accent focus:ring-accent/50"
+            onChange={(e) => setDraftName(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void commitRename();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancelRename();
+              }
+            }}
+            onBlur={() => {
+              if (skipCommitOnBlurRef.current) {
+                skipCommitOnBlurRef.current = false;
+                return;
+              }
+              void commitRename();
+            }}
+          />
+        ) : (
+          <span className="min-w-0 flex-1 truncate" title={row.path}>
+            {row.name}
+          </span>
+        )}
 
         {editingProjects && row.isProjectRoot ? (
           <button
@@ -691,7 +1042,7 @@ function ProjectTreeRow({
               "hover:border-red-400 hover:bg-red-600/40 hover:text-white",
             )}
           >
-            <Trash2 className="size-3" strokeWidth={2.5} />
+            <Minus className="size-3" strokeWidth={2.5} />
           </button>
         ) : (
           <AccessCheckbox
@@ -700,7 +1051,22 @@ function ProjectTreeRow({
             onChange={(enabled) => void handleAccessChange(enabled)}
           />
         )}
-      </section>
+      </div>
+  );
+
+  return (
+    <section>
+      <ProjectFolderContextMenu
+        entryPath={row.path}
+        entryKind={row.isDirectory ? "folder" : "file"}
+        projectRootPath={row.projectRootPath}
+        isProjectRoot={row.isProjectRoot}
+        projectId={row.isProjectRoot ? row.projectId : undefined}
+        onFsChange={onFsChange}
+        onStartRename={onStartRename}
+      >
+        {rowBody}
+      </ProjectFolderContextMenu>
 
       {loadError && isExpanded && (
         <p

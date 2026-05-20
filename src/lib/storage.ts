@@ -7,6 +7,7 @@ const PROJECTS_KEY = "prompt:projects:v1";
 const PERMISSIONS_KEY = "prompt:permissions:v1";
 const CHATS_KEY = "prompt:chats:v1";
 const ACTIVE_CHAT_KEY = "prompt:active-chat:v1";
+const API_USAGE_KEY = "prompt:api-usage:v1";
 
 export function loadProjects(): Project[] {
   try {
@@ -80,7 +81,8 @@ function isChatThread(value: unknown): value is ChatThread {
     typeof value.id === "string" &&
     Array.isArray(value.messages) &&
     typeof value.createdAt === "number" &&
-    typeof value.updatedAt === "number"
+    typeof value.updatedAt === "number" &&
+    (value.title === undefined || typeof value.title === "string")
   );
 }
 
@@ -196,4 +198,27 @@ export function saveActiveChatId(id: string | null): void {
   } else {
     localStorage.removeItem(ACTIVE_CHAT_KEY);
   }
+}
+
+export function loadApiUsage(): { tokens: number; costUsd: number } {
+  try {
+    const raw = localStorage.getItem(API_USAGE_KEY);
+    if (!raw) return { tokens: 0, costUsd: 0 };
+    const parsed = JSON.parse(raw) as { tokens?: unknown; costUsd?: unknown };
+    const tokens =
+      typeof parsed.tokens === "number" && Number.isFinite(parsed.tokens)
+        ? Math.max(0, parsed.tokens)
+        : 0;
+    const costUsd =
+      typeof parsed.costUsd === "number" && Number.isFinite(parsed.costUsd)
+        ? Math.max(0, parsed.costUsd)
+        : 0;
+    return { tokens, costUsd };
+  } catch {
+    return { tokens: 0, costUsd: 0 };
+  }
+}
+
+export function saveApiUsage(usage: { tokens: number; costUsd: number }): void {
+  localStorage.setItem(API_USAGE_KEY, JSON.stringify(usage));
 }

@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import * as git from "@/lib/git";
+import { useChats } from "@/contexts/ChatsContext";
 import { useProjects } from "@/contexts/ProjectsContext";
 import type { GitCommandResult, GitStatusResult } from "@/types/git";
 
@@ -43,32 +44,35 @@ const EMPTY_STATUS: GitStatusResult = {
 
 export function GitProvider({ children }: { children: ReactNode }) {
   const { projects } = useProjects();
-  const [projectId, setActiveProject] = useState<string | null>(null);
+  const { activeChatId, activeChat, setChatGitProject } = useChats();
+
+  const projectId = useMemo(() => {
+    const id = activeChat?.gitProjectId;
+    if (!id) return null;
+    return projects.some((p) => p.id === id) ? id : null;
+  }, [activeChat?.gitProjectId, projects]);
+
+  const activeProject = useMemo(() => {
+    if (!projectId) return null;
+    return projects.find((p) => p.id === projectId) ?? null;
+  }, [projects, projectId]);
+
+  const repoPath = activeProject?.rootPath ?? null;
+
+  const setActiveProject = useCallback(
+    (id: string | null) => {
+      if (!activeChatId) return;
+      if (id !== null && !projects.some((p) => p.id === id)) return;
+      setChatGitProject(activeChatId, id);
+    },
+    [activeChatId, projects, setChatGitProject],
+  );
+
   const [status, setStatus] = useState<GitStatusResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isOperating, setIsOperating] = useState(false);
   const [lastMessage, setLastMessage] = useState<string | null>(null);
   const [lastMessageOk, setLastMessageOk] = useState(true);
-
-  const activeProject = useMemo(() => {
-    if (projects.length === 0) return null;
-    if (projectId) {
-      return projects.find((p) => p.id === projectId) ?? projects[0];
-    }
-    return projects[0];
-  }, [projects, projectId]);
-
-  const repoPath = activeProject?.rootPath ?? null;
-
-  useEffect(() => {
-    if (projects.length === 0) {
-      setActiveProject(null);
-      return;
-    }
-    if (projectId && !projects.some((p) => p.id === projectId)) {
-      setActiveProject(projects[0].id);
-    }
-  }, [projects, projectId]);
 
   const setMessage = useCallback((ok: boolean, text: string) => {
     setLastMessageOk(ok);
@@ -170,7 +174,7 @@ export function GitProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       repoPath,
-      projectId: activeProject?.id ?? null,
+      projectId,
       setActiveProject,
       status,
       isLoading,
@@ -188,7 +192,8 @@ export function GitProvider({ children }: { children: ReactNode }) {
     }),
     [
       repoPath,
-      activeProject?.id,
+      projectId,
+      setActiveProject,
       status,
       isLoading,
       isOperating,

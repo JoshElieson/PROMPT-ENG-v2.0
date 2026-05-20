@@ -2,9 +2,11 @@ import {
   forwardRef,
   useCallback,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   type ClipboardEvent,
+  type DragEvent,
   type KeyboardEvent,
   type SyntheticEvent,
 } from "react";
@@ -24,7 +26,11 @@ interface ComposerTextareaProps {
   value: string;
   cartIds: string[];
   placeholder?: string;
-  rows?: number;
+  readOnly?: boolean;
+  /** Minimum visible lines (empty composer). */
+  minRows?: number;
+  /** Lines before the textarea scrolls instead of growing. */
+  maxRows?: number;
   onChange: (
     e: SyntheticEvent<HTMLTextAreaElement> & {
       currentTarget: HTMLTextAreaElement;
@@ -36,6 +42,10 @@ interface ComposerTextareaProps {
   onClick?: (e: SyntheticEvent<HTMLTextAreaElement>) => void;
   onFocus?: (e: SyntheticEvent<HTMLTextAreaElement>) => void;
   onPaste?: (e: ClipboardEvent<HTMLTextAreaElement>) => void;
+  onDragEnter?: (e: DragEvent<HTMLTextAreaElement>) => void;
+  onDragLeave?: (e: DragEvent<HTMLTextAreaElement>) => void;
+  onDragOver?: (e: DragEvent<HTMLTextAreaElement>) => void;
+  onDrop?: (e: DragEvent<HTMLTextAreaElement>) => void;
 }
 
 export const ComposerTextarea = forwardRef<
@@ -46,7 +56,9 @@ export const ComposerTextarea = forwardRef<
     value,
     cartIds,
     placeholder,
-    rows = 2,
+    readOnly = false,
+    minRows = 1,
+    maxRows = 12,
     onChange,
     onKeyDown,
     onKeyUp,
@@ -54,6 +66,10 @@ export const ComposerTextarea = forwardRef<
     onClick,
     onFocus,
     onPaste,
+    onDragEnter,
+    onDragLeave,
+    onDragOver,
+    onDrop,
   },
   ref,
 ) {
@@ -80,6 +96,54 @@ export const ComposerTextarea = forwardRef<
     highlight.scrollLeft = textarea.scrollLeft;
   }, []);
 
+  const resizeToContent = useCallback(() => {
+    const textarea = textareaRef.current;
+    const highlight = highlightRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "0px";
+    const style = getComputedStyle(textarea);
+    const lineHeight = parseFloat(style.lineHeight);
+    if (!Number.isFinite(lineHeight) || lineHeight <= 0) return;
+
+    const paddingY =
+      parseFloat(style.paddingTop) +
+      parseFloat(style.paddingBottom) +
+      parseFloat(style.borderTopWidth) +
+      parseFloat(style.borderBottomWidth);
+    const minHeight = lineHeight * minRows + paddingY;
+    const maxHeight = lineHeight * maxRows + paddingY;
+    const nextHeight = Math.min(
+      Math.max(textarea.scrollHeight, minHeight),
+      maxHeight,
+    );
+
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+
+    if (highlight) {
+      highlight.style.height = `${nextHeight}px`;
+      highlight.style.overflowY = textarea.style.overflowY;
+    }
+  }, [minRows, maxRows]);
+
+  useLayoutEffect(() => {
+    resizeToContent();
+  }, [value, resizeToContent]);
+
+  const handleChange = useCallback(
+    (
+      e: SyntheticEvent<HTMLTextAreaElement> & {
+        currentTarget: HTMLTextAreaElement;
+      },
+    ) => {
+      onChange(e);
+      requestAnimationFrame(resizeToContent);
+    },
+    [onChange, resizeToContent],
+  );
+
   return (
     <div className="relative grid [&>*]:col-start-1 [&>*]:row-start-1">
       <div
@@ -99,7 +163,7 @@ export const ComposerTextarea = forwardRef<
                 key={index}
                 className={cn(
                   segment.model
-                    ? "rounded-sm bg-sky-500/15 font-medium text-sky-400"
+                    ? "rounded-sm bg-[#6366f1]/14 font-medium text-[#c7d2fe]"
                     : "text-foreground/90",
                 )}
               >
@@ -113,10 +177,12 @@ export const ComposerTextarea = forwardRef<
         ref={textareaRef}
         data-composer-textarea
         value={value}
-        rows={rows}
+        rows={minRows}
         spellCheck
         placeholder={placeholder}
-        onChange={onChange}
+        readOnly={readOnly}
+        aria-busy={readOnly}
+        onChange={handleChange}
         onKeyDown={onKeyDown}
         onKeyUp={(e) => {
           syncScroll();
@@ -127,9 +193,14 @@ export const ComposerTextarea = forwardRef<
         onClick={onClick}
         onFocus={onFocus}
         onPaste={onPaste}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
         className={cn(
           composerTextClass,
-          "text-transparent caret-foreground selection:bg-sky-500/25 selection:text-transparent",
+          "text-transparent caret-foreground selection:bg-[#6366f1]/22 selection:text-transparent",
+          readOnly && "cursor-not-allowed opacity-70",
         )}
       />
     </div>

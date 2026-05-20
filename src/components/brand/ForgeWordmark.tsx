@@ -14,7 +14,7 @@ export function ForgeWordmark({ className, height = 14 }: ForgeWordmarkProps) {
     <span
       role="img"
       aria-label="FORGE"
-      className={cn("inline-block shrink-0 bg-accent", className)}
+      className={cn("inline-block shrink-0 bg-[#a5b4fc]", className)}
       style={{
         height,
         width: height * WORDMARK_ASPECT,

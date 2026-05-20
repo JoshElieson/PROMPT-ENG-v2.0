@@ -1,7 +1,10 @@
 use crate::ai_config::{
     api_key, base_url, default_synthesis_provider, resolve_api_model, Provider,
 };
-use crate::ai_workspace::{tool_list_directory, tool_read_file, tool_write_file, AiWorkspace, WorkspacePolicy};
+use crate::ai_workspace::{
+    tool_clear_directory, tool_list_directory, tool_read_file, tool_remove_path, tool_write_file,
+    AiWorkspace, WorkspacePolicy,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -85,23 +88,70 @@ fn tools_schema_openai() -> Vec<serde_json::Value> {
                 }
             }
         }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "remove_path",
+                "description": "Permanently delete a file or subfolder (recursive). Works on individually AI-enabled files. For an AI-enabled folder root, use clear_directory instead of deleting that folder path.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Absolute file or directory path" }
+                    },
+                    "required": ["path"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "clear_directory",
+                "description": "Delete every file and subfolder inside a directory but keep the directory. Use to empty/clear a folder for a fresh start. Pass the folder's absolute path (parent folders are allowed when children are AI-enabled).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Absolute directory path" }
+                    },
+                    "required": ["path"]
+                }
+            }
+        }),
     ]
+}
+
+const CODE_FORMATTING_GUIDANCE: &str = "\n\
+Formatting:\n\
+- When sharing code, commands, or config snippets, use fenced markdown code blocks with a language tag (e.g. ```python).\n\
+- Put a short plain-language intro before or after the block when helpful; keep the code itself inside the fence.\n";
+
+const DEFAULT_CHAT_SYSTEM: &str = "You are a helpful assistant in a multi-model AI workspace. \
+When sharing code or shell commands, use fenced markdown code blocks with a language tag (e.g. ```python).";
+
+fn chat_system_prompt(user: Option<&str>) -> String {
+    match user.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(custom) => format!("{custom}{CODE_FORMATTING_GUIDANCE}"),
+        None => DEFAULT_CHAT_SYSTEM.to_string(),
+    }
 }
 
 fn workspace_system_prompt(policy: &WorkspacePolicy) -> String {
     format!(
-        "The user enabled the following locations for AI file access. You have tools read_file, write_file, and list_directory to work on their real project on disk.\n\
+        "The user enabled the following locations for AI file access. You have tools read_file, write_file, list_directory, remove_path, and clear_directory to work on their real project on disk.\n\
 \n\
 How to work:\n\
 - Whenever the request depends on this codebase (behavior, errors, structure, config, or \"what does X do\"), use list_directory and/or read_file early instead of guessing.\n\
 - When the user wants changes, fixes, refactors, or new files, carry them out with write_file after reading any files you need to change safely.\n\
+- When the user asks to delete files, remove folders, or empty/clear a directory, use remove_path or clear_directory—do not claim deletion without calling a tool.\n\
+- To empty a folder but keep the folder itself, call clear_directory with that folder's absolute path (works even when only files inside are AI-enabled).\n\
+- remove_path deletes any file, including individually AI-enabled files. It deletes subfolders recursively. Only an AI-enabled folder root itself must be cleared with clear_directory, not remove_path.\n\
 - If you are unsure which file matters, list_directory near the roots below, then read the most relevant paths.\n\
 \n\
 Rules:\n\
 - Only access paths under these AI-enabled locations (absolute paths):\n{}\n\
 - Prefer read_file or list_directory before overwriting files.\n\
-- write_file replaces the entire file contents.\n\
-- Use absolute paths exactly as they appear on disk.",
+- write_file replaces the entire file contents; it does not delete files.\n\
+- remove_path cannot delete an AI-enabled folder root in one step—use clear_directory on that folder instead.\n\
+- Use absolute paths exactly as they appear on disk.{CODE_FORMATTING_GUIDANCE}",
         policy.roots_summary()
     )
 }
@@ -129,6 +179,18 @@ fn run_tool(policy: &WorkspacePolicy, name: &str, args: &str) -> String {
                     .as_str()
                     .ok_or_else(|| "list_directory: missing path".to_string())?;
                 tool_list_directory(policy, path)
+            }
+            "remove_path" | "delete_path" | "delete_file" | "remove_file" => {
+                let path = v["path"]
+                    .as_str()
+                    .ok_or_else(|| "remove_path: missing path".to_string())?;
+                tool_remove_path(policy, path)
+            }
+            "clear_directory" | "empty_directory" => {
+                let path = v["path"]
+                    .as_str()
+                    .ok_or_else(|| "clear_directory: missing path".to_string())?;
+                tool_clear_directory(policy, path)
             }
             _ => Err(format!("Unknown tool: {name}")),
         }
@@ -334,6 +396,28 @@ fn anthropic_tools() -> Vec<serde_json::Value> {
         json!({
             "name": "list_directory",
             "description": "List files and subfolders under an AI-enabled directory. Use to find paths or project layout before reading files.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Absolute directory path" }
+                },
+                "required": ["path"]
+            }
+        }),
+        json!({
+            "name": "remove_path",
+            "description": "Permanently delete a file or folder (recursive). Use when the user asks to delete; do not claim deletion without this tool.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Absolute file or directory path" }
+                },
+                "required": ["path"]
+            }
+        }),
+        json!({
+            "name": "clear_directory",
+            "description": "Delete all files and subfolders inside a directory but keep the directory. Use to empty or clear a folder.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -572,6 +656,28 @@ fn gemini_tool_declarations() -> serde_json::Value {
                     },
                     "required": ["path"]
                 }
+            },
+            {
+                "name": "remove_path",
+                "description": "Permanently delete a file or folder (recursive). Use when the user asks to delete files or folders.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string" }
+                    },
+                    "required": ["path"]
+                }
+            },
+            {
+                "name": "clear_directory",
+                "description": "Delete all contents inside a directory but keep the directory. Use to empty or clear a folder.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string" }
+                    },
+                    "required": ["path"]
+                }
             }
         ]
     }])
@@ -802,11 +908,8 @@ pub async fn ai_chat_complete(
             return complete_for_model_with_workspace(&model_id, &messages, &policy).await;
         }
     }
-    let sys = system
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    complete_for_model(&model_id, &messages, sys).await
+    let sys = chat_system_prompt(system.as_deref());
+    complete_for_model(&model_id, &messages, Some(sys.as_str())).await
 }
 
 #[tauri::command]
@@ -830,7 +933,8 @@ pub async fn ai_chat_synthesize(
 
     let system = "You synthesize multiple AI assistant answers into one clear, unified reply. \
 Incorporate the strongest points; avoid repeating the same idea. Do not mention round tables \
-or that you are merging sources unless the user asked for that process.";
+or that you are merging sources unless the user asked for that process. \
+When the merged answer includes code, use fenced markdown code blocks with a language tag (e.g. ```python).";
 
     let user_prompt = format!(
         "User message:\n{user_message}\n\nAssistant responses to merge:\n{lines}\n\

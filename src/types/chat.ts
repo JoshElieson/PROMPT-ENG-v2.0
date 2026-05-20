@@ -28,9 +28,11 @@ export interface ChatMessage {
   modelContributions?: ModelContribution[];
 }
 
-/** One conversation stream inside a sidebar chat (up to 4 per chat for split workspace). */
+/** One conversation stream inside a sidebar chat (up to 7 per chat for workspace tabs). */
 export interface ChatThread {
   id: string;
+  /** Tab label; falls back to "Agent N" when unset. */
+  title?: string;
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
@@ -39,13 +41,19 @@ export interface ChatThread {
 export interface Chat {
   id: string;
   title: string;
-  /** One or more parallel threads (split panes) under this sidebar chat. */
+  /** When true, workspace stays at the top of the sidebar list. */
+  pinned?: boolean;
+  /** One or more parallel threads (workspace tabs) under this sidebar chat. */
   threads: ChatThread[];
+  /** Next auto-assigned "Agent N" number for newly opened workspace tabs. */
+  nextAgentNumber?: number;
   createdAt: number;
   updatedAt: number;
   /** Per-chat file/folder access toggles from the projects tree */
   permissions?: Record<string, NodePermissions>;
-  /** Split-pane layout for the center workspace (threads referenced by leaf `threadId`). */
+  /** Source-control project selected for this workspace (sidebar chat). */
+  gitProjectId?: string | null;
+  /** Thread tab layout for the center workspace (threads referenced by leaf `threadId`). */
   workspace?: WorkspacePaneLayout;
 }
 

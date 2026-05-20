@@ -57,7 +57,7 @@ export function RoundTableDiscussion({
                   className={cn(
                     "inline-flex items-center gap-1 border px-2 py-1 text-[10px] transition-all",
                     isSpeaking &&
-                      "border-accent/50 bg-accent/10 text-foreground shadow-[0_0_12px_rgba(255,107,53,0.15)]",
+                      "border-[#6366f1]/30 bg-[#6366f1]/12 text-foreground",
                     isPast && "border-border-subtle opacity-60",
                     !isSpeaking &&
                       !isPast &&
@@ -73,7 +73,7 @@ export function RoundTableDiscussion({
                   />
                   <span className="max-w-[5rem] truncate">{model.name}</span>
                   {isSpeaking && (
-                    <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-accent" />
+                    <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#a5b4fc]" />
                   )}
                 </span>
               </span>

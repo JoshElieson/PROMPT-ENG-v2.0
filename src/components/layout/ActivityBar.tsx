@@ -30,14 +30,14 @@ function ActivityButton({
       title={title}
       onClick={onClick}
       className={cn(
-        "relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg transition-colors",
+        "relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-transparent transition-all duration-150",
         active
-          ? "text-accent"
-          : "text-muted-foreground hover:bg-panel-elevated/60",
+          ? "border-[#6366f1]/28 bg-[#6366f1]/12 text-foreground shadow-[inset_0_0_0_1px_rgba(99,102,241,0.16)]"
+          : "text-muted-foreground hover:border-border hover:bg-panel-elevated/70 hover:text-foreground",
       )}
     >
       {active && (
-        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 bg-accent" />
+        <span className="absolute left-1/2 top-1 h-0.5 w-3 -translate-x-1/2 rounded-full bg-[#6366f1]/75" />
       )}
       {children}
     </button>
@@ -61,8 +61,8 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
       : "Source Control";
 
   return (
-    <aside className="flex w-12 shrink-0 flex-col items-center border-r border-border-subtle bg-surface py-3">
-      <div className="flex flex-col gap-1">
+    <aside className="flex w-12 shrink-0 flex-col items-center border-r border-border-subtle bg-surface/90 py-3 backdrop-blur-sm">
+      <div className="flex flex-col gap-1.5">
         <ActivityButton
           title="Model Cart"
           active={activeView === "agents"}
@@ -71,17 +71,17 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
             selectWorkspaceScreen();
           }}
         >
-          <Bot className="h-4 w-4" />
+          <Bot className="h-3.5 w-3.5" />
         </ActivityButton>
         <ActivityButton
-          title="Chats & Projects"
+          title="Workspaces"
           active={activeView === "explorer" || explorerSidebarSelected}
           onClick={() => {
             onViewChange("explorer");
             selectChatList();
           }}
         >
-          <MessageSquare className="h-4 w-4" />
+          <MessageSquare className="h-3.5 w-3.5" />
         </ActivityButton>
         <ActivityButton
           title={scTitle}
@@ -91,7 +91,7 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
             selectWorkspaceScreen();
           }}
         >
-          <SourceControlIcon className="h-4 w-4" changeCount={changeCount} />
+          <SourceControlIcon className="h-3.5 w-3.5" changeCount={changeCount} />
         </ActivityButton>
       </div>
 
@@ -99,9 +99,9 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
         <button
           type="button"
           title="Settings"
-          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-panel-elevated hover:text-foreground"
+          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-all duration-150 hover:border-border hover:bg-panel-elevated/70 hover:text-foreground"
         >
-          <Settings className="h-4 w-4" />
+          <Settings className="h-3.5 w-3.5" />
         </button>
         <AccountMenu />
       </div>

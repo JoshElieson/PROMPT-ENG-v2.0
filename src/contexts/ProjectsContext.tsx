@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { basename, listDescendantPaths, pickProjectDirectory } from "@/lib/fs";
+import { findOwningProject, pathsEqual } from "@/lib/project-paths";
 import { loadProjects, saveProjects } from "@/lib/storage";
 import { useChats } from "@/contexts/ChatsContext";
 import {
@@ -33,6 +34,7 @@ interface ProjectsContextValue {
   isAdding: boolean;
   error: string | null;
   addProject: () => Promise<void>;
+  addProjectFromPath: (rootPath: string) => Promise<void>;
   removeProject: (id: string) => void;
   getPermissions: (path: string) => NodePermissions;
   setPermissions: (path: string, patch: Partial<NodePermissions>) => void;
@@ -40,28 +42,35 @@ interface ProjectsContextValue {
     dirPath: string,
     patch: Partial<NodePermissions>,
   ) => Promise<void>;
+  /** Opens folder picker; adds new projects or enables context on the given chat. */
+  pickProjectContextForChat: (chatId: string) => Promise<string | null>;
   clearError: () => void;
+  setError: (message: string | null) => void;
 }
 
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
 
 export function ProjectsProvider({ children }: { children: ReactNode }) {
   const {
+    activeChat,
     activeChatId,
     chats,
     updateChatPermissions,
     setChatPermissions,
+    setChatGitProject,
   } = useChats();
   const [projects, setProjects] = useState<Project[]>(() => loadProjects());
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const activeChat = useMemo(
-    () => chats.find((c) => c.id === activeChatId) ?? null,
-    [chats, activeChatId],
-  );
-
   const activePermissions = activeChat?.permissions ?? {};
+
+  const allChats = useMemo(() => {
+    if (activeChat && !chats.some((c) => c.id === activeChat.id)) {
+      return [activeChat, ...chats];
+    }
+    return chats;
+  }, [activeChat, chats]);
 
   useEffect(() => {
     saveProjects(projects);
@@ -108,15 +117,14 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     [patchActivePermissions],
   );
 
-  const addProject = useCallback(async () => {
-    setError(null);
-    setIsAdding(true);
-    try {
-      const rootPath = await pickProjectDirectory();
-      if (!rootPath) return;
+  const addProjectFromPath = useCallback(
+    async (rootPath: string) => {
+      setError(null);
+      const trimmed = rootPath.trim();
+      if (!trimmed) return;
 
       const duplicate = projects.some(
-        (p) => p.rootPath.toLowerCase() === rootPath.toLowerCase(),
+        (p) => p.rootPath.toLowerCase() === trimmed.toLowerCase(),
       );
       if (duplicate) {
         setError("This folder is already added as a project.");
@@ -125,18 +133,90 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
 
       const project: Project = {
         id: crypto.randomUUID(),
-        name: basename(rootPath),
-        rootPath,
+        name: basename(trimmed),
+        rootPath: trimmed,
         addedAt: Date.now(),
       };
 
       setProjects((prev) => [...prev, project]);
+    },
+    [projects],
+  );
+
+  const addProject = useCallback(async () => {
+    setError(null);
+    setIsAdding(true);
+    try {
+      const rootPath = await pickProjectDirectory();
+      if (!rootPath) return;
+      await addProjectFromPath(rootPath);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add project folder.");
     } finally {
       setIsAdding(false);
     }
-  }, [projects]);
+  }, [addProjectFromPath]);
+
+  const enableDirectoryOnChat = useCallback(
+    async (
+      chatId: string,
+      dirPath: string,
+      patch: Partial<NodePermissions>,
+    ) => {
+      const descendants = await listDescendantPaths(dirPath);
+      updateChatPermissions(chatId, (prev) => {
+        const next = { ...prev };
+        const apply = (path: string) => {
+          next[path] = { ...(prev[path] ?? DEFAULT_PERMISSIONS), ...patch };
+        };
+        apply(dirPath);
+        for (const path of descendants) apply(path);
+        return next;
+      });
+    },
+    [updateChatPermissions],
+  );
+
+  const pickProjectContextForChat = useCallback(
+    async (chatId: string): Promise<string | null> => {
+      setError(null);
+      setIsAdding(true);
+      try {
+        const picked = await pickProjectDirectory("Add project context");
+        if (!picked) return null;
+
+        const trimmed = picked.trim();
+        const owning = findOwningProject(projects, trimmed);
+
+        if (!owning) {
+          const project: Project = {
+            id: crypto.randomUUID(),
+            name: basename(trimmed),
+            rootPath: trimmed,
+            addedAt: Date.now(),
+          };
+          setProjects((prev) => [...prev, project]);
+        }
+
+        const contextPath = owning
+          ? pathsEqual(owning.rootPath, trimmed)
+            ? owning.rootPath
+            : trimmed
+          : trimmed;
+
+        await enableDirectoryOnChat(chatId, contextPath, { enabled: true });
+        return contextPath;
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "Failed to add project context.",
+        );
+        return null;
+      } finally {
+        setIsAdding(false);
+      }
+    },
+    [projects, enableDirectoryOnChat],
+  );
 
   const removeProject = useCallback(
     (id: string) => {
@@ -144,7 +224,10 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       if (!target) return;
 
       const prefix = target.rootPath;
-      for (const chat of chats) {
+      for (const chat of allChats) {
+        if (chat.gitProjectId === id) {
+          setChatGitProject(chat.id, null);
+        }
         if (!chat.permissions) continue;
         const next = { ...chat.permissions };
         for (const key of pathsUnderRoot(next, prefix)) {
@@ -155,7 +238,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
 
       setProjects((prev) => prev.filter((p) => p.id !== id));
     },
-    [projects, chats, setChatPermissions],
+    [projects, allChats, setChatPermissions, setChatGitProject],
   );
 
   const clearError = useCallback(() => setError(null), []);
@@ -166,22 +249,28 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       isAdding,
       error,
       addProject,
+      addProjectFromPath,
       removeProject,
       getPermissions,
       setPermissions,
       setDirectoryPermissions,
+      pickProjectContextForChat,
       clearError,
+      setError: setError,
     }),
     [
       projects,
       isAdding,
       error,
       addProject,
+      addProjectFromPath,
       removeProject,
       getPermissions,
       setPermissions,
       setDirectoryPermissions,
+      pickProjectContextForChat,
       clearError,
+      setError,
     ],
   );
 

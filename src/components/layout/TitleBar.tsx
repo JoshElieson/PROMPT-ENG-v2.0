@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ForgeWordmark } from "@/components/brand/ForgeWordmark";
 import { MenuBar } from "@/components/layout/MenuBar";
 import { isTauri } from "@/lib/tauri";
+import { startWindowDrag, tauriDragRegionProps } from "@/lib/window-drag";
 import { cn } from "@/lib/utils";
 
 export function TitleBar() {
@@ -37,18 +38,19 @@ export function TitleBar() {
     <header
       className={cn(
         "flex h-8 shrink-0 select-none items-stretch",
-        "border-0 border-b border-border-subtle bg-black text-foreground",
+        "border-0 border-b border-border-subtle bg-surface/95 text-foreground backdrop-blur-sm",
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center">
-        <span
-          {...(tauri ? { "data-tauri-drag-region": true } : {})}
-          className="flex shrink-0 items-center px-3"
-        >
-          <ForgeWordmark height={13} />
+      <div
+        className="flex min-w-0 flex-1 items-center"
+        {...tauriDragRegionProps()}
+        onMouseDown={startWindowDrag}
+      >
+        <span className="ml-1 flex shrink-0 items-center rounded-md px-2.5 opacity-85">
+          <ForgeWordmark height={12} />
         </span>
         <MenuBar className="shrink-0" />
-        {tauri && <div className="min-w-0 flex-1" data-tauri-drag-region />}
+        <div className="min-w-0 flex-1" />
       </div>
 
       {tauri && appWindow && (
@@ -57,7 +59,7 @@ export function TitleBar() {
             type="button"
             title="Minimize"
             onClick={() => void appWindow.minimize()}
-            className="inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-panel-elevated hover:text-foreground"
+            className="inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-panel-elevated/85 hover:text-foreground"
           >
             <Minus className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
@@ -65,7 +67,7 @@ export function TitleBar() {
             type="button"
             title={isMaximized ? "Restore" : "Maximize"}
             onClick={() => void appWindow.toggleMaximize()}
-            className="inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-panel-elevated hover:text-foreground"
+            className="inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-panel-elevated/85 hover:text-foreground"
           >
             <Square className="h-3 w-3" strokeWidth={2} />
           </button>

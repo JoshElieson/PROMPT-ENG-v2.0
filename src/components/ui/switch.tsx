@@ -12,7 +12,7 @@ const Switch = React.forwardRef<
       "focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-foreground",
       "disabled:cursor-not-allowed disabled:opacity-50",
       "data-[state=unchecked]:bg-border",
-      "data-[state=checked]:bg-accent",
+      "data-[state=checked]:bg-[#4f46e5]",
       className,
     )}
     {...props}
@@ -22,7 +22,7 @@ const Switch = React.forwardRef<
       className={cn(
         "pointer-events-none block h-4 w-4 rounded-[9999px] ring-0 transition-transform",
         "bg-foreground shadow-sm",
-        "data-[state=checked]:translate-x-4 data-[state=checked]:bg-black",
+        "data-[state=checked]:translate-x-4 data-[state=checked]:bg-[#e2e8f0]",
         "data-[state=unchecked]:translate-x-0",
       )}
     />

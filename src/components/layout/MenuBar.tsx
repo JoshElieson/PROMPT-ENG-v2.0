@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -17,6 +16,7 @@ import {
   type MenuActionId,
   type MenuEntry,
 } from "@/data/menu-items";
+import type { SidebarView } from "@/components/layout/ActivityBar";
 import { menuActionChecked, useLayout } from "@/contexts/LayoutContext";
 import { cn } from "@/lib/utils";
 
@@ -28,10 +28,21 @@ function menuActionToRightPanel(
   return null;
 }
 
+function menuActionToSidebarView(action: MenuActionId): Exclude<SidebarView, "git"> | null {
+  if (action === "view.explorer") return "explorer";
+  if (action === "view.agentCart") return "agents";
+  return null;
+}
+
 function MenuEntries({ items }: { items: MenuEntry[] }) {
   const {
     rightPanels,
+    workspaceBottomPanelOpen,
+    sidebarView,
+    leftSidebarCollapsed,
     setRightPanelVisible,
+    setLeftSidebarViewVisible,
+    requestBottomPanelTab,
     dispatchMenuAction,
   } = useLayout();
   return (
@@ -56,23 +67,35 @@ function MenuEntries({ items }: { items: MenuEntry[] }) {
 
         if (entry.checkable && entry.action) {
           const panel = menuActionToRightPanel(entry.action);
-          const checked = menuActionChecked(entry.action, rightPanels) ?? false;
+          const sidebarViewTarget = menuActionToSidebarView(entry.action);
+          const checked =
+            menuActionChecked(
+              entry.action,
+              rightPanels,
+              workspaceBottomPanelOpen,
+              sidebarView,
+              leftSidebarCollapsed,
+            ) ?? false;
 
           return (
-            <DropdownMenuCheckboxItem
+            <DropdownMenuItem
               key={entry.label}
-              checked={checked}
               disabled={entry.disabled}
-              onCheckedChange={(next) => {
+              onSelect={() => {
+                const next = !checked;
                 if (panel) setRightPanelVisible(panel, next);
+                else if (entry.action === "view.workspaceTerminal") {
+                  requestBottomPanelTab("terminal");
+                } else if (sidebarViewTarget) {
+                  setLeftSidebarViewVisible(sidebarViewTarget, next);
+                }
               }}
-              onSelect={(e) => e.preventDefault()}
             >
               {getMenuDisplayLabel(entry)}
               {entry.shortcut && (
                 <DropdownMenuShortcut>{entry.shortcut}</DropdownMenuShortcut>
               )}
-            </DropdownMenuCheckboxItem>
+            </DropdownMenuItem>
           );
         }
 
@@ -81,6 +104,10 @@ function MenuEntries({ items }: { items: MenuEntry[] }) {
             key={entry.label}
             disabled={entry.disabled}
             onSelect={() => {
+              if (entry.action === "view.workspaceBrowser") {
+                requestBottomPanelTab("browser");
+                return;
+              }
               if (entry.action) dispatchMenuAction(entry.action);
             }}
           >
@@ -117,7 +144,7 @@ function MenuGroupDropdown({
           type="button"
           data-menu-trigger={label}
           className={cn(
-            "rounded-md px-2.5 py-1 text-[13px] text-muted-foreground outline-none",
+            "rounded-md px-2.5 py-1 text-[11px] font-normal text-muted outline-none",
             "transition-colors duration-150 ease-out",
             "hover:bg-menu-hover hover:text-foreground",
             "data-[state=open]:bg-menu-hover-strong data-[state=open]:text-foreground",
@@ -202,7 +229,7 @@ export function MenuBar({ className }: MenuBarProps) {
   return (
     <nav
       ref={navRef}
-      className={cn("flex min-w-0 items-center gap-0.5", className)}
+      className={cn("flex min-w-0 items-center gap-1", className)}
       aria-label="Application menu"
     >
       {appMenuGroups.map((group) => (
@@ -231,6 +258,7 @@ export function MenuBar({ className }: MenuBarProps) {
           }}
           onOpenChange={(nextOpen) => {
             if (nextOpen) beginSession(group.label);
+            else endSession();
           }}
         />
       ))}

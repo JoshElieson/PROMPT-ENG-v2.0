@@ -1,22 +1,23 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #000000;
-  --color-surface: #0a0a0a;
-  --color-panel: #121212;
-  --color-panel-elevated: #1a1a1a;
-  --color-border: #2a2a2a;
-  --color-border-subtle: #1f1f1f;
-  --color-muted: #888888;
-  --color-muted-foreground: #a3a3a3;
-  --color-foreground: #fafafa;
-  --color-accent: #ff6b35;
-  --color-accent-muted: #ff6b3520;
+  --color-background: #11151d;
+  --color-surface: #171c26;
+  --color-panel: #1b2130;
+  --color-panel-elevated: #20283a;
+  --color-composer: #232c3f;
+  --color-border: rgb(255 255 255 / 0.08);
+  --color-border-subtle: rgb(148 163 184 / 0.12);
+  --color-muted: #8e9aae;
+  --color-muted-foreground: #94a3b8;
+  --color-foreground: #f3f4f6;
+  --color-accent: #6366f1;
+  --color-accent-muted: rgb(99 102 241 / 0.16);
   /** Opaque accent rule for the shared Chats / models / Round Table header line. */
-  --color-workspace-header-line: #412419;
-  --color-accent-hover: #ff8555;
-  --color-menu-hover: rgb(255 255 255 / 0.1);
-  --color-menu-hover-strong: rgb(255 255 255 / 0.14);
+  --color-workspace-header-line: rgb(99 102 241 / 0.24);
+  --color-accent-hover: #4f46e5;
+  --color-menu-hover: rgb(148 163 184 / 0.12);
+  --color-menu-hover-strong: rgb(99 102 241 / 0.14);
   --color-success: #22c55e;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --radius-xs: 0.25rem;
@@ -38,13 +39,21 @@
   html,
   body,
   #root {
-    @apply h-full w-full overflow-hidden bg-black text-foreground antialiased;
+    @apply h-full w-full overflow-hidden bg-background text-foreground antialiased;
     font-family: var(--font-sans);
     margin: 0;
     padding: 0;
     border: none;
     outline: none;
     box-shadow: none;
+  }
+
+  body {
+    background:
+      radial-gradient(circle at 12% -10%, rgb(79 70 229 / 0.05), transparent 46%),
+      radial-gradient(circle at 86% 0%, rgb(99 102 241 / 0.06), transparent 44%),
+      radial-gradient(circle at 55% 100%, rgb(59 130 246 / 0.035), transparent 42%),
+      var(--color-background);
   }
 
   /* Prevent focus rings / borders from showing as a window-edge tint */
@@ -64,11 +73,35 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #333;
+    background: rgb(148 163 184 / 0.3);
     border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #444;
+    background: rgb(148 163 184 / 0.45);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]):not(:disabled),
+  a[href],
+  label[for],
+  label:has(input:not(:disabled)),
+  select:not(:disabled),
+  summary,
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  [role="menuitem"]:not([data-disabled]),
+  [role="menuitemcheckbox"]:not([data-disabled]),
+  [role="menuitemradio"]:not([data-disabled]),
+  [role="option"]:not([data-disabled]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="switch"] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"],
+  [data-disabled] {
+    cursor: not-allowed;
   }
 }

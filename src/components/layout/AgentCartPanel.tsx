@@ -136,7 +136,7 @@ function OrgCartRow({
       className={cn(
         "flex w-full items-center gap-2.5 border px-3 py-2.5 text-left transition-colors",
         isOpen || selectedCount > 0
-          ? "border-foreground/30 bg-panel-elevated"
+          ? "border-[#6366f1]/24 bg-panel-elevated/72"
           : "border-transparent hover:border-border-subtle hover:bg-panel-elevated",
       )}
       onPointerEnter={handleOpen}
@@ -298,7 +298,7 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
         />
       )}
 
-      <footer className="shrink-0 border-t border-border-subtle px-3 py-2">
+      <footer className="shrink-0 px-3 py-2">
         <p className="text-xs text-muted-foreground">
           <span className="font-medium text-foreground">{selectedIds.length}</span>
           {selectedIds.length === 1 ? " model" : " models"} selected

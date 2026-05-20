@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 export const WORKSPACE_HEADER_ROW = "flex h-9 shrink-0 items-center border-b";
 
 /** Same surface as an active `SidebarPanel` (panel + elevated tint). */
-export const WORKSPACE_HEADER_SURFACE = "bg-panel bg-panel-elevated/30";
+export const WORKSPACE_HEADER_SURFACE = "bg-panel/85";
 
 export function workspaceHeaderBorder(active = false) {
   return active ? "border-workspace-header-line" : "border-border-subtle";

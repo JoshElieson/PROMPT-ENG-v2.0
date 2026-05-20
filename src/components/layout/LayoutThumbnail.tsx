@@ -11,7 +11,7 @@ interface LayoutThumbnailProps {
 const box = "rounded-[1px]";
 
 const hoverHighlight =
-  "group-data-[highlighted]:border-muted-foreground/50 group-data-[highlighted]:ring-1 group-data-[highlighted]:ring-zinc-600/80";
+  "group-data-[highlighted]:border-muted-foreground/50 group-data-[highlighted]:ring-1 group-data-[highlighted]:ring-[#6366f1]/30";
 
 /** Mini wireframe of the workspace — LeetCode-style layout preview. */
 export function LayoutThumbnail({

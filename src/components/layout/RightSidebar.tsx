@@ -3,13 +3,20 @@ import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { WeightSlider } from "@/components/ui/weight-slider";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ResizableSidebar } from "@/components/ui/resizable-panels";
 import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import { ModelLogo } from "@/components/models/ModelLogo";
 import { popularAiModels } from "@/data/ai-models";
+import { useApiUsage } from "@/contexts/ApiUsageContext";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { useLayout, type RightPanelId } from "@/contexts/LayoutContext";
+import { formatCostUsd, formatTokenCount } from "@/lib/token-usage";
 import { cn } from "@/lib/utils";
 
 const ROUND_TABLE_DESCRIPTION =
@@ -40,10 +47,10 @@ const ModelRow = memo(function ModelRow({
   return (
     <section
       className={cn(
-        "space-y-2.5 border px-3 py-3 transition-colors",
+        "space-y-2.5 rounded-xl border px-3 py-3 transition-all duration-150",
         active
-          ? "border-foreground/30 bg-panel-elevated"
-          : "border-transparent opacity-50",
+          ? "border-[#6366f1]/28 bg-panel-elevated/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+          : "border-border/60 bg-panel-elevated/35 opacity-78",
       )}
     >
       <button
@@ -83,6 +90,8 @@ const ModelRow = memo(function ModelRow({
 });
 
 function RoundTableSection({ onClose }: { onClose: () => void }) {
+  const [autoEnabled, setAutoEnabled] = useState(true);
+  const [deeperEnabled, setDeeperEnabled] = useState(false);
   const {
     selectedIds,
     activeIds,
@@ -99,7 +108,7 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
 
   return (
     <SidebarPanel
-      title="Round Table"
+      title="Models"
       titleDescription={ROUND_TABLE_DESCRIPTION}
       active
       fill
@@ -107,9 +116,82 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
     >
       <ScrollArea className="h-full">
         <section className="p-4">
+          <section className="mb-2">
+            <div className="flex items-center justify-between gap-1.5 py-1">
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Tooltip delayDuration={150}>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        Auto
+                      </span>
+                      <Switch
+                        checked={autoEnabled}
+                        onCheckedChange={setAutoEnabled}
+                        aria-label="Toggle Auto mode"
+                        className="scale-[0.85]"
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" align="start" className="max-w-[260px]">
+                    <p className="text-sm font-semibold">Auto</p>
+                    <p>
+                      Uses models that balance intelligence and cost efficiency.
+                      Useful for everyday tasks.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip delayDuration={150}>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        Deeper
+                      </span>
+                      <Switch
+                        checked={deeperEnabled}
+                        onCheckedChange={setDeeperEnabled}
+                        aria-label="Toggle Deeper mode"
+                        className="scale-[0.85]"
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" align="start" className="max-w-[260px]">
+                    <p className="text-sm font-semibold">Deeper</p>
+                    <p>
+                      Uses the most capable models available. Recommended for
+                      complex tasks.
+                    </p>
+                    <p className="mt-1 text-muted">Billed at the model&apos;s API price.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="min-w-0 max-w-[11.5rem] text-right text-[10px] leading-[1.3] text-muted">
+                {activeCount > 0 ? (
+                  <span className="inline-flex flex-col items-start gap-0.5 text-left">
+                    <span>
+                      Active:{" "}
+                      <span className="font-medium text-foreground">
+                        {activeCount}
+                      </span>
+                    </span>
+                    <span>
+                      Total Input:{" "}
+                      <span className="font-medium text-foreground">
+                        {allocationSum}%
+                      </span>
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    No models active for chat
+                  </span>
+                )}
+              </p>
+            </div>
+          </section>
           {tableModels.length === 0 ? (
             <p className="text-xs text-muted">
-              Add models in the Model Cart to use the Round Table.
+              Add models in the Model Cart to configure this panel.
             </p>
           ) : (
             <>
@@ -131,23 +213,6 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
                   );
                 })}
               </section>
-              <p className="border-t border-border-subtle pt-3 text-right text-xs text-muted">
-                {activeCount > 0 ? (
-                  <>
-                    <span className="font-medium text-foreground">
-                      {activeCount}
-                    </span>{" "}
-                    active · Combined input{" "}
-                    <span className="font-medium text-foreground">
-                      {allocationSum}%
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-muted-foreground">
-                    No models active for chat
-                  </span>
-                )}
-              </p>
             </>
           )}
         </section>
@@ -188,7 +253,7 @@ function WorkflowSection({ onClose }: { onClose: () => void }) {
       <section className="shrink-0 p-2" aria-label="Workflow">
         <section
           className={cn(
-            "h-56 min-h-56 max-h-56 w-full shrink-0 rounded-lg border border-border-subtle bg-panel-elevated/40 transition-opacity",
+            "h-56 min-h-56 max-h-56 w-full shrink-0 rounded-xl border border-border/70 bg-panel-elevated/50 transition-opacity",
             !workflowEnabled && "pointer-events-none opacity-40",
           )}
         />
@@ -198,6 +263,7 @@ function WorkflowSection({ onClose }: { onClose: () => void }) {
 }
 
 export function RightSidebar() {
+  const { usage } = useApiUsage();
   const { rightPanels, setRightPanelVisible } = useLayout();
   const showRoundTable = rightPanels.roundTable;
   const showWorkflow = rightPanels.workflow;
@@ -239,20 +305,28 @@ export function RightSidebar() {
       </div>
 
       <footer className="flex min-h-workspace-dock shrink-0 flex-col gap-2 border-t border-border-subtle px-3 pb-2.5 pt-3">
-        <section className="grid min-h-0 flex-1 grid-cols-3 gap-2">
+        <section className="grid min-h-0 flex-1 grid-cols-2 gap-2">
           {[
-            { label: "Tokens", value: "12.4k" },
-            { label: "Cost", value: "$0.042" },
-            { label: "Time", value: "3.2s" },
+            {
+              label: "Tokens",
+              value: formatTokenCount(usage.tokens),
+              title: "Estimated API tokens (input + output)",
+            },
+            {
+              label: "Cost",
+              value: formatCostUsd(usage.costUsd),
+              title: "Estimated API cost from model pricing",
+            },
           ].map((stat) => (
             <section
               key={stat.label}
-              className="flex h-full min-h-0 flex-col items-center justify-center rounded-lg border border-border-subtle bg-surface px-2 py-2 text-center"
+              title={stat.title}
+              className="flex h-full min-h-0 flex-col items-center justify-center rounded-xl border border-border bg-panel-elevated/65 px-2 py-2 text-center"
             >
               <p className="text-[10px] uppercase tracking-wider text-muted">
                 {stat.label}
               </p>
-              <p className="mt-1 text-sm font-semibold tabular-nums">
+              <p className="mt-1 text-sm font-medium tabular-nums">
                 {stat.value}
               </p>
             </section>
@@ -262,8 +336,8 @@ export function RightSidebar() {
         <button
           type="button"
           className={cn(
-            "flex w-full shrink-0 items-center justify-center gap-1 rounded-lg py-2 text-xs text-muted-foreground",
-            "hover:bg-panel-elevated hover:text-foreground",
+            "flex w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-transparent py-2 text-xs text-muted-foreground transition-all",
+            "hover:border-border hover:bg-panel-elevated hover:text-foreground",
           )}
         >
           View Full Breakdown

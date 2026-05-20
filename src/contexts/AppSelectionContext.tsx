@@ -9,30 +9,53 @@ import {
 } from "react";
 import { useChats } from "@/contexts/ChatsContext";
 import { useProjects } from "@/contexts/ProjectsContext";
+import { sortWorkspaces } from "@/lib/chat-utils";
+import { findOwningProject } from "@/lib/project-paths";
 
 /** Which major surface owns keyboard focus (mutually exclusive). */
-export type AppSelectionZone = "projects" | "chat-list" | "workspace";
+export type AppSelectionZone =
+  | "projects"
+  | "chat-list"
+  | "workspace"
+  | "bottom-panel";
 
 type FocusFn = () => void;
+type WorkspaceSelectionTarget = "screen" | "agent-tabs";
 
 interface AppSelectionContextValue {
   zone: AppSelectionZone | null;
   chatListFocusId: string | null;
   projectFocusRootPath: string | null;
+  /** Specific folder/file row to reveal in the project tree (consumed after expand). */
+  projectFocusPath: string | null;
   isProjectsSelected: boolean;
   isChatListSelected: boolean;
   isWorkspaceScreenSelected: boolean;
+  isWorkspaceAgentTabsSelected: boolean;
+  isBottomPanelSelected: boolean;
+  /** @deprecated Use isBottomPanelSelected */
+  isTerminalSelected: boolean;
   selectProject: (rootPath: string) => void;
+  /** Focus a path inside an existing project (expands ancestors in the tree). */
+  selectProjectPath: (path: string) => void;
   selectTopProject: () => void;
   selectChat: (chatId: string) => void;
   selectChatList: (chatId?: string | null) => void;
   selectWorkspaceScreen: () => void;
+  selectWorkspaceAgentTabs: () => void;
+  selectBottomPanel: () => void;
+  /** @deprecated Use selectBottomPanel */
+  selectTerminal: () => void;
   moveChatListFocus: (delta: number) => void;
   focusComposer: () => void;
   focusWorkspaceScreen: () => void;
+  focusWorkspaceAgentTabs: () => void;
   registerFocusComposer: (fn: FocusFn) => () => void;
   registerFocusWorkspaceScreen: (fn: FocusFn) => () => void;
+  registerFocusWorkspaceAgentTabs: (fn: FocusFn) => () => void;
   registerFocusProjectTree: (fn: FocusFn) => () => void;
+  clearProjectFocusPath: () => void;
+  selectTopChat: () => void;
 }
 
 const AppSelectionContext = createContext<AppSelectionContextValue | null>(null);
@@ -45,14 +68,16 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
   const [projectFocusRootPath, setProjectFocusRootPath] = useState<string | null>(
     null,
   );
+  const [projectFocusPath, setProjectFocusPath] = useState<string | null>(null);
+  const [workspaceSelectionTarget, setWorkspaceSelectionTarget] =
+    useState<WorkspaceSelectionTarget>("screen");
   const focusComposerRef = useRef<FocusFn | null>(null);
   const focusWorkspaceScreenRef = useRef<FocusFn | null>(null);
+  const focusWorkspaceAgentTabsRef = useRef<FocusFn | null>(null);
   const focusProjectTreeRef = useRef<FocusFn | null>(null);
 
   const sortedChatIds = useCallback(() => {
-    return [...chats]
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map((c) => c.id);
+    return sortWorkspaces(chats).map((c) => c.id);
   }, [chats]);
 
   const resolveChatId = useCallback(
@@ -70,6 +95,24 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
       if (!projects.some((p) => p.rootPath === rootPath)) return;
       setZone("projects");
       setProjectFocusRootPath(rootPath);
+      setProjectFocusPath(null);
+      requestAnimationFrame(() => {
+        focusProjectTreeRef.current?.();
+      });
+    },
+    [projects],
+  );
+
+  const selectProjectPath = useCallback(
+    (path: string) => {
+      const owning = findOwningProject(projects, path);
+      if (!owning) return;
+      setZone("projects");
+      setProjectFocusRootPath(owning.rootPath);
+      setProjectFocusPath(path);
+      requestAnimationFrame(() => {
+        focusProjectTreeRef.current?.();
+      });
     },
     [projects],
   );
@@ -81,6 +124,7 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
       setZone("chat-list");
       setChatListFocusId(chatId);
       setProjectFocusRootPath(null);
+      setProjectFocusPath(null);
       activateChat(chatId);
     },
     [sortedChatIds, activateChat],
@@ -97,8 +141,33 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
 
   const selectWorkspaceScreen = useCallback(() => {
     setZone("workspace");
+    setWorkspaceSelectionTarget("screen");
     setProjectFocusRootPath(null);
+    setProjectFocusPath(null);
   }, []);
+
+  const selectWorkspaceAgentTabs = useCallback(() => {
+    setZone("workspace");
+    setWorkspaceSelectionTarget("agent-tabs");
+    setProjectFocusRootPath(null);
+    setProjectFocusPath(null);
+  }, []);
+
+  const selectBottomPanel = useCallback(() => {
+    setZone("bottom-panel");
+    setWorkspaceSelectionTarget("screen");
+    setProjectFocusRootPath(null);
+    setProjectFocusPath(null);
+    setChatListFocusId(null);
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) {
+      if (active.closest("[data-workspace-bottom-panel]")) return;
+      if (active.closest("[data-projects-panel]")) return;
+      active.blur();
+    }
+  }, []);
+
+  const selectTerminal = selectBottomPanel;
 
   const focusComposer = useCallback(() => {
     focusComposerRef.current?.();
@@ -106,6 +175,10 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
 
   const focusWorkspaceScreen = useCallback(() => {
     focusWorkspaceScreenRef.current?.();
+  }, []);
+
+  const focusWorkspaceAgentTabs = useCallback(() => {
+    focusWorkspaceAgentTabsRef.current?.();
   }, []);
 
   const registerFocusComposer = useCallback((fn: FocusFn) => {
@@ -124,6 +197,19 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
         focusWorkspaceScreenRef.current = null;
       }
     };
+  }, []);
+
+  const registerFocusWorkspaceAgentTabs = useCallback((fn: FocusFn) => {
+    focusWorkspaceAgentTabsRef.current = fn;
+    return () => {
+      if (focusWorkspaceAgentTabsRef.current === fn) {
+        focusWorkspaceAgentTabsRef.current = null;
+      }
+    };
+  }, []);
+
+  const clearProjectFocusPath = useCallback(() => {
+    setProjectFocusPath(null);
   }, []);
 
   const registerFocusProjectTree = useCallback((fn: FocusFn) => {
@@ -222,9 +308,32 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
       const target = e.target;
       if (!(target instanceof Element)) return;
       if (!target.closest("[data-workspace-split-host]")) return;
+      if (
+        target.closest("[data-workspace-bottom-panel], .xterm")
+      ) {
+        return;
+      }
       if (target.closest("button, a, select")) return;
 
-      if (zone === "workspace" && e.key === "ArrowDown") {
+      if (
+        zone === "workspace" &&
+        workspaceSelectionTarget === "screen" &&
+        e.key === "ArrowUp" &&
+        !target.closest("[data-composer-textarea]")
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        selectWorkspaceAgentTabs();
+        requestAnimationFrame(() => focusWorkspaceAgentTabsRef.current?.());
+        return;
+      }
+
+      if (
+        zone === "workspace" &&
+        workspaceSelectionTarget === "screen" &&
+        e.key === "ArrowDown" &&
+        !target.closest("[data-composer-textarea]")
+      ) {
         e.preventDefault();
         e.stopPropagation();
         focusComposer();
@@ -232,19 +341,9 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
       }
 
       if (e.key === "ArrowLeft") {
-        const inComposer = target.closest("[data-composer-textarea]");
-        if (inComposer instanceof HTMLTextAreaElement) {
-          e.preventDefault();
-          e.stopPropagation();
-          const active = document.activeElement;
-          if (active instanceof HTMLElement) {
-            active.blur();
-          }
-          selectTopProject();
-          return;
-        }
+        if (target.closest("[data-composer-textarea]")) return;
 
-        if (zone === "workspace") {
+        if (zone === "workspace" && workspaceSelectionTarget === "screen") {
           e.preventDefault();
           e.stopPropagation();
           selectTopChat();
@@ -254,27 +353,48 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
 
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [zone, selectTopChat, selectTopProject, focusComposer]);
+  }, [
+    zone,
+    workspaceSelectionTarget,
+    selectTopChat,
+    selectTopProject,
+    focusComposer,
+    selectWorkspaceAgentTabs,
+  ]);
 
   const value: AppSelectionContextValue = {
     zone,
     chatListFocusId,
     projectFocusRootPath,
+    projectFocusPath,
     isProjectsSelected:
       zone === "projects" && projectFocusRootPath != null,
     isChatListSelected: zone === "chat-list" && chatListFocusId != null,
-    isWorkspaceScreenSelected: zone === "workspace",
+    isWorkspaceScreenSelected:
+      zone === "workspace" && workspaceSelectionTarget === "screen",
+    isWorkspaceAgentTabsSelected:
+      zone === "workspace" && workspaceSelectionTarget === "agent-tabs",
+    isBottomPanelSelected: zone === "bottom-panel",
+    isTerminalSelected: zone === "bottom-panel",
     selectProject,
+    selectProjectPath,
     selectTopProject,
     selectChat,
     selectChatList,
     selectWorkspaceScreen,
+    selectWorkspaceAgentTabs,
+    selectBottomPanel,
+    selectTerminal,
     moveChatListFocus,
     focusComposer,
     focusWorkspaceScreen,
+    focusWorkspaceAgentTabs,
     registerFocusComposer,
     registerFocusWorkspaceScreen,
+    registerFocusWorkspaceAgentTabs,
     registerFocusProjectTree,
+    clearProjectFocusPath,
+    selectTopChat,
   };
 
   return (

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-use crate::fs::{list_directory, FsEntry};
+use crate::fs::{list_directory, remove_path, FsEntry};
 
 const MAX_READ_BYTES: usize = 512 * 1024;
 const MAX_LIST_ENTRIES: usize = 200;
@@ -34,11 +34,12 @@ impl WorkspacePolicy {
         Some(Self { roots })
     }
 
-    /// True if `path` lies under at least one enabled root (canonical when possible).
+    /// True if `path` is an enabled root, lies under one, or is a parent of one
+    /// (so `clear_directory` can target a folder that contains enabled files).
     pub fn allows_path(&self, path: &Path) -> bool {
-        self.roots
-            .iter()
-            .any(|root| path_is_within_workspace(path, root))
+        self.roots.iter().any(|root| {
+            path_is_within_workspace(path, root) || path_is_within_workspace(root, path)
+        })
     }
 
     pub fn roots_summary(&self) -> String {
@@ -48,6 +49,18 @@ impl WorkspacePolicy {
             .collect::<Vec<_>>()
             .join("\n")
     }
+
+    /// True when `path` is exactly one of the user's enabled roots (not a child).
+    pub fn is_enabled_root(&self, path: &Path) -> bool {
+        let target_key = path_key(path);
+        self.roots
+            .iter()
+            .any(|root| path_key(root) == target_key)
+    }
+}
+
+fn path_key(path: &Path) -> std::path::PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn path_is_within_workspace(path: &Path, root: &Path) -> bool {
@@ -162,4 +175,91 @@ pub fn tool_list_directory(policy: &WorkspacePolicy, path_str: &str) -> Result<S
         ));
     }
     Ok(lines.join("\n"))
+}
+
+fn delete_path_allowed(policy: &WorkspacePolicy, path: &Path, tool: &str) -> Result<(), String> {
+    if !policy.allows_path(path) {
+        return Err(format!(
+            "{tool}: path is not inside an AI-enabled folder or file: {}",
+            path.display()
+        ));
+    }
+    if !path.exists() {
+        return Err(format!("{tool}: path does not exist: {}", path.display()));
+    }
+    remove_path(path)
+}
+
+pub fn tool_remove_path(policy: &WorkspacePolicy, path_str: &str) -> Result<String, String> {
+    let path = Path::new(path_str.trim());
+    if path_str.trim().is_empty() {
+        return Err("remove_path: path is empty".to_string());
+    }
+    if !policy.allows_path(path) {
+        return Err(format!(
+            "remove_path: path is not inside an AI-enabled folder or file: {}",
+            path.display()
+        ));
+    }
+    if policy.is_enabled_root(path) && path.is_dir() {
+        return Err(
+            "remove_path: cannot delete an AI-enabled folder root; use clear_directory on that folder path to empty it instead.".to_string(),
+        );
+    }
+    let kind = if path.is_dir() { "directory" } else { "file" };
+    delete_path_allowed(policy, path, "remove_path")?;
+    Ok(format!("Deleted {kind}: {}", path.display()))
+}
+
+pub fn tool_clear_directory(policy: &WorkspacePolicy, path_str: &str) -> Result<String, String> {
+    let path = Path::new(path_str.trim());
+    if path_str.trim().is_empty() {
+        return Err("clear_directory: path is empty".to_string());
+    }
+    if !policy.allows_path(path) {
+        return Err(format!(
+            "clear_directory: path is not inside an AI-enabled folder: {}",
+            path.display()
+        ));
+    }
+    if !path.exists() {
+        return Err(format!(
+            "clear_directory: path does not exist: {}",
+            path.display()
+        ));
+    }
+    if !path.is_dir() {
+        return Err(format!(
+            "clear_directory: not a directory: {}",
+            path.display()
+        ));
+    }
+
+    let entries: Vec<FsEntry> = list_directory(path.to_string_lossy().to_string())?;
+    if entries.is_empty() {
+        return Ok(format!("Directory already empty: {}", path.display()));
+    }
+
+    let mut removed = 0usize;
+    let mut errors: Vec<String> = Vec::new();
+    for entry in &entries {
+        let child = Path::new(&entry.path);
+        match delete_path_allowed(policy, child, "clear_directory") {
+            Ok(()) => removed += 1,
+            Err(e) => errors.push(format!("{}: {e}", entry.path)),
+        }
+    }
+
+    if errors.is_empty() {
+        return Ok(format!(
+            "Cleared {} item(s) from {}",
+            removed,
+            path.display()
+        ));
+    }
+    Err(format!(
+        "clear_directory: removed {removed} item(s); {} failed:\n{}",
+        errors.len(),
+        errors.join("\n")
+    ))
 }

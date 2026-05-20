@@ -141,7 +141,7 @@ export function WeightSlider({
       >
         <div
           className={cn(
-            "h-full rounded-full bg-accent",
+            "h-full rounded-full bg-[#6366f1]/75",
             !isDragging && "transition-[width] duration-150 ease-out",
           )}
           style={{ width: `${displayValue}%` }}

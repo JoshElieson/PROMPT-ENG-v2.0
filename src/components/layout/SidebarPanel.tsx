@@ -36,8 +36,8 @@ export function SidebarPanel({
     title ? (
       <h3
         className={cn(
-          "flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider",
-          active ? "text-accent" : "text-muted",
+          "flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.08em]",
+          active ? "text-foreground/95" : "text-muted",
         )}
       >
         {titleIcon}
@@ -54,7 +54,7 @@ export function SidebarPanel({
     <button
       type="button"
       onClick={onClose}
-      className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-panel-elevated hover:text-foreground"
+      className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground"
       aria-label={title ? `Close ${title}` : "Close panel"}
     >
       <X className="h-3.5 w-3.5" />
@@ -64,9 +64,9 @@ export function SidebarPanel({
   return (
     <section
       className={cn(
-        "flex flex-col bg-panel",
+        "flex flex-col bg-panel/85",
         fill ? "min-h-0 flex-1" : "shrink-0",
-        active && "bg-panel-elevated/30",
+        active && "bg-panel-elevated/35",
         className,
       )}
     >
