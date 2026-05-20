@@ -25,6 +25,7 @@ export const SUPPORTED_AI_MODEL_IDS = new Set([
   "claude-opus",
   "gemini",
   "gemini-flash",
+  "deepseek",
 ]);
 
 export function isAiModelSupported(modelId: string): boolean {

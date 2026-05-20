@@ -39,6 +39,7 @@ fn provider_error(provider: Provider, context: &str, detail: &str) -> String {
         Provider::OpenAi => "OpenAI",
         Provider::Anthropic => "Anthropic",
         Provider::Google => "Gemini",
+        Provider::DeepSeek => "DeepSeek",
     };
     format!("{name} {context}: {detail}")
 }
@@ -366,6 +367,169 @@ async fn openai_agent_loop(
     }
 
     Err("OpenAI: stopped after too many tool rounds (possible loop).".to_string())
+}
+
+async fn complete_deepseek(
+    api_model: &str,
+    messages: &[ChatTurn],
+    system: Option<&str>,
+) -> Result<String, String> {
+    let key = api_key(Provider::DeepSeek).expect("key checked");
+    let base = base_url(Provider::DeepSeek, "https://api.deepseek.com/v1");
+    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+
+    let mut api_messages: Vec<serde_json::Value> = Vec::new();
+    if let Some(sys) = system {
+        api_messages.push(json!({
+            "role": "system",
+            "content": sys,
+        }));
+    }
+    for turn in messages {
+        let role = if turn.role == "assistant" {
+            "assistant"
+        } else {
+            "user"
+        };
+        api_messages.push(json!({
+            "role": role,
+            "content": turn.content,
+        }));
+    }
+
+    let body = json!({
+        "model": api_model,
+        "messages": api_messages,
+        "max_tokens": 4096,
+    });
+
+    let client = http_client()?;
+    let res = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {key}"))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| provider_error(Provider::DeepSeek, "request failed", &e.to_string()))?;
+
+    let status = res.status();
+    let data: serde_json::Value = res
+        .json()
+        .await
+        .map_err(|e| provider_error(Provider::DeepSeek, "invalid response", &e.to_string()))?;
+
+    if !status.is_success() {
+        let detail = data["error"]["message"]
+            .as_str()
+            .or_else(|| data["error"].as_str())
+            .unwrap_or("Unknown error");
+        return Err(provider_error(
+            Provider::DeepSeek,
+            &format!("HTTP {status}"),
+            detail,
+        ));
+    }
+
+    data["choices"][0]["message"]["content"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            provider_error(Provider::DeepSeek, "response", "missing message content")
+        })
+}
+
+async fn deepseek_agent_loop(
+    api_model: &str,
+    chat_messages: &[ChatTurn],
+    policy: &WorkspacePolicy,
+) -> Result<String, String> {
+    let key = api_key(Provider::DeepSeek).expect("key checked");
+    let base = base_url(Provider::DeepSeek, "https://api.deepseek.com/v1");
+    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+    let client = http_client()?;
+    let tools = tools_schema_openai();
+
+    let mut api_messages: Vec<serde_json::Value> = vec![json!({
+        "role": "system",
+        "content": workspace_system_prompt(policy),
+    })];
+    for turn in chat_messages {
+        let role = if turn.role == "assistant" {
+            "assistant"
+        } else {
+            "user"
+        };
+        api_messages.push(json!({ "role": role, "content": turn.content }));
+    }
+
+    for _ in 0..MAX_TOOL_ROUNDS {
+        let body = json!({
+            "model": api_model,
+            "messages": api_messages,
+            "tools": tools,
+            "tool_choice": "auto",
+            "max_tokens": 4096,
+        });
+
+        let res = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", key.as_str()))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| provider_error(Provider::DeepSeek, "request failed", &e.to_string()))?;
+
+        let status = res.status();
+        let data: serde_json::Value = res
+            .json()
+            .await
+            .map_err(|e| provider_error(Provider::DeepSeek, "invalid response", &e.to_string()))?;
+
+        if !status.is_success() {
+            let detail = data["error"]["message"]
+                .as_str()
+                .unwrap_or("Unknown error");
+            return Err(provider_error(
+                Provider::DeepSeek,
+                &format!("HTTP {status}"),
+                detail,
+            ));
+        }
+
+        let msg = &data["choices"][0]["message"];
+        let tool_calls = msg["tool_calls"].as_array();
+
+        if let Some(calls) = tool_calls {
+            if !calls.is_empty() {
+                api_messages.push(msg.clone());
+
+                for call in calls {
+                    let id = call["id"].as_str().unwrap_or("");
+                    let name = call["function"]["name"].as_str().unwrap_or("");
+                    let args = call["function"]["arguments"].as_str().unwrap_or("{}");
+                    let output = run_tool(policy, name, args);
+                    api_messages.push(json!({
+                        "role": "tool",
+                        "tool_call_id": id,
+                        "content": output,
+                    }));
+                }
+                continue;
+            }
+        }
+
+        return msg["content"]
+            .as_str()
+            .map(|s| s.to_string())
+            .filter(|s| !s.trim().is_empty())
+            .ok_or_else(|| {
+                provider_error(Provider::DeepSeek, "response", "empty assistant message")
+            });
+    }
+
+    Err("DeepSeek: stopped after too many tool rounds (possible loop).".to_string())
 }
 
 fn anthropic_tools() -> Vec<serde_json::Value> {
@@ -873,6 +1037,7 @@ async fn complete_for_model(
         Provider::OpenAi => complete_openai(&api_model, messages, system).await,
         Provider::Anthropic => complete_anthropic(&api_model, messages, system).await,
         Provider::Google => complete_gemini(&api_model, messages, system).await,
+        Provider::DeepSeek => complete_deepseek(&api_model, messages, system).await,
     }
 }
 
@@ -890,6 +1055,7 @@ async fn complete_for_model_with_workspace(
         Provider::OpenAi => openai_agent_loop(&api_model, messages, policy).await,
         Provider::Anthropic => anthropic_agent_loop(&api_model, messages, policy).await,
         Provider::Google => gemini_agent_loop(&api_model, messages, policy).await,
+        Provider::DeepSeek => deepseek_agent_loop(&api_model, messages, policy).await,
     }
 }
 
@@ -947,13 +1113,14 @@ Write one cohesive answer for the user."
     }];
 
     let (provider, _) = default_synthesis_provider().ok_or_else(|| {
-        "No AI API keys configured. Add OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY to .env.".to_string()
+        "No AI API keys configured. Add OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or DEEPSEEK_API_KEY to .env.".to_string()
     })?;
 
     let model_id = match provider {
         Provider::OpenAi => "gpt4o",
         Provider::Anthropic => "claude",
         Provider::Google => "gemini",
+        Provider::DeepSeek => "deepseek",
     };
 
     complete_for_model(model_id, &messages, Some(system)).await
