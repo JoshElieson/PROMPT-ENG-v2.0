@@ -34,9 +34,14 @@ pub fn run() {
             github_fetch_user,
         ])
         .setup(|app| {
+            let icon = app.default_window_icon().cloned();
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_theme(Some(tauri::Theme::Dark));
                 let _ = window.set_shadow(false);
+                // Frameless windows on Windows use the window icon for the taskbar.
+                if let Some(icon) = icon {
+                    let _ = window.set_icon(icon);
+                }
             }
             Ok(())
         })

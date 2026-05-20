@@ -72,7 +72,7 @@ export function AccountMenu() {
             <User className="h-4 w-4" />
           )}
           {isLoggedIn && (
-            <span className="absolute bottom-1.5 right-1.5 h-2 w-2 bg-success ring-2 ring-surface" />
+            <span className="absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full bg-success ring-2 ring-surface" />
           )}
         </button>
       </DropdownMenuTrigger>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Minus, Square, X } from "lucide-react";
+import { defaultWindowIcon } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ForgeWordmark } from "@/components/brand/ForgeWordmark";
 import { MenuBar } from "@/components/layout/MenuBar";
@@ -16,6 +17,9 @@ export function TitleBar() {
     const appWindow = getCurrentWindow();
 
     void appWindow.setTheme("dark");
+    void defaultWindowIcon().then((icon) => {
+      if (icon) void appWindow.setIcon(icon);
+    });
     void appWindow.isMaximized().then(setIsMaximized);
 
     const unlistenPromise = appWindow.onResized(() => {
