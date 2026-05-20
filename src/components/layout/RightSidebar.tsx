@@ -1,13 +1,14 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { WeightSlider } from "@/components/ui/weight-slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ResizableSidebar } from "@/components/ui/resizable-panels";
 import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import { ModelLogo } from "@/components/models/ModelLogo";
 import { popularAiModels } from "@/data/ai-models";
-import { useRoundTable } from "@/contexts/RoundTableContext";
+import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { useLayout, type RightPanelId } from "@/contexts/LayoutContext";
 import { cn } from "@/lib/utils";
 
@@ -50,7 +51,7 @@ const ModelRow = memo(function ModelRow({
         onClick={() => onToggle(modelId)}
         aria-pressed={active}
         aria-label={`${active ? "Disable" : "Enable"} ${name} for chat`}
-        className="flex w-full items-start gap-3 text-left"
+        className="flex w-full cursor-pointer items-start gap-3 text-left"
       >
         <ModelLogo orgId={orgId} size="md" muted={!active} />
         <span className="min-w-0 flex-1">
@@ -89,7 +90,7 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
     isActive,
     toggleActive,
     setModelWeight,
-  } = useRoundTable();
+  } = useChatRoundTable();
 
   const weightById = new Map(roundTableModels.map((m) => [m.id, m.weight]));
   const tableModels = popularAiModels.filter((m) => selectedIds.includes(m.id));
@@ -156,6 +157,8 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
 }
 
 function WorkflowSection({ onClose }: { onClose: () => void }) {
+  const [workflowEnabled, setWorkflowEnabled] = useState(false);
+
   return (
     <SidebarPanel
       title="Workflow"
@@ -163,6 +166,14 @@ function WorkflowSection({ onClose }: { onClose: () => void }) {
       fill={false}
       className="bg-panel-elevated/30"
       onClose={onClose}
+      headerCenter={
+        <Switch
+          checked={workflowEnabled}
+          onCheckedChange={setWorkflowEnabled}
+          aria-label="Run workflow on send"
+          className="scale-90"
+        />
+      }
       headerExtra={
         <Button
           type="button"
@@ -175,7 +186,12 @@ function WorkflowSection({ onClose }: { onClose: () => void }) {
       }
     >
       <section className="shrink-0 p-2" aria-label="Workflow">
-        <section className="h-56 min-h-56 max-h-56 w-full shrink-0 rounded-lg border border-border-subtle bg-panel-elevated/40" />
+        <section
+          className={cn(
+            "h-56 min-h-56 max-h-56 w-full shrink-0 rounded-lg border border-border-subtle bg-panel-elevated/40 transition-opacity",
+            !workflowEnabled && "pointer-events-none opacity-40",
+          )}
+        />
       </section>
     </SidebarPanel>
   );

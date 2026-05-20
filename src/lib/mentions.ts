@@ -192,7 +192,10 @@ export function resolveTargetModelIds(
 ): string[] {
   const mentioned = parseMentions(content, cartSelectedIds);
   if (mentioned.length > 0) {
-    return mentioned.filter((id) => cartSelectedIds.includes(id));
+    const activeMentioned = mentioned.filter((id) =>
+      roundTableActiveIds.includes(id),
+    );
+    return activeMentioned.length > 0 ? activeMentioned : [];
   }
   return [...roundTableActiveIds];
 }

@@ -22,9 +22,9 @@ export function LayoutMenu() {
           variant="ghost"
           size="icon"
           title="Layouts"
-          className="h-7 w-7 shrink-0 text-muted-foreground hover:bg-zinc-700 hover:text-foreground"
+          className="group h-7 w-7 shrink-0 text-muted-foreground hover:bg-zinc-700 hover:text-foreground"
         >
-          <LayoutGrid className="h-4 w-4" />
+          <LayoutGrid className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto p-2">

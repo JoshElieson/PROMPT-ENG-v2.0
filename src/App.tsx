@@ -4,8 +4,10 @@ import { MainWorkspace } from "@/components/layout/MainWorkspace";
 import { RightSidebar } from "@/components/layout/RightSidebar";
 import { StatusBar } from "@/components/layout/StatusBar";
 import { TitleBar } from "@/components/layout/TitleBar";
-import { RoundTableProvider } from "@/contexts/RoundTableContext";
+import { AppSelectionProvider } from "@/contexts/AppSelectionContext";
 import { ChatsProvider } from "@/contexts/ChatsContext";
+import { FocusedWorkspacePaneRoundTableProvider } from "@/contexts/FocusedWorkspacePaneRoundTableProvider";
+import { RoundTableProvider } from "@/contexts/RoundTableContext";
 import { GitProvider } from "@/contexts/GitContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProjectsProvider } from "@/contexts/ProjectsContext";
@@ -35,13 +37,17 @@ function App() {
       <LayoutProvider>
         <RoundTableProvider>
           <ChatsProvider>
-            <ProjectsProvider>
-              <GitProvider>
-                <TooltipProvider delayDuration={200}>
-                  <AppShell />
-                </TooltipProvider>
-              </GitProvider>
-            </ProjectsProvider>
+            <FocusedWorkspacePaneRoundTableProvider>
+              <ProjectsProvider>
+                <AppSelectionProvider>
+                  <GitProvider>
+                    <TooltipProvider delayDuration={200}>
+                      <AppShell />
+                    </TooltipProvider>
+                  </GitProvider>
+                </AppSelectionProvider>
+              </ProjectsProvider>
+            </FocusedWorkspacePaneRoundTableProvider>
           </ChatsProvider>
         </RoundTableProvider>
       </LayoutProvider>

@@ -24,19 +24,35 @@ import {
   saveActiveChatId,
   saveChats,
 } from "@/lib/storage";
+import {
+  collapseWorkspaceByLeaf,
+  ensureFocusedLeafExists,
+  expandWorkspaceLayout,
+  reconcileWorkspaceThreads,
+} from "@/lib/center-workspace-layout";
+import { createDefaultWorkspaceLayout } from "@/lib/workspace-pane-storage";
 import type { NodePermissions } from "@/types/project";
 import type {
   AiWorkspacePayload,
   Chat,
   ChatMessage,
+  ChatThread,
   ResponseLoadingState,
   SendMessagePayload,
 } from "@/types/chat";
+import type { WorkspacePaneLayout } from "@/types/workspace-pane";
 
 interface ChatsContextValue {
   chats: Chat[];
   activeChat: Chat | null;
   activeChatId: string | null;
+  activeWorkspaceLayout: WorkspacePaneLayout | null;
+  patchActiveWorkspaceLayout: (
+    fn: (prev: WorkspacePaneLayout) => WorkspacePaneLayout,
+  ) => void;
+  expandActiveWorkspaceLayout: (aspectWide: boolean) => boolean;
+  /** Removes the pane for this leaf (4→3→2→1) and drops its thread. */
+  closeActiveWorkspaceLeaf: (leafId: string) => boolean;
   responseLoading: ResponseLoadingState | null;
   isResponding: boolean;
   createChat: () => string;
@@ -63,51 +79,90 @@ function resolveActiveId(chats: Chat[], storedId: string | null): string | null 
   return chats[0].id;
 }
 
-function appendUserMessage(
+function resolveThreadId(chat: Chat, threadId: string | null | undefined): string {
+  if (threadId && chat.threads.some((t) => t.id === threadId)) return threadId;
+  return chat.threads[0]!.id;
+}
+
+function appendUserMessageToThread(
   list: Chat[],
   chatId: string | null,
+  threadId: string | null,
   userMessage: ChatMessage,
   trimmed: string,
   now: number,
-): { chats: Chat[]; resolvedChatId: string } {
+): { chats: Chat[]; resolvedChatId: string; resolvedThreadId: string } {
   if (!chatId || !list.some((c) => c.id === chatId)) {
+    const tid = crypto.randomUUID();
+    const cid = crypto.randomUUID();
     const chat: Chat = {
-      id: crypto.randomUUID(),
+      id: cid,
       title: titleFromMessage(trimmed || "Attachments"),
-      messages: [userMessage],
+      threads: [
+        {
+          id: tid,
+          messages: [userMessage],
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
       createdAt: now,
       updatedAt: now,
+      permissions: {},
+      workspace: createDefaultWorkspaceLayout(tid),
     };
-    return { chats: [chat, ...list], resolvedChatId: chat.id };
+    return { chats: [chat, ...list], resolvedChatId: cid, resolvedThreadId: tid };
   }
+
+  const targetChat = list.find((c) => c.id === chatId)!;
+  const tid = resolveThreadId(targetChat, threadId);
 
   return {
     resolvedChatId: chatId,
+    resolvedThreadId: tid,
     chats: list.map((chat) => {
       if (chat.id !== chatId) return chat;
-      const isFirst = chat.messages.length === 0;
+      const threads = chat.threads.map((th) => {
+        if (th.id !== tid) return th;
+        return {
+          ...th,
+          messages: [...th.messages, userMessage],
+          updatedAt: now,
+        };
+      });
+      const wasEmpty =
+        chat.threads.find((th) => th.id === tid)?.messages.length === 0;
       return {
         ...chat,
-        title: isFirst
+        threads,
+        title: wasEmpty
           ? titleFromMessage(trimmed || "Attachments")
           : chat.title,
-        messages: [...chat.messages, userMessage],
         updatedAt: now,
       };
     }),
   };
 }
 
-function appendAssistantMessage(
+function appendAssistantToThread(
   list: Chat[],
   chatId: string,
+  threadId: string,
   assistantMessage: ChatMessage,
 ): Chat[] {
   return list.map((chat) => {
     if (chat.id !== chatId) return chat;
     return {
       ...chat,
-      messages: [...chat.messages, assistantMessage],
+      threads: chat.threads.map((th) =>
+        th.id === threadId
+          ? {
+              ...th,
+              messages: [...th.messages, assistantMessage],
+              updatedAt: assistantMessage.createdAt,
+            }
+          : th,
+      ),
       updatedAt: assistantMessage.createdAt,
     };
   });
@@ -144,14 +199,143 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     }
   }, [chats, activeChatId]);
 
+  const activeWorkspaceLayout = useMemo(() => {
+    const c = chats.find((x) => x.id === activeChatId);
+    if (!c?.threads[0]) return null;
+    const t0 = c.threads[0].id;
+    const base = c.workspace ?? createDefaultWorkspaceLayout(t0);
+    const valid = new Set(c.threads.map((t) => t.id));
+    return ensureFocusedLeafExists(
+      reconcileWorkspaceThreads(base, valid, t0),
+    );
+  }, [chats, activeChatId]);
+
+  const patchActiveWorkspaceLayout = useCallback(
+    (fn: (prev: WorkspacePaneLayout) => WorkspacePaneLayout) => {
+      if (!activeChatId) return;
+      setChats((prev) =>
+        prev.map((c) => {
+          if (c.id !== activeChatId) return c;
+          const t0 = c.threads[0]?.id;
+          if (!t0) return c;
+          const base = c.workspace ?? createDefaultWorkspaceLayout(t0);
+          const valid = new Set(c.threads.map((t) => t.id));
+          const reconciled = ensureFocusedLeafExists(
+            reconcileWorkspaceThreads(base, valid, t0),
+          );
+          const next = ensureFocusedLeafExists(fn(reconciled));
+          return { ...c, workspace: next, updatedAt: Date.now() };
+        }),
+      );
+    },
+    [activeChatId],
+  );
+
+  const expandActiveWorkspaceLayout = useCallback(
+    (aspectWide: boolean): boolean => {
+      if (!activeChatId) return false;
+      let ok = false;
+      setChats((prev) =>
+        prev.map((c) => {
+          if (c.id !== activeChatId) return c;
+          const newTid = crypto.randomUUID();
+          const t0 = c.threads[0]?.id;
+          if (!t0) return c;
+          const base = c.workspace ?? createDefaultWorkspaceLayout(t0);
+          const expanded = expandWorkspaceLayout(base, aspectWide, newTid);
+          if (!expanded) return c;
+          ok = true;
+          const newThread: ChatThread = {
+            id: newTid,
+            messages: [],
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          return {
+            ...c,
+            threads: [...c.threads, newThread],
+            workspace: ensureFocusedLeafExists(expanded),
+            updatedAt: Date.now(),
+          };
+        }),
+      );
+      return ok;
+    },
+    [activeChatId],
+  );
+
+  const closeActiveWorkspaceLeaf = useCallback(
+    (leafId: string): boolean => {
+      if (!activeChatId) return false;
+
+      let didMutate = false;
+      let removedThreadId: string | null = null;
+
+      setChats((prev) => {
+        const chat = prev.find((c) => c.id === activeChatId);
+        if (!chat?.threads[0]) return prev;
+
+        const t0 = chat.threads[0].id;
+        const base = chat.workspace ?? createDefaultWorkspaceLayout(t0);
+        const valid = new Set(chat.threads.map((t) => t.id));
+        const reconciled = ensureFocusedLeafExists(
+          reconcileWorkspaceThreads(base, valid, t0),
+        );
+
+        const collapsed = collapseWorkspaceByLeaf(reconciled, leafId);
+        if (!collapsed) return prev;
+
+        const threads = chat.threads.filter(
+          (t) => t.id !== collapsed.removedThreadId,
+        );
+        if (threads.length === 0) return prev;
+
+        didMutate = true;
+        removedThreadId = collapsed.removedThreadId;
+
+        return prev.map((c) =>
+          c.id === activeChatId
+            ? {
+                ...c,
+                threads,
+                workspace: ensureFocusedLeafExists(collapsed.layout),
+                updatedAt: Date.now(),
+              }
+            : c,
+        );
+      });
+
+      if (!didMutate) return false;
+
+      setResponseLoading((rl) => {
+        if (
+          rl &&
+          rl.chatId === activeChatId &&
+          removedThreadId &&
+          rl.threadId === removedThreadId
+        ) {
+          responseRunRef.current += 1;
+          return null;
+        }
+        return rl;
+      });
+
+      return true;
+    },
+    [activeChatId],
+  );
+
   const createChat = useCallback((): string => {
     const now = Date.now();
+    const tid = crypto.randomUUID();
     const chat: Chat = {
       id: crypto.randomUUID(),
       title: "New Chat",
-      messages: [],
+      threads: [{ id: tid, messages: [], createdAt: now, updatedAt: now }],
       createdAt: now,
       updatedAt: now,
+      permissions: {},
+      workspace: createDefaultWorkspaceLayout(tid),
     };
     setChats((prev) => [chat, ...prev]);
     setActiveChatId(chat.id);
@@ -199,6 +383,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     async (
       runId: number,
       chatId: string,
+      threadId: string,
       userContent: string,
       history: ChatTurn[],
       targetModelIds: string[],
@@ -215,7 +400,9 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           modelContributions:
             targetModelIds.length > 1 ? contributions : undefined,
         };
-        setChats((prev) => appendAssistantMessage(prev, chatId, assistantMessage));
+        setChats((prev) =>
+          appendAssistantToThread(prev, chatId, threadId, assistantMessage),
+        );
         setResponseLoading(null);
       };
 
@@ -245,6 +432,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         if (targetModelIds.length === 1) {
           setResponseLoading({
             chatId,
+            threadId,
             targetModelIds,
             phase: "roundtable",
             speakingModelIndex: 0,
@@ -267,6 +455,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           const modelId = targetModelIds[i];
           setResponseLoading({
             chatId,
+            threadId,
             targetModelIds,
             phase: "roundtable",
             speakingModelIndex: i,
@@ -280,6 +469,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
         setResponseLoading({
           chatId,
+          threadId,
           targetModelIds,
           phase: "synthesizing",
           speakingModelIndex: -1,
@@ -327,31 +517,41 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         createdAt: now,
         attachments: payload.attachments,
         targetModelIds,
+        modelContributions:
+          targetModelIds.length > 1 ? contributions : undefined,
       };
 
-      let resolvedChatId = activeChatId ?? "";
+      const requestedChatId = payload.chatId ?? activeChatId ?? null;
+      const requestedThreadId = payload.threadId ?? null;
+
+      let resolvedChatId = requestedChatId ?? "";
+      let resolvedThreadId = "";
 
       setChats((prev) => {
-        const result = appendUserMessage(
+        const result = appendUserMessageToThread(
           prev,
-          activeChatId,
+          requestedChatId,
+          requestedThreadId,
           userMessage,
           trimmed,
           now,
         );
         resolvedChatId = result.resolvedChatId;
+        resolvedThreadId = result.resolvedThreadId;
         return result.chats;
       });
 
       setActiveChatId(resolvedChatId);
 
-      const sourceChatId =
-        activeChatId != null && chats.some((c) => c.id === activeChatId)
-          ? activeChatId
-          : null;
+      const chat = chats.find((c) => c.id === requestedChatId) ?? null;
+      const stableThreadId =
+        requestedThreadId && chat?.threads.some((t) => t.id === requestedThreadId)
+          ? requestedThreadId
+          : (chat?.threads[0]?.id ?? resolvedThreadId);
+
       const priorMessages =
-        sourceChatId != null
-          ? (chats.find((c) => c.id === sourceChatId)?.messages ?? [])
+        chat != null
+          ? (chat.threads.find((t) => t.id === stableThreadId)?.messages ?? [])
           : [];
 
       const history: ChatTurn[] = [
@@ -362,8 +562,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         { role: "user", content: trimmed },
       ];
 
+      const finalThreadId = resolvedThreadId || stableThreadId;
+
       setResponseLoading({
         chatId: resolvedChatId,
+        threadId: finalThreadId,
         targetModelIds,
         phase: "roundtable",
         speakingModelIndex: 0,
@@ -372,6 +575,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       void runAiResponse(
         runId,
         resolvedChatId,
+        finalThreadId,
         trimmed,
         history,
         targetModelIds,
@@ -395,8 +599,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       chats,
       activeChat,
       activeChatId,
-      responseLoading:
-        responseLoading?.chatId === activeChatId ? responseLoading : null,
+      activeWorkspaceLayout,
+      patchActiveWorkspaceLayout,
+      expandActiveWorkspaceLayout,
+      closeActiveWorkspaceLeaf,
+      responseLoading,
       isResponding,
       createChat,
       selectChat,
@@ -409,6 +616,10 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       chats,
       activeChat,
       activeChatId,
+      activeWorkspaceLayout,
+      patchActiveWorkspaceLayout,
+      expandActiveWorkspaceLayout,
+      closeActiveWorkspaceLeaf,
       responseLoading,
       isResponding,
       createChat,

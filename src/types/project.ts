@@ -19,7 +19,3 @@ export interface NodePermissions {
 export const DEFAULT_PERMISSIONS: NodePermissions = {
   enabled: false,
 };
-
-export const DEFAULT_ROOT_PERMISSIONS: NodePermissions = {
-  enabled: true,
-};

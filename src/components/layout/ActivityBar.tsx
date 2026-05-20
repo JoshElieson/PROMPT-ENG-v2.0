@@ -1,6 +1,7 @@
 import { Bot, MessageSquare, Settings } from "lucide-react";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { SourceControlIcon } from "@/components/git/SourceControlIcon";
+import { useAppSelection } from "@/contexts/AppSelectionContext";
 import { useGit } from "@/contexts/GitContext";
 import { getGitChangeCount } from "@/lib/git-utils";
 import { cn } from "@/lib/utils";
@@ -45,7 +46,15 @@ function ActivityButton({
 
 export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
   const { status } = useGit();
+  const {
+    isProjectsSelected,
+    isChatListSelected,
+    selectChatList,
+    selectWorkspaceScreen,
+  } = useAppSelection();
   const changeCount = getGitChangeCount(status);
+  const explorerSidebarSelected =
+    isProjectsSelected || isChatListSelected;
   const scTitle =
     changeCount > 0
       ? `Source Control (${changeCount} change${changeCount === 1 ? "" : "s"})`
@@ -57,21 +66,30 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
         <ActivityButton
           title="Model Cart"
           active={activeView === "agents"}
-          onClick={() => onViewChange("agents")}
+          onClick={() => {
+            onViewChange("agents");
+            selectWorkspaceScreen();
+          }}
         >
           <Bot className="h-4 w-4" />
         </ActivityButton>
         <ActivityButton
           title="Chats & Projects"
-          active={activeView === "explorer"}
-          onClick={() => onViewChange("explorer")}
+          active={activeView === "explorer" || explorerSidebarSelected}
+          onClick={() => {
+            onViewChange("explorer");
+            selectChatList();
+          }}
         >
           <MessageSquare className="h-4 w-4" />
         </ActivityButton>
         <ActivityButton
           title={scTitle}
           active={activeView === "git"}
-          onClick={() => onViewChange("git")}
+          onClick={() => {
+            onViewChange("git");
+            selectWorkspaceScreen();
+          }}
         >
           <SourceControlIcon className="h-4 w-4" changeCount={changeCount} />
         </ActivityButton>

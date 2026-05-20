@@ -4,6 +4,7 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
+  type ClipboardEvent,
   type KeyboardEvent,
   type SyntheticEvent,
 } from "react";
@@ -33,6 +34,8 @@ interface ComposerTextareaProps {
   onKeyUp?: (e: SyntheticEvent<HTMLTextAreaElement>) => void;
   onSelect?: (e: SyntheticEvent<HTMLTextAreaElement>) => void;
   onClick?: (e: SyntheticEvent<HTMLTextAreaElement>) => void;
+  onFocus?: (e: SyntheticEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (e: ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
 export const ComposerTextarea = forwardRef<
@@ -49,6 +52,8 @@ export const ComposerTextarea = forwardRef<
     onKeyUp,
     onSelect,
     onClick,
+    onFocus,
+    onPaste,
   },
   ref,
 ) {
@@ -120,6 +125,8 @@ export const ComposerTextarea = forwardRef<
         onScroll={syncScroll}
         onSelect={onSelect}
         onClick={onClick}
+        onFocus={onFocus}
+        onPaste={onPaste}
         className={cn(
           composerTextClass,
           "text-transparent caret-foreground selection:bg-sky-500/25 selection:text-transparent",

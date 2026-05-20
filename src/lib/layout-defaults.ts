@@ -26,6 +26,8 @@ export const DEFAULT_RIGHT_PANELS: RightPanelVisibility = {
 
 export const RIGHT_SIDEBAR_COLLAPSED_KEY = "prompt:right-sidebar-width:collapsed";
 
+import { LEGACY_WORKSPACE_LAYOUT_KEY, WORKSPACE_LAYOUT_KEY } from "@/lib/workspace-pane-storage";
+
 const WINDOW_LAYOUT_KEYS = [
   "prompt:left-sidebar-width",
   "prompt:left-sidebar-width:collapsed",
@@ -33,6 +35,8 @@ const WINDOW_LAYOUT_KEYS = [
   "prompt:right-sidebar-width",
   "prompt:right-sidebar-width:collapsed",
   "prompt:right-panels-visibility",
+  WORKSPACE_LAYOUT_KEY,
+  LEGACY_WORKSPACE_LAYOUT_KEY,
 ] as const;
 
 /** Clears persisted window sizes and panel visibility so components can restore defaults. */

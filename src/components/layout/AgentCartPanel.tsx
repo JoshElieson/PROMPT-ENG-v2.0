@@ -11,7 +11,7 @@ import {
   type ModelOrg,
 } from "@/data/ai-models";
 import { ModelLogo } from "@/components/models/ModelLogo";
-import { useRoundTable } from "@/contexts/RoundTableContext";
+import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { cn } from "@/lib/utils";
 
 const allGroupedOrgs = getModelsGroupedByOrg();
@@ -176,7 +176,8 @@ interface AgentCartPanelProps {
 }
 
 export function AgentCartPanel({ active }: AgentCartPanelProps) {
-  const { selectedIds, isSelected, toggleModel, deselectModels } = useRoundTable();
+  const { selectedIds, isSelected, toggleModel, deselectModels } =
+    useChatRoundTable();
   const [search, setSearch] = useState("");
   const [openOrgId, setOpenOrgId] = useState<string | null>(null);
   const [flyoutAnchor, setFlyoutAnchor] = useState<DOMRect | null>(null);

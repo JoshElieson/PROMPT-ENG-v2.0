@@ -7,13 +7,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { defaultPermissionsForProjects } from "@/lib/project-ai-paths";
 import { basename, listDescendantPaths, pickProjectDirectory } from "@/lib/fs";
 import { loadProjects, saveProjects } from "@/lib/storage";
 import { useChats } from "@/contexts/ChatsContext";
 import {
   DEFAULT_PERMISSIONS,
-  DEFAULT_ROOT_PERMISSIONS,
   type NodePermissions,
   type Project,
 } from "@/types/project";
@@ -68,14 +66,6 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     saveProjects(projects);
   }, [projects]);
-
-  useEffect(() => {
-    if (!activeChatId || projects.length === 0) return;
-    const chat = chats.find((c) => c.id === activeChatId);
-    if (!chat) return;
-    if (chat.permissions && Object.keys(chat.permissions).length > 0) return;
-    setChatPermissions(activeChatId, defaultPermissionsForProjects(projects));
-  }, [activeChatId, chats, projects, setChatPermissions]);
 
   const patchActivePermissions = useCallback(
     (updater: (prev: Record<string, NodePermissions>) => Record<string, NodePermissions>) => {
@@ -141,19 +131,12 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       };
 
       setProjects((prev) => [...prev, project]);
-
-      if (activeChatId) {
-        patchActivePermissions((prev) => ({
-          ...prev,
-          [rootPath]: { ...DEFAULT_ROOT_PERMISSIONS },
-        }));
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add project folder.");
     } finally {
       setIsAdding(false);
     }
-  }, [projects, activeChatId, patchActivePermissions]);
+  }, [projects]);
 
   const removeProject = useCallback(
     (id: string) => {

@@ -1,167 +1,94 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-
-import { ForgeWordmark } from "@/components/brand/ForgeWordmark";
-import { ActiveModelsBar } from "@/components/chat/ActiveModelsBar";
-import { ChatComposer } from "@/components/chat/ChatComposer";
-import { MessageBubble } from "@/components/chat/MessageBubble";
-import { ResponseLoadingView } from "@/components/chat/ResponseLoadingView";
-
-import { ScrollArea } from "@/components/ui/scroll-area";
-
-import { useRoundTable } from "@/contexts/RoundTableContext";
+import { SquareSplitHorizontal } from "lucide-react";
+import { LayoutMenu } from "@/components/layout/LayoutMenu";
+import { RecursiveSplitWorkspace } from "@/components/layout/RecursiveSplitWorkspace";
+import { Button } from "@/components/ui/button";
+import { useAppSelection } from "@/contexts/AppSelectionContext";
 import { useChats } from "@/contexts/ChatsContext";
-import { buildModelKeyboardShortcuts } from "@/data/mock";
+import {
+  WorkspacePanesProvider,
+  useWorkspacePanes,
+} from "@/contexts/WorkspacePanesContext";
+import {
+  WORKSPACE_HEADER_SURFACE,
+  workspaceHeaderRowClass,
+} from "@/lib/workspace-header";
 import { cn } from "@/lib/utils";
 
-const SLOGAN_SENTENCES = [
-  "One prompt.",
-  "Multiple models.",
-  "Better answers.",
-] as const;
+function WorkspaceMainToolbar() {
+  const { expandLayout, paneCount, maxPanes } = useWorkspacePanes();
 
-const SLOGAN_REVEAL_MS = 1000;
-
-export function MainWorkspace() {
-
-  const { activeChat, responseLoading } = useChats();
-  const { selectedIds } = useRoundTable();
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const keyboardShortcuts = useMemo(
-    () => buildModelKeyboardShortcuts(selectedIds),
-    [selectedIds],
-  );
-
-
-
-  const messages = activeChat?.messages ?? [];
-
-  const showWelcome = messages.length === 0;
-  const [sloganVisibleCount, setSloganVisibleCount] = useState(0);
-
-  useEffect(() => {
-    if (!showWelcome) {
-      setSloganVisibleCount(0);
-      return;
-    }
-
-    setSloganVisibleCount(0);
-    const timers = SLOGAN_SENTENCES.map((_, index) =>
-      window.setTimeout(
-        () => setSloganVisibleCount(index + 1),
-        SLOGAN_REVEAL_MS * (index + 1),
-      ),
+  const handleSplit = () => {
+    const host = document.querySelector<HTMLElement>(
+      "[data-workspace-split-host]",
     );
-
-    return () => timers.forEach(clearTimeout);
-  }, [showWelcome]);
-
-  const scrollToEnd = () => {
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    });
+    const rect = host?.getBoundingClientRect();
+    const wide = rect ? rect.width >= rect.height : true;
+    expandLayout(wide);
   };
 
-  useEffect(() => {
-    if (responseLoading) scrollToEnd();
-  }, [responseLoading]);
-
-
-
   return (
-
-    <main className="flex min-w-0 flex-1 flex-col bg-background">
-
-      <ActiveModelsBar />
-
-      <ScrollArea className="relative flex-1">
-
-        {showWelcome && (
-
-          <section className="flex flex-col items-center px-8 pt-24 pb-8">
-
-            <h1 className="flex items-center gap-3 text-3xl font-semibold tracking-tight">
-
-              Welcome to <ForgeWordmark height={40} className="translate-y-px" />
-
-            </h1>
-
-            <p className="mt-2 w-full text-center text-muted-foreground">
-              {SLOGAN_SENTENCES.map((sentence, index) => (
-                <span
-                  key={sentence}
-                  className={cn(
-                    "transition-opacity duration-500",
-                    index < sloganVisibleCount ? "opacity-100" : "opacity-0",
-                    index === SLOGAN_SENTENCES.length - 1 && "text-accent/90",
-                  )}
-                >
-                  {sentence}
-                  {index < SLOGAN_SENTENCES.length - 1 ? " " : ""}
-                </span>
-              ))}
-            </p>
-
-
-
-            <section className="mt-10 rounded-xl border border-border bg-panel/80 p-4 backdrop-blur-sm">
-
-              <ul className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-
-                {keyboardShortcuts.map((shortcut) => (
-
-                  <li key={shortcut.keys} className="flex items-center gap-3">
-
-                    <kbd className="min-w-[3rem] rounded border border-border bg-surface px-2 py-0.5 text-center text-xs font-medium text-muted-foreground">
-
-                      {shortcut.keys}
-
-                    </kbd>
-
-                    <span className="text-muted-foreground">{shortcut.label}</span>
-
-                  </li>
-
-                ))}
-
-              </ul>
-
-            </section>
-
-          </section>
-
-        )}
-
-
-
-        {messages.length > 0 && (
-
-          <section className="mx-auto max-w-2xl space-y-4 px-6 py-4">
-
-            {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
-
-            {responseLoading && (
-              <ResponseLoadingView loading={responseLoading} />
-            )}
-
-            <div ref={scrollRef} aria-hidden className="h-px" />
-
-          </section>
-
-        )}
-
-      </ScrollArea>
-
-
-
-      <ChatComposer onSent={scrollToEnd} />
-
-    </main>
-
+    <header
+      className={workspaceHeaderRowClass(
+        true,
+        cn(
+          WORKSPACE_HEADER_SURFACE,
+          "shrink-0 justify-end gap-1.5 px-2",
+        ),
+      )}
+    >
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="group h-7 w-7 shrink-0 text-muted-foreground hover:bg-zinc-700 hover:text-foreground"
+          title={
+            paneCount >= maxPanes
+              ? "Maximum panes (4)"
+              : "Add pane (split direction follows workspace shape)"
+          }
+          disabled={paneCount >= maxPanes}
+          onClick={handleSplit}
+          aria-label="Add chat pane"
+        >
+          <SquareSplitHorizontal className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
+        </Button>
+        <LayoutMenu />
+      </div>
+    </header>
   );
-
 }
 
+export function MainWorkspace() {
+  const { activeWorkspaceLayout, activeChatId } = useChats();
+  const { isWorkspaceScreenSelected } = useAppSelection();
 
+  if (!activeChatId || !activeWorkspaceLayout) {
+    return (
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center text-sm text-muted-foreground">
+          No chat selected. Create or open a chat from the left sidebar.
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <WorkspacePanesProvider>
+      <main
+        className={cn(
+          "flex min-w-0 flex-1 flex-col overflow-hidden bg-background",
+          isWorkspaceScreenSelected && "ring-1 ring-inset ring-accent/15",
+        )}
+      >
+        <WorkspaceMainToolbar />
+        <div
+          data-workspace-split-host
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        >
+          <RecursiveSplitWorkspace />
+        </div>
+      </main>
+    </WorkspacePanesProvider>
+  );
+}

@@ -792,6 +792,7 @@ pub async fn ai_chat_complete(
     model_id: String,
     messages: Vec<ChatTurn>,
     workspace: Option<AiWorkspace>,
+    system: Option<String>,
 ) -> Result<String, String> {
     if messages.is_empty() {
         return Err("No messages to send.".to_string());
@@ -801,7 +802,11 @@ pub async fn ai_chat_complete(
             return complete_for_model_with_workspace(&model_id, &messages, &policy).await;
         }
     }
-    complete_for_model(&model_id, &messages, None).await
+    let sys = system
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    complete_for_model(&model_id, &messages, sys).await
 }
 
 #[tauri::command]

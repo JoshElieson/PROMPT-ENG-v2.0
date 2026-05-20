@@ -1,4 +1,5 @@
 import type { NodePermissions } from "@/types/project";
+import type { WorkspacePaneLayout } from "@/types/workspace-pane";
 
 export type MessageRole = "user" | "assistant";
 
@@ -27,14 +28,25 @@ export interface ChatMessage {
   modelContributions?: ModelContribution[];
 }
 
+/** One conversation stream inside a sidebar chat (up to 4 per chat for split workspace). */
+export interface ChatThread {
+  id: string;
+  messages: ChatMessage[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Chat {
   id: string;
   title: string;
-  messages: ChatMessage[];
+  /** One or more parallel threads (split panes) under this sidebar chat. */
+  threads: ChatThread[];
   createdAt: number;
   updatedAt: number;
   /** Per-chat file/folder access toggles from the projects tree */
   permissions?: Record<string, NodePermissions>;
+  /** Split-pane layout for the center workspace (threads referenced by leaf `threadId`). */
+  workspace?: WorkspacePaneLayout;
 }
 
 export interface AiWorkspacePayload {
@@ -49,12 +61,17 @@ export interface SendMessagePayload {
   modelContributions?: ModelContribution[];
   /** When set and non-empty, models may use read_file / write_file / list_directory tools. */
   workspace?: AiWorkspacePayload;
+  /** Sidebar chat id (workspace container). */
+  chatId?: string;
+  /** Thread within that chat (pane). */
+  threadId?: string;
 }
 
 export type ResponseLoadingPhase = "roundtable" | "synthesizing";
 
 export interface ResponseLoadingState {
   chatId: string;
+  threadId: string;
   targetModelIds: string[];
   phase: ResponseLoadingPhase;
   /** Active speaker during roundtable phase; -1 when synthesizing */

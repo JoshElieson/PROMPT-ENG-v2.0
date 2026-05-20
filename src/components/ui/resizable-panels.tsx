@@ -46,6 +46,11 @@ interface ResizablePanelsProps {
   defaultSizes: number[];
   storageKey?: string;
   className?: string;
+  /** Controlled sizes (flex ratios). When both are set, `storageKey` persistence is disabled. */
+  sizes?: number[];
+  onSizesChange?: (sizes: number[]) => void;
+  /** When false, gutters are not draggable; `sizes` still drive layout when provided. */
+  resizable?: boolean;
 }
 
 function normalizeSizes(sizes: number[]): number[] {
@@ -60,11 +65,35 @@ export function ResizablePanels({
   defaultSizes,
   storageKey,
   className,
+  sizes: controlledSizes,
+  onSizesChange,
+  resizable = true,
 }: ResizablePanelsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { layoutResetNonce } = useLayout();
-  const [sizes, setSizes] = useState<number[]>(() =>
+  const isControlled =
+    controlledSizes != null &&
+    controlledSizes.length === panels.length &&
+    (resizable ? onSizesChange != null : true);
+
+  const [uncontrolledSizes, setUncontrolledSizes] = useState<number[]>(() =>
     normalizeSizes(loadLayoutSizes(storageKey ?? "", defaultSizes)),
+  );
+
+  const sizes = isControlled
+    ? normalizeSizes(controlledSizes)
+    : uncontrolledSizes;
+
+  const applySizes = useCallback(
+    (next: number[]) => {
+      const normalized = normalizeSizes(next);
+      if (isControlled) {
+        onSizesChange?.(normalized);
+      } else {
+        setUncontrolledSizes(normalized);
+      }
+    },
+    [isControlled, onSizesChange],
   );
   const dragRef = useRef<{
     index: number;
@@ -76,13 +105,14 @@ export function ResizablePanels({
   const isVertical = direction === "vertical";
 
   useEffect(() => {
-    if (storageKey) saveLayoutSizes(storageKey, sizes);
-  }, [sizes, storageKey]);
+    if (isControlled || !storageKey) return;
+    saveLayoutSizes(storageKey, sizes);
+  }, [sizes, storageKey, isControlled]);
 
   useEffect(() => {
-    if (layoutResetNonce === 0) return;
-    setSizes(normalizeSizes(defaultSizes));
-  }, [layoutResetNonce, defaultSizes]);
+    if (isControlled || layoutResetNonce === 0) return;
+    setUncontrolledSizes(normalizeSizes(defaultSizes));
+  }, [layoutResetNonce, defaultSizes, isControlled]);
 
   const onPointerDown = useCallback(
     (index: number, event: ReactPointerEvent<HTMLDivElement>) => {
@@ -124,9 +154,9 @@ export function ResizablePanels({
         minRatio(panels[drag.index + 1]),
       );
 
-      setSizes(normalizeSizes(next));
+      applySizes(next);
     },
-    [isVertical, panels],
+    [isVertical, panels, applySizes],
   );
 
   const onPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -158,30 +188,39 @@ export function ResizablePanels({
           >
             {panel.content}
           </section>
-          {index < panels.length - 1 && (
-            <div
-              role="separator"
-              aria-orientation={isVertical ? "horizontal" : "vertical"}
-              aria-label="Resize panel"
-              onPointerDown={(e) => onPointerDown(index, e)}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
-              className={cn(
-                "group z-10 shrink-0 touch-none select-none",
-                isVertical
-                  ? "flex h-1.5 w-full cursor-row-resize items-center justify-center"
-                  : "flex h-full w-1.5 cursor-col-resize items-center justify-center",
-              )}
-            >
-              <span
+          {index < panels.length - 1 &&
+            (resizable ? (
+              <div
+                role="separator"
+                aria-orientation={isVertical ? "horizontal" : "vertical"}
+                aria-label="Resize panel"
+                onPointerDown={(e) => onPointerDown(index, e)}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                onPointerCancel={onPointerUp}
                 className={cn(
-                  "bg-border transition-colors group-hover:bg-muted-foreground/40 group-active:bg-foreground",
-                  isVertical ? "h-0.5 w-8" : "h-8 w-0.5",
+                  "group z-10 shrink-0 touch-none select-none",
+                  isVertical
+                    ? "flex h-1.5 w-full cursor-row-resize items-center justify-center"
+                    : "flex h-full w-1.5 cursor-col-resize items-center justify-center",
+                )}
+              >
+                <span
+                  className={cn(
+                    "bg-border transition-colors group-hover:bg-muted-foreground/40 group-active:bg-foreground",
+                    isVertical ? "h-0.5 w-8" : "h-8 w-0.5",
+                  )}
+                />
+              </div>
+            ) : (
+              <div
+                aria-hidden
+                className={cn(
+                  "pointer-events-none shrink-0 bg-border-subtle",
+                  isVertical ? "h-px w-full" : "h-full w-px",
                 )}
               />
-            </div>
-          )}
+            ))}
         </section>
       ))}
     </div>

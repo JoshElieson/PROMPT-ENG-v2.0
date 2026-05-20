@@ -1,0 +1,14 @@
+import { useContext } from "react";
+import { PaneRoundTableContext } from "@/contexts/PaneRoundTableContext";
+import type { PaneRoundTableContextValue } from "@/contexts/PaneRoundTableContext";
+import { useRoundTable } from "@/contexts/RoundTableContext";
+/**
+ * Prefer per-pane round table when inside a split chat pane; otherwise use the
+ * global Model Cart / Round Table from the app shell.
+ */
+export function useChatRoundTable(): PaneRoundTableContextValue {
+  const pane = useContext(PaneRoundTableContext);
+  const global = useRoundTable();
+  if (pane) return pane;
+  return global as unknown as PaneRoundTableContextValue;
+}

@@ -7,7 +7,13 @@ import { ModelContributionHover } from "@/components/chat/ModelContributionHover
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-function MessageContent({ content }: { content: string }) {
+function MessageContent({
+  content,
+  isSent,
+}: {
+  content: string;
+  isSent?: boolean;
+}) {
   const parts = content.split(/(@[a-z0-9][a-z0-9_-]*)/gi);
 
   return (
@@ -18,7 +24,12 @@ function MessageContent({ content }: { content: string }) {
           return (
             <span
               key={`${part}-${i}`}
-              className="rounded-md bg-accent/15 px-1 py-0.5 font-medium text-accent"
+              className={cn(
+                "rounded-md px-1 py-0.5 font-medium",
+                isSent
+                  ? "bg-muted-foreground/15 text-muted-foreground"
+                  : "bg-accent/15 text-accent",
+              )}
             >
               {model ? `@${model.name}` : part}
             </span>
@@ -69,7 +80,6 @@ interface MessageBubbleProps {
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isSent = message.role === "user";
   const showModelBlend =
-    !isSent &&
     message.modelContributions != null &&
     message.modelContributions.length > 0;
 
@@ -82,23 +92,29 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     >
       <section
         className={cn(
-          "relative max-w-[85%] rounded-2xl border px-4 py-3",
+          "relative",
           isSent
-            ? "border-accent/30 bg-accent/10"
-            : "border-border bg-panel pr-10",
-          showModelBlend && "group/message cursor-default",
+            ? "max-w-[85%] rounded-2xl border border-zinc-500/40 bg-zinc-600 px-4 py-3"
+            : "w-full max-w-2xl pr-10 pl-0 pt-0.5 pb-3",
         )}
       >
         {!isSent && <CopyResponseButton content={message.content} />}
-        {showModelBlend && (
-          <ModelContributionHover contributions={message.modelContributions!} />
-        )}
-        {message.attachments && message.attachments.length > 0 && (
-          <div className="-mx-1 mb-2">
-            <AttachmentChips attachments={message.attachments} readonly />
+        <div className="flex items-start gap-1.5">
+          {showModelBlend && (
+            <ModelContributionHover
+              contributions={message.modelContributions!}
+              className="mt-0.5"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            {message.attachments && message.attachments.length > 0 && (
+              <div className="-mx-1 mb-2">
+                <AttachmentChips attachments={message.attachments} readonly />
+              </div>
+            )}
+            <MessageContent content={message.content} isSent={isSent} />
           </div>
-        )}
-        <MessageContent content={message.content} />
+        </div>
       </section>
     </article>
   );

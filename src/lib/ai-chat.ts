@@ -43,14 +43,17 @@ export async function aiChatComplete(
   modelId: string,
   messages: ChatTurn[],
   workspace?: AiWorkspacePayload | null,
+  system?: string | null,
 ): Promise<string> {
   requireTauri();
+  const systemPrompt = system?.trim();
   try {
     return await invoke<string>("ai_chat_complete", {
       modelId,
       messages,
       workspace:
         workspace && workspace.enabledPaths.length > 0 ? workspace : null,
+      system: systemPrompt ? systemPrompt : null,
     });
   } catch (error) {
     throw new Error(

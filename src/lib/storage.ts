@@ -1,6 +1,7 @@
-import type { Chat } from "@/types/chat";
+import type { Chat, ChatMessage, ChatThread } from "@/types/chat";
 import type { NodePermissions, Project } from "@/types/project";
 import { DEFAULT_PERMISSIONS } from "@/types/project";
+import { parseWorkspacePaneLayoutV2 } from "@/lib/workspace-pane-storage";
 
 const PROJECTS_KEY = "prompt:projects:v1";
 const PERMISSIONS_KEY = "prompt:permissions:v1";
@@ -31,7 +32,6 @@ function normalizePermission(value: unknown): NodePermissions {
     return { enabled: record.enabled };
   }
 
-  // Legacy: any of context / read / write checked counts as enabled
   const legacyEnabled = Boolean(
     record.inContext || record.canRead || record.canWrite,
   );
@@ -59,18 +59,6 @@ export function savePermissions(permissions: Record<string, NodePermissions>): v
   localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(permissions));
 }
 
-function isChat(value: unknown): value is Chat {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === "string" &&
-    typeof record.title === "string" &&
-    Array.isArray(record.messages) &&
-    typeof record.createdAt === "number" &&
-    typeof record.updatedAt === "number"
-  );
-}
-
 function normalizeChatPermissions(
   raw: unknown,
 ): Record<string, NodePermissions> | undefined {
@@ -82,6 +70,72 @@ function normalizeChatPermissions(
   return result;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isChatThread(value: unknown): value is ChatThread {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    Array.isArray(value.messages) &&
+    typeof value.createdAt === "number" &&
+    typeof value.updatedAt === "number"
+  );
+}
+
+function isLegacyChat(value: unknown): value is Chat & { messages: ChatMessage[] } {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    typeof value.title === "string" &&
+    Array.isArray(value.messages) &&
+    typeof value.createdAt === "number" &&
+    typeof value.updatedAt === "number" &&
+    !Array.isArray(value.threads)
+  );
+}
+
+function isModernChat(value: unknown): value is Chat {
+  if (!isRecord(value)) return false;
+  if (!Array.isArray(value.threads) || value.threads.length === 0) return false;
+  return (
+    typeof value.id === "string" &&
+    typeof value.title === "string" &&
+    typeof value.createdAt === "number" &&
+    typeof value.updatedAt === "number" &&
+    value.threads.every(isChatThread)
+  );
+}
+
+function migrateLegacyChat(
+  chat: Chat & { messages: ChatMessage[] },
+  legacyPermissions: Record<string, NodePermissions> | null,
+): Chat {
+  const threadId = crypto.randomUUID();
+  const permissions =
+    normalizeChatPermissions(
+      (chat as unknown as Record<string, unknown>).permissions,
+    ) ?? (legacyPermissions && Object.keys(legacyPermissions).length > 0
+      ? { ...legacyPermissions }
+      : undefined);
+
+  const { messages, ...rest } = chat;
+  return {
+    ...(rest as Omit<Chat, "threads" | "workspace" | "permissions">),
+    permissions,
+    threads: [
+      {
+        id: threadId,
+        messages: Array.isArray(messages) ? messages : [],
+        createdAt: chat.createdAt,
+        updatedAt: chat.updatedAt,
+      },
+    ],
+    workspace: undefined,
+  };
+}
+
 export function loadChats(): Chat[] {
   try {
     const raw = localStorage.getItem(CHATS_KEY);
@@ -91,16 +145,33 @@ export function loadChats(): Chat[] {
 
     const legacyPermissions = loadPermissions();
     const hasLegacy = Object.keys(legacyPermissions).length > 0;
+    const permCopy = hasLegacy ? { ...legacyPermissions } : null;
 
-    return parsed.filter(isChat).map((chat) => {
-      const record = chat as Chat;
-      const permissions =
-        normalizeChatPermissions(
-          (record as unknown as Record<string, unknown>).permissions,
-        ) ??
-        (hasLegacy ? { ...legacyPermissions } : undefined);
-      return permissions ? { ...record, permissions } : record;
-    });
+    return parsed
+      .filter((v): v is unknown => v != null)
+      .map((item) => {
+        if (isModernChat(item)) {
+          const record = item as Chat;
+          const permissions =
+            normalizeChatPermissions(
+              (record as unknown as Record<string, unknown>).permissions,
+            ) ?? (permCopy ?? undefined);
+          const rawWorkspace = (record as unknown as Record<string, unknown>)
+            .workspace;
+          const workspace =
+            rawWorkspace != null
+              ? parseWorkspacePaneLayoutV2(rawWorkspace)
+              : record.workspace;
+          return permissions
+            ? { ...record, permissions, workspace: workspace ?? undefined }
+            : { ...record, workspace: workspace ?? undefined };
+        }
+        if (isLegacyChat(item)) {
+          return migrateLegacyChat(item, permCopy);
+        }
+        return null;
+      })
+      .filter((c): c is Chat => c != null);
   } catch {
     return [];
   }

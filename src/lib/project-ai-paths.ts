@@ -1,6 +1,5 @@
 import { basename } from "@/lib/fs";
-import type { NodePermissions, Project } from "@/types/project";
-import { DEFAULT_ROOT_PERMISSIONS } from "@/types/project";
+import type { NodePermissions } from "@/types/project";
 
 function normalizePath(path: string): string {
   return path.replace(/[/\\]+$/, "");
@@ -11,16 +10,6 @@ function isStrictAncestor(ancestor: string, descendant: string): boolean {
   const d = normalizePath(descendant);
   if (a === d) return false;
   return d.startsWith(`${a}/`) || d.startsWith(`${a}\\`);
-}
-
-export function defaultPermissionsForProjects(
-  projects: Project[],
-): Record<string, NodePermissions> {
-  const result: Record<string, NodePermissions> = {};
-  for (const project of projects) {
-    result[project.rootPath] = { ...DEFAULT_ROOT_PERMISSIONS };
-  }
-  return result;
 }
 
 /** Highest-level enabled paths (no other enabled path is an ancestor). */
