@@ -1,7 +1,6 @@
-import { memo, useState } from "react";
+import { memo } from "react";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { WeightSlider } from "@/components/ui/weight-slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ResizableSidebar } from "@/components/ui/resizable-panels";
@@ -82,15 +81,7 @@ const ModelRow = memo(function ModelRow({
   );
 });
 
-function RoundTableSection({
-  enabled,
-  onEnabledChange,
-  onClose,
-}: {
-  enabled: boolean;
-  onEnabledChange: (enabled: boolean) => void;
-  onClose: () => void;
-}) {
+function RoundTableSection({ onClose }: { onClose: () => void }) {
   const {
     selectedIds,
     activeIds,
@@ -109,65 +100,54 @@ function RoundTableSection({
     <SidebarPanel
       title="Round Table"
       titleDescription={ROUND_TABLE_DESCRIPTION}
-      active={enabled}
-      fill={enabled}
+      active
+      fill
       onClose={onClose}
-      headerExtra={
-        <Switch
-          checked={enabled}
-          onCheckedChange={onEnabledChange}
-          aria-label="Toggle Round Table"
-        />
-      }
     >
-      <ScrollArea className={cn(enabled && "h-full")}>
+      <ScrollArea className="h-full">
         <section className="p-4">
-          {enabled ? (
-            tableModels.length === 0 ? (
-              <p className="text-xs text-muted">
-                Add models in the Model Cart to use the Round Table.
-              </p>
-            ) : (
-              <>
-                <section className="space-y-1">
-                  {tableModels.map((model) => {
-                    const active = isActive(model.id);
-                    return (
-                      <ModelRow
-                        key={model.id}
-                        modelId={model.id}
-                        name={model.name}
-                        role={model.role}
-                        orgId={model.orgId}
-                        weight={weightById.get(model.id) ?? 0}
-                        active={active}
-                        onToggle={toggleActive}
-                        onWeightChange={setModelWeight}
-                      />
-                    );
-                  })}
-                </section>
-                <p className="border-t border-border-subtle pt-3 text-right text-xs text-muted">
-                  {activeCount > 0 ? (
-                    <>
-                      <span className="font-medium text-foreground">
-                        {activeCount}
-                      </span>{" "}
-                      active · Combined input{" "}
-                      <span className="font-medium text-foreground">
-                        {allocationSum}%
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">
-                      No models active for chat
-                    </span>
-                  )}
-                </p>
-              </>
-            )
+          {tableModels.length === 0 ? (
+            <p className="text-xs text-muted">
+              Add models in the Model Cart to use the Round Table.
+            </p>
           ) : (
-            <p className="text-xs text-muted">Round Table is off</p>
+            <>
+              <section className="space-y-1">
+                {tableModels.map((model) => {
+                  const active = isActive(model.id);
+                  return (
+                    <ModelRow
+                      key={model.id}
+                      modelId={model.id}
+                      name={model.name}
+                      role={model.role}
+                      orgId={model.orgId}
+                      weight={weightById.get(model.id) ?? 0}
+                      active={active}
+                      onToggle={toggleActive}
+                      onWeightChange={setModelWeight}
+                    />
+                  );
+                })}
+              </section>
+              <p className="border-t border-border-subtle pt-3 text-right text-xs text-muted">
+                {activeCount > 0 ? (
+                  <>
+                    <span className="font-medium text-foreground">
+                      {activeCount}
+                    </span>{" "}
+                    active · Combined input{" "}
+                    <span className="font-medium text-foreground">
+                      {allocationSum}%
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">
+                    No models active for chat
+                  </span>
+                )}
+              </p>
+            </>
           )}
         </section>
       </ScrollArea>
@@ -180,22 +160,22 @@ function WorkflowSection({ onClose }: { onClose: () => void }) {
     <SidebarPanel
       title="Workflow"
       titleDescription={WORKFLOW_DESCRIPTION}
-      active
       fill={false}
+      className="bg-panel-elevated/30"
       onClose={onClose}
       headerExtra={
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="h-6 px-2 text-xs text-muted-foreground hover:bg-zinc-700 hover:text-foreground"
+          className="h-6 px-2 text-xs text-muted-foreground hover:bg-panel-elevated hover:text-foreground"
         >
           Edit
         </Button>
       }
     >
       <section className="shrink-0 p-2" aria-label="Workflow">
-        <section className="h-48 min-h-48 max-h-48 w-full shrink-0 rounded-lg border border-dashed border-border-subtle bg-surface/50" />
+        <section className="h-56 min-h-56 max-h-56 w-full shrink-0 rounded-lg border border-border-subtle bg-panel-elevated/40" />
       </section>
     </SidebarPanel>
   );
@@ -203,13 +183,9 @@ function WorkflowSection({ onClose }: { onClose: () => void }) {
 
 export function RightSidebar() {
   const { rightPanels, setRightPanelVisible } = useLayout();
-  const [roundTableEnabled, setRoundTableEnabled] = useState(true);
   const showRoundTable = rightPanels.roundTable;
   const showWorkflow = rightPanels.workflow;
   const closePanel = (id: RightPanelId) => setRightPanelVisible(id, false);
-
-  const roundTableExpanded = showRoundTable && roundTableEnabled;
-  const workflowExpanded = showWorkflow && (!showRoundTable || !roundTableEnabled);
 
   return (
     <ResizableSidebar
@@ -222,43 +198,32 @@ export function RightSidebar() {
     >
       <div className="flex min-h-0 flex-1 flex-col">
         {showRoundTable && (
-          <div
-            className={cn(
-              "flex min-h-0 flex-col overflow-hidden",
-              roundTableExpanded && showWorkflow
-                ? "min-h-0 flex-1"
-                : roundTableExpanded
-                  ? "flex-1"
-                  : "shrink-0",
-            )}
-          >
-            <RoundTableSection
-              enabled={roundTableEnabled}
-              onEnabledChange={setRoundTableEnabled}
-              onClose={() => closePanel("roundTable")}
-            />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <RoundTableSection onClose={() => closePanel("roundTable")} />
           </div>
         )}
-        {showWorkflow && (
-          <div
-            className={cn(
-              "flex min-h-0 flex-col overflow-hidden",
-              workflowExpanded ? "min-h-0 flex-1" : "shrink-0",
-              showRoundTable && "border-t border-border-subtle",
-            )}
-          >
-            <WorkflowSection onClose={() => closePanel("workflow")} />
-          </div>
+        {showWorkflow && !showRoundTable && (
+          <div className="min-h-0 flex-1" aria-hidden />
         )}
         {!showRoundTable && !showWorkflow && (
           <p className="flex flex-1 items-center justify-center px-4 text-center text-xs text-muted">
             Use View to select a panel.
           </p>
         )}
+        {showWorkflow && (
+          <div
+            className={cn(
+              "flex shrink-0 flex-col overflow-hidden",
+              showRoundTable && "border-t border-border-subtle",
+            )}
+          >
+            <WorkflowSection onClose={() => closePanel("workflow")} />
+          </div>
+        )}
       </div>
 
-      <footer className="shrink-0 border-t border-border-subtle p-4">
-        <section className="grid grid-cols-3 gap-2 text-center">
+      <footer className="flex min-h-workspace-dock shrink-0 flex-col gap-2 border-t border-border-subtle px-3 pb-2.5 pt-3">
+        <section className="grid min-h-0 flex-1 grid-cols-3 gap-2">
           {[
             { label: "Tokens", value: "12.4k" },
             { label: "Cost", value: "$0.042" },
@@ -266,12 +231,12 @@ export function RightSidebar() {
           ].map((stat) => (
             <section
               key={stat.label}
-              className="rounded-lg border border-border-subtle bg-surface px-2 py-2.5"
+              className="flex h-full min-h-0 flex-col items-center justify-center rounded-lg border border-border-subtle bg-surface px-2 py-2 text-center"
             >
               <p className="text-[10px] uppercase tracking-wider text-muted">
                 {stat.label}
               </p>
-              <p className="mt-0.5 text-sm font-semibold tabular-nums">
+              <p className="mt-1 text-sm font-semibold tabular-nums">
                 {stat.value}
               </p>
             </section>
@@ -281,7 +246,7 @@ export function RightSidebar() {
         <button
           type="button"
           className={cn(
-            "mt-3 flex w-full items-center justify-center gap-1 rounded-lg py-2 text-xs text-muted-foreground",
+            "flex w-full shrink-0 items-center justify-center gap-1 rounded-lg py-2 text-xs text-muted-foreground",
             "hover:bg-panel-elevated hover:text-foreground",
           )}
         >

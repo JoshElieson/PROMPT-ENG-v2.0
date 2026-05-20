@@ -89,7 +89,6 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
   const toggleModel = useCallback((id: string) => {
     setSelectedIds((prev) => {
       if (prev.includes(id)) {
-        if (prev.length <= 1) return prev;
         setActiveIds((active) => active.filter((x) => x !== id));
         return prev.filter((x) => x !== id);
       }
@@ -117,19 +116,8 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
       const toRemove = ids.filter((id) => prev.includes(id));
       if (toRemove.length === 0) return prev;
 
-      let next = prev.filter((id) => !toRemove.includes(id));
-      let removed = toRemove;
-
-      if (next.length === 0) {
-        const keepId = prev[0];
-        next = [keepId];
-        removed = toRemove.filter((id) => id !== keepId);
-      }
-
-      if (removed.length > 0) {
-        setActiveIds((active) => active.filter((id) => !removed.includes(id)));
-      }
-
+      const next = prev.filter((id) => !toRemove.includes(id));
+      setActiveIds((active) => active.filter((id) => !toRemove.includes(id)));
       return next;
     });
   }, []);
@@ -139,7 +127,6 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
 
     setActiveIds((prev) => {
       if (prev.includes(id)) {
-        if (prev.length <= 1) return prev;
         return prev.filter((x) => x !== id);
       }
       const next = [...prev, id];
@@ -162,10 +149,9 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
     }));
 
     if (clamped === 0) {
-      setActiveIds((prev) => {
-        if (!prev.includes(id) || prev.length <= 1) return prev;
-        return prev.filter((x) => x !== id);
-      });
+      setActiveIds((prev) =>
+        prev.includes(id) ? prev.filter((x) => x !== id) : prev,
+      );
     }
   }, []);
 

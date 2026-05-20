@@ -12,6 +12,8 @@
   --color-foreground: #fafafa;
   --color-accent: #ff6b35;
   --color-accent-muted: #ff6b3520;
+  /** Opaque accent rule for the shared Chats / models / Round Table header line. */
+  --color-workspace-header-line: #412419;
   --color-accent-hover: #ff8555;
   --color-menu-hover: rgb(255 255 255 / 0.1);
   --color-menu-hover-strong: rgb(255 255 255 / 0.14);
@@ -24,6 +26,8 @@
   --radius-xl: 1rem;
   --radius-2xl: 1.25rem;
   --radius-3xl: 1.5rem;
+  /** Shared bottom dock height (chat composer + right sidebar stats). */
+  --spacing-workspace-dock: 8rem;
 }
 
 @layer base {

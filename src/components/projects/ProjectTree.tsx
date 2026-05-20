@@ -29,10 +29,12 @@ function FsTreeNode({
   onRemoveProject?: () => void;
   projectId?: string;
 }) {
-  const { getPermissions, setPermissions, removeProject } = useProjects();
+  const { getPermissions, setPermissions, setDirectoryPermissions, removeProject } =
+    useProjects();
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<FsEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [togglingAccess, setTogglingAccess] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const permissions = getPermissions(entry.path);
@@ -63,7 +65,16 @@ function FsTreeNode({
     }
   }, [entry.isDirectory, entry.path, expanded, children]);
 
-  const handleAccessChange = (enabled: boolean) => {
+  const handleAccessChange = async (enabled: boolean) => {
+    if (entry.isDirectory) {
+      setTogglingAccess(true);
+      try {
+        await setDirectoryPermissions(entry.path, { enabled });
+      } finally {
+        setTogglingAccess(false);
+      }
+      return;
+    }
     setPermissions(entry.path, { enabled });
   };
 
@@ -108,7 +119,8 @@ function FsTreeNode({
 
         <AccessCheckbox
           enabled={permissions.enabled}
-          onChange={handleAccessChange}
+          disabled={togglingAccess}
+          onChange={(enabled) => void handleAccessChange(enabled)}
         />
 
         {isRoot && projectId && onRemoveProject && (

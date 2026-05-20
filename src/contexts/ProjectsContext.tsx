@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { basename, pickProjectDirectory } from "@/lib/fs";
+import { basename, listDescendantPaths, pickProjectDirectory } from "@/lib/fs";
 import { loadPermissions, loadProjects, savePermissions, saveProjects } from "@/lib/storage";
 import {
   DEFAULT_PERMISSIONS,
@@ -25,6 +25,10 @@ interface ProjectsContextValue {
   removeProject: (id: string) => void;
   getPermissions: (path: string) => NodePermissions;
   setPermissions: (path: string, patch: Partial<NodePermissions>) => void;
+  setDirectoryPermissions: (
+    dirPath: string,
+    patch: Partial<NodePermissions>,
+  ) => Promise<void>;
   clearError: () => void;
 }
 
@@ -59,6 +63,22 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       [path]: { ...(prev[path] ?? DEFAULT_PERMISSIONS), ...patch },
     }));
   }, []);
+
+  const setDirectoryPermissions = useCallback(
+    async (dirPath: string, patch: Partial<NodePermissions>) => {
+      const descendants = await listDescendantPaths(dirPath);
+      setPermissionsState((prev) => {
+        const next = { ...prev };
+        const apply = (path: string) => {
+          next[path] = { ...(prev[path] ?? DEFAULT_PERMISSIONS), ...patch };
+        };
+        apply(dirPath);
+        for (const path of descendants) apply(path);
+        return next;
+      });
+    },
+    [],
+  );
 
   const addProject = useCallback(async () => {
     setError(null);
@@ -126,6 +146,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       removeProject,
       getPermissions,
       setPermissions,
+      setDirectoryPermissions,
       clearError,
     }),
     [
@@ -137,6 +158,7 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       removeProject,
       getPermissions,
       setPermissions,
+      setDirectoryPermissions,
       clearError,
     ],
   );

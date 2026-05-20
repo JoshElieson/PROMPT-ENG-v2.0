@@ -33,3 +33,18 @@ export async function listDirectory(path: string): Promise<FsEntry[]> {
 
   return invoke<FsEntry[]>("list_directory", { path });
 }
+
+/** All paths under a directory (nested folders and files), excluding the root path. */
+export async function listDescendantPaths(dirPath: string): Promise<string[]> {
+  const entries = await listDirectory(dirPath);
+  const paths: string[] = [];
+
+  for (const entry of entries) {
+    paths.push(entry.path);
+    if (entry.isDirectory) {
+      paths.push(...(await listDescendantPaths(entry.path)));
+    }
+  }
+
+  return paths;
+}

@@ -18,7 +18,7 @@ import { useLayout } from "@/contexts/LayoutContext";
 import { cn } from "@/lib/utils";
 
 /** Narrowest width while dragging; release here snaps closed (VS Code–style). */
-const COLLAPSE_THRESHOLD = 80;
+const COLLAPSE_THRESHOLD = 120;
 
 function resolveSidebarDragWidth(
   next: number,
@@ -364,10 +364,9 @@ export function ResizableSidebar({
   return (
     <aside
       className={cn(
-        "relative flex shrink-0 flex-col border-border-subtle bg-panel",
-        side === "left" ? "border-r" : "border-l",
-        collapsed && "border-transparent bg-transparent",
-        snapHighlight && (side === "left" ? "border-r-accent" : "border-l-accent"),
+        "relative flex shrink-0 flex-col bg-panel",
+        collapsed && "bg-transparent",
+        snapHighlight && (side === "left" ? "border-r border-accent" : "border-l border-accent"),
         className,
       )}
       style={{ width: collapsed ? 0 : width }}
@@ -408,9 +407,7 @@ export function ResizableSidebar({
             "transition-colors duration-150",
             snapHighlight
               ? "h-full w-0.5 bg-accent shadow-[0_0_6px_var(--color-accent)]"
-              : collapsed
-                ? "h-full w-px bg-border opacity-0 hover:bg-muted-foreground/40 hover:opacity-100"
-                : "h-10 w-0.5 bg-border hover:bg-muted-foreground/40 active:bg-muted-foreground/60",
+              : "h-full w-0.5 bg-transparent opacity-0 hover:bg-muted-foreground/40 hover:opacity-100 active:bg-muted-foreground/60",
           )}
         />
       </div>

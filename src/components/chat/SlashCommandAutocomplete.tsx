@@ -1,24 +1,23 @@
-import { ModelLogo } from "@/components/models/ModelLogo";
-import type { AiModel } from "@/data/ai-models";
+import type { SlashCommand } from "@/data/slash-commands";
 import { cn } from "@/lib/utils";
 
-interface MentionAutocompleteProps {
-  models: AiModel[];
+interface SlashCommandAutocompleteProps {
+  commands: SlashCommand[];
   activeIndex: number;
-  onSelect: (model: AiModel) => void;
+  onSelect: (command: SlashCommand) => void;
   onActiveIndexChange?: (index: number) => void;
 }
 
-export function MentionAutocomplete({
-  models,
+export function SlashCommandAutocomplete({
+  commands,
   activeIndex,
   onSelect,
   onActiveIndexChange,
-}: MentionAutocompleteProps) {
-  if (models.length === 0) {
+}: SlashCommandAutocompleteProps) {
+  if (commands.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-panel p-3 text-xs text-muted shadow-lg">
-        Add models to your Model Cart first
+        No matching commands
       </div>
     );
   }
@@ -27,9 +26,10 @@ export function MentionAutocomplete({
     <ul
       className="max-h-48 overflow-y-auto rounded-lg border border-border bg-panel py-1 shadow-lg"
       role="listbox"
+      aria-label="Slash commands"
     >
-      {models.map((model, index) => (
-        <li key={model.id} role="option" aria-selected={index === activeIndex}>
+      {commands.map((command, index) => (
+        <li key={command.id} role="option" aria-selected={index === activeIndex}>
           <button
             type="button"
             onMouseDown={(e) => {
@@ -39,22 +39,23 @@ export function MentionAutocomplete({
             onMouseEnter={() => onActiveIndexChange?.(index)}
             onClick={(e) => {
               e.preventDefault();
-              onSelect(model);
+              onSelect(command);
             }}
             className={cn(
-              "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
+              "flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm transition-colors",
               index === activeIndex
                 ? "bg-panel-elevated text-foreground outline outline-1 outline-offset-[-1px] outline-foreground"
                 : "hover:bg-panel-elevated",
             )}
           >
-            <ModelLogo orgId={model.orgId} size="sm" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium">{model.name}</span>
-              <span className="block truncate text-xs text-muted">
-                @{model.id}
-              </span>
+            <span className="truncate font-medium text-sky-400">
+              {command.label}
             </span>
+            {command.description && (
+              <span className="truncate text-xs text-muted">
+                {command.description}
+              </span>
+            )}
           </button>
         </li>
       ))}

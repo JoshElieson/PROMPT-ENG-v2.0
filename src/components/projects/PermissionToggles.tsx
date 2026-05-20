@@ -3,23 +3,30 @@ import { cn } from "@/lib/utils";
 
 interface AccessCheckboxProps {
   enabled: boolean;
+  disabled?: boolean;
   onChange: (enabled: boolean) => void;
 }
 
-export function AccessCheckbox({ enabled, onChange }: AccessCheckboxProps) {
+export function AccessCheckbox({
+  enabled,
+  disabled = false,
+  onChange,
+}: AccessCheckboxProps) {
   return (
     <label
       title="Give AI full access — context, read & write"
       className={cn(
-        "relative flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center",
+        "relative flex h-4 w-4 shrink-0 items-center justify-center",
         "opacity-0 transition-all group-hover:opacity-100",
         enabled && "opacity-100",
+        disabled ? "cursor-wait opacity-50" : "cursor-pointer",
       )}
       onClick={(e) => e.stopPropagation()}
     >
       <input
         type="checkbox"
         checked={enabled}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         className="peer sr-only"
       />

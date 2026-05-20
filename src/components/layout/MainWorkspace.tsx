@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ForgeWordmark } from "@/components/brand/ForgeWordmark";
 import { ActiveModelsBar } from "@/components/chat/ActiveModelsBar";
@@ -8,26 +8,54 @@ import { ResponseLoadingView } from "@/components/chat/ResponseLoadingView";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+import { useRoundTable } from "@/context/RoundTableContext";
 import { useChats } from "@/contexts/ChatsContext";
+import { buildModelKeyboardShortcuts } from "@/data/mock";
 import { shouldShowMessageTime } from "@/lib/chat-utils";
+import { cn } from "@/lib/utils";
 
-import { keyboardShortcuts } from "@/data/mock";
+const SLOGAN_SENTENCES = [
+  "One prompt.",
+  "Multiple models.",
+  "Better answers.",
+] as const;
 
-
+const SLOGAN_REVEAL_MS = 1000;
 
 export function MainWorkspace() {
 
   const { activeChat, responseLoading } = useChats();
+  const { selectedIds } = useRoundTable();
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const keyboardShortcuts = useMemo(
+    () => buildModelKeyboardShortcuts(selectedIds),
+    [selectedIds],
+  );
 
 
 
   const messages = activeChat?.messages ?? [];
 
   const showWelcome = messages.length === 0;
+  const [sloganVisibleCount, setSloganVisibleCount] = useState(0);
 
+  useEffect(() => {
+    if (!showWelcome) {
+      setSloganVisibleCount(0);
+      return;
+    }
 
+    setSloganVisibleCount(0);
+    const timers = SLOGAN_SENTENCES.map((_, index) =>
+      window.setTimeout(
+        () => setSloganVisibleCount(index + 1),
+        SLOGAN_REVEAL_MS * (index + 1),
+      ),
+    );
+
+    return () => timers.forEach(clearTimeout);
+  }, [showWelcome]);
 
   const scrollToEnd = () => {
     requestAnimationFrame(() => {
@@ -59,10 +87,20 @@ export function MainWorkspace() {
 
             </h1>
 
-            <p className="mt-2 text-muted-foreground">
-
-              One prompt. Multiple models. Better answers.
-
+            <p className="mt-2 w-full text-center text-muted-foreground">
+              {SLOGAN_SENTENCES.map((sentence, index) => (
+                <span
+                  key={sentence}
+                  className={cn(
+                    "transition-opacity duration-500",
+                    index < sloganVisibleCount ? "opacity-100" : "opacity-0",
+                    index === SLOGAN_SENTENCES.length - 1 && "text-accent/90",
+                  )}
+                >
+                  {sentence}
+                  {index < SLOGAN_SENTENCES.length - 1 ? " " : ""}
+                </span>
+              ))}
             </p>
 
 

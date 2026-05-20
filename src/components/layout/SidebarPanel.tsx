@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { PanelTitleInfo } from "@/components/layout/PanelTitleInfo";
+import { workspaceHeaderRowClass } from "@/lib/workspace-header";
 import { cn } from "@/lib/utils";
 
 interface SidebarPanelProps {
@@ -39,10 +40,7 @@ export function SidebarPanel({
     >
       {(title ?? headerExtra ?? onClose) && (
         <header
-          className={cn(
-            "flex shrink-0 items-center justify-between border-b border-border-subtle px-3 py-2",
-            active && "border-accent/20",
-          )}
+          className={workspaceHeaderRowClass(active, "justify-between px-3")}
         >
           {title ? (
             <h3

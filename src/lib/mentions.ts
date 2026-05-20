@@ -1,23 +1,188 @@
 import { getModelById, type AiModel } from "@/data/ai-models";
 
-/** Mention token format: @modelId (e.g. @gpt4o) */
-const MENTION_PATTERN = /@([a-z0-9][a-z0-9_-]*)/gi;
+/** Composer @-tokens include display names while typing (e.g. @GPT-4o). */
+const COMPOSER_MENTION_PATTERN = /@([^\s@]*)/g;
+
+function normalizeMentionKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function cartModelsFromIds(cartIds: string[]): AiModel[] {
+  return cartIds
+    .map((id) => getModelById(id))
+    .filter((m): m is AiModel => m != null);
+}
+
+/** Resolve a completed @-token to a cart model (id or display name). */
+export function resolveMentionQuery(
+  query: string,
+  cartIds?: string[],
+): AiModel | null {
+  if (!query) return null;
+
+  const byId = getModelById(query);
+  if (byId && (!cartIds || cartIds.includes(byId.id))) return byId;
+
+  const lower = query.toLowerCase();
+  const key = normalizeMentionKey(query);
+  const models = cartIds ? cartModelsFromIds(cartIds) : [];
+
+  for (const model of models) {
+    if (model.id.toLowerCase() === lower) return model;
+    if (model.name.toLowerCase() === lower) return model;
+    if (normalizeMentionKey(model.name) === key) return model;
+  }
+
+  return null;
+}
+
+/** Resolve an in-progress @-token for composer highlighting (prefix match). */
+export function resolveMentionQueryPartial(
+  query: string,
+  cartIds: string[],
+): AiModel | null {
+  const exact = resolveMentionQuery(query, cartIds);
+  if (exact) return exact;
+  if (!query) return null;
+
+  const lower = query.toLowerCase();
+  const key = normalizeMentionKey(query);
+  const matches = cartModelsFromIds(cartIds).filter(
+    (model) =>
+      model.id.toLowerCase().startsWith(lower) ||
+      model.name.toLowerCase().startsWith(lower) ||
+      normalizeMentionKey(model.name).startsWith(key),
+  );
+
+  if (matches.length === 0) return null;
+  return (
+    matches.find((model) => model.id.toLowerCase().startsWith(lower)) ??
+    matches[0]
+  );
+}
+
+export type ComposerMentionSegment =
+  | { kind: "text"; value: string }
+  | { kind: "mention"; raw: string; model: AiModel | null };
+
+export function splitComposerMentionSegments(
+  value: string,
+  cartIds: string[],
+): ComposerMentionSegment[] {
+  if (!value) return [];
+
+  const segments: ComposerMentionSegment[] = [];
+  let lastIndex = 0;
+
+  for (const match of value.matchAll(COMPOSER_MENTION_PATTERN)) {
+    const start = match.index ?? 0;
+    const raw = match[0];
+    const query = match[1];
+
+    if (start > lastIndex) {
+      segments.push({ kind: "text", value: value.slice(lastIndex, start) });
+    }
+
+    segments.push({
+      kind: "mention",
+      raw,
+      model: resolveMentionQueryPartial(query, cartIds),
+    });
+    lastIndex = start + raw.length;
+  }
+
+  if (lastIndex < value.length) {
+    segments.push({ kind: "text", value: value.slice(lastIndex) });
+  }
+
+  return segments;
+}
 
 export function mentionToken(modelId: string): string {
   return `@${modelId}`;
 }
 
-export function parseMentions(content: string): string[] {
+export function parseMentions(content: string, cartIds?: string[]): string[] {
   const ids = new Set<string>();
-  for (const match of content.matchAll(MENTION_PATTERN)) {
-    const model = getModelById(match[1]);
+  for (const match of content.matchAll(COMPOSER_MENTION_PATTERN)) {
+    const model = resolveMentionQuery(match[1], cartIds);
     if (model) ids.add(model.id);
   }
   return [...ids];
 }
 
-export function hasModelMentions(content: string): boolean {
-  return parseMentions(content).length > 0;
+export type ResolvedMentionSpan = {
+  start: number;
+  end: number;
+  modelId: string;
+};
+
+/** Ranges for @-tokens that resolve to a cart model (atomic delete targets). */
+export function getResolvedMentionSpans(
+  value: string,
+  cartIds: string[],
+): ResolvedMentionSpan[] {
+  const spans: ResolvedMentionSpan[] = [];
+  for (const match of value.matchAll(COMPOSER_MENTION_PATTERN)) {
+    const start = match.index ?? 0;
+    const query = match[1];
+    const model = resolveMentionQuery(query, cartIds);
+    if (!model) continue;
+    spans.push({
+      start,
+      end: start + match[0].length,
+      modelId: model.id,
+    });
+  }
+  return spans;
+}
+
+/** Mention span to remove when Backspace/Delete is pressed at a collapsed cursor. */
+export function findResolvedMentionSpanAtCursor(
+  value: string,
+  cursor: number,
+  cartIds: string[],
+  direction: "backspace" | "delete",
+): ResolvedMentionSpan | null {
+  for (const span of getResolvedMentionSpans(value, cartIds)) {
+    if (direction === "backspace") {
+      if (cursor > span.start && cursor <= span.end) return span;
+    } else if (cursor >= span.start && cursor < span.end) {
+      return span;
+    }
+  }
+  return null;
+}
+
+export function removeMentionSpan(
+  value: string,
+  span: ResolvedMentionSpan,
+): { value: string; cursor: number } {
+  return {
+    value: value.slice(0, span.start) + value.slice(span.end),
+    cursor: span.start,
+  };
+}
+
+export function filterModelsNotMentioned(
+  content: string,
+  models: AiModel[],
+  cartIds?: string[],
+): AiModel[] {
+  const mentioned = new Set(parseMentions(content, cartIds));
+  return models.filter((model) => !mentioned.has(model.id));
+}
+
+export function hasModelMentions(content: string, cartIds?: string[]): boolean {
+  return parseMentions(content, cartIds).length > 0;
+}
+
+export function isModelMentioned(
+  content: string,
+  modelId: string,
+  cartIds?: string[],
+): boolean {
+  return parseMentions(content, cartIds).includes(modelId);
 }
 
 export function resolveTargetModelIds(
@@ -25,7 +190,7 @@ export function resolveTargetModelIds(
   cartSelectedIds: string[],
   roundTableActiveIds: string[],
 ): string[] {
-  const mentioned = parseMentions(content);
+  const mentioned = parseMentions(content, cartSelectedIds);
   if (mentioned.length > 0) {
     return mentioned.filter((id) => cartSelectedIds.includes(id));
   }
@@ -35,6 +200,25 @@ export function resolveTargetModelIds(
 export function buildMentionTextForModels(models: AiModel[]): string {
   if (models.length === 0) return "";
   return models.map((m) => mentionToken(m.id)).join(" ");
+}
+
+export function insertMentionsForModels(
+  content: string,
+  models: AiModel[],
+  selectionStart: number,
+  selectionEnd: number,
+  cartIds?: string[],
+): { value: string; cursor: number } | null {
+  const toAdd = filterModelsNotMentioned(content, models, cartIds);
+  if (toAdd.length === 0) return null;
+  const mentionText = buildMentionTextForModels(toAdd);
+  const insertion = mentionText.endsWith(" ") ? mentionText : `${mentionText} `;
+  return insertTextAtCursor(
+    content,
+    insertion,
+    selectionStart,
+    selectionEnd,
+  );
 }
 
 export function insertTextAtCursor(
@@ -56,6 +240,7 @@ export function insertTextAtCursor(
 export function getMentionQuery(
   value: string,
   cursor: number,
+  cartIds?: string[],
 ): { start: number; query: string } | null {
   const before = value.slice(0, cursor);
   const at = before.lastIndexOf("@");
@@ -65,9 +250,9 @@ export function getMentionQuery(
   if (/\s/.test(between)) return null;
 
   // Cursor is after a completed @mention token — not an active query
-  const tokenMatch = value.slice(at + 1).match(/^([a-z0-9][a-z0-9_-]*)/i);
-  if (tokenMatch) {
-    const model = getModelById(tokenMatch[1]);
+  const tokenMatch = value.slice(at + 1).match(/^([^\s@]*)/);
+  if (tokenMatch && tokenMatch[1].length > 0) {
+    const model = resolveMentionQuery(tokenMatch[1], cartIds);
     const tokenEnd = at + 1 + tokenMatch[1].length;
     if (model && cursor >= tokenEnd) return null;
   }
