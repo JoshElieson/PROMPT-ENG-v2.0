@@ -21,7 +21,7 @@ function normalizeOptimizedOutput(raw: string): string {
   if (text.startsWith("```")) {
     const lines = text.split("\n");
     if (lines[0]?.match(/^```/)) lines.shift();
-    const last = lines.at(-1);
+    const last = lines[lines.length - 1];
     if (last?.match(/^```/)) lines.pop();
     text = lines.join("\n").trim();
   }

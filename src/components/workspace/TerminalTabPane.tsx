@@ -163,7 +163,9 @@ export function TerminalTabPane({
           const size = measureSize();
           void resizeTerminalSession(sessionId, size.cols, size.rows);
         });
-        resizeObserver.observe(hostRef.current);
+        if (hostRef.current) {
+          resizeObserver.observe(hostRef.current);
+        }
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Could not start terminal.";

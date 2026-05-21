@@ -721,7 +721,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
       if (!isTauri()) {
         fail(
-          "AI chat requires the desktop app. Run with `npm run tauri:dev` and ensure API keys are in `.env`.",
+          "AI chat requires the desktop app. Run with `npm run tauri:dev` and ensure API keys are configured in `.env` (installed app users can place this at `%APPDATA%/FORGE/.env`).",
         );
         return;
       }
