@@ -9,12 +9,42 @@ pub enum Provider {
     Xai,
 }
 
+fn env_candidates() -> Vec<PathBuf> {
+    let mut candidates = vec![PathBuf::from(".env"), PathBuf::from("../.env")];
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            candidates.push(exe_dir.join(".env"));
+            // Typical Tauri release layout: <root>\.updater\FORGE.exe
+            if let Some(parent) = exe_dir.parent() {
+                candidates.push(parent.join(".env"));
+            }
+        }
+    }
+
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let base = PathBuf::from(appdata);
+        candidates.push(base.join("FORGE").join(".env"));
+        candidates.push(base.join("com.forge.desktop").join(".env"));
+    }
+
+    if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
+        let base = PathBuf::from(local_appdata);
+        candidates.push(base.join("FORGE").join(".env"));
+        candidates.push(base.join("com.forge.desktop").join(".env"));
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        let base = PathBuf::from(home);
+        candidates.push(base.join(".config").join("FORGE").join(".env"));
+        candidates.push(base.join(".config").join("com.forge.desktop").join(".env"));
+    }
+
+    candidates
+}
+
 pub fn load_dotenv() {
-    let candidates = [
-        PathBuf::from(".env"),
-        PathBuf::from("../.env"),
-    ];
-    for path in candidates {
+    for path in env_candidates() {
         if path.is_file() {
             let _ = dotenvy::from_path(&path);
             break;
@@ -103,7 +133,11 @@ pub fn resolve_api_model(model_id: &str) -> Result<(Provider, String), String> {
             Provider::DeepSeek => "DEEPSEEK_API_KEY",
             Provider::Xai => "GROK_API_KEY (or XAI_API_KEY)",
         };
-        format!("Missing {env} in .env. Add your API key and restart the app.")
+        format!(
+            "Missing {env}. Set it in a .env file and restart the app. \
+Checked common locations including the app folder and user config folders \
+(for Windows: %APPDATA%\\FORGE\\.env)."
+        )
     })?;
     validate_api_key_format(provider, &key)?;
 

@@ -1,2 +1,2 @@
-e0743891276cd3b84024f4d5aa0e89da852c7905045ae1ad8c1cb834770efc8b  FORGE_1.0.0-1_x64_en-US.msi
-c2fed0d24a6259fb0a3d03471a4affcbed3af551aaeb5230edc4a55eb9a058ea  FORGE_1.0.0-1_x64-setup.exe
+282b038cc02d6bb856ffc42aacedcb2db6d878a6ad3d9a252fd7fee0c3496fc7  FORGE_1.0.0-1_x64_en-US.msi
+513b704d844bd872e7db502724d7905d2b7f9ae94e5c0cfd02a7e19d2a01adac  FORGE_1.0.0-1_x64-setup.exe

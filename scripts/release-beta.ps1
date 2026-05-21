@@ -4,6 +4,7 @@ $version = "1.0.0-1"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $releaseDir = Join-Path $repoRoot ("release\" + $version)
 $bundleRoot = Join-Path $repoRoot "src-tauri\target\release\bundle"
+$envExample = Join-Path $repoRoot ".env.example"
 
 Set-Location $repoRoot
 
@@ -45,6 +46,10 @@ $checksums = foreach ($file in $copiedFiles) {
 
 Set-Content -Path (Join-Path $releaseDir "SHA256SUMS.txt") -Value $checksums
 
+if (Test-Path $envExample) {
+  Copy-Item -Path $envExample -Destination (Join-Path $releaseDir ".env.example") -Force
+}
+
 Write-Host ""
 Write-Host "Release artifacts ready:"
 Write-Host "  $releaseDir"
@@ -52,3 +57,6 @@ Write-Host ""
 Write-Host "Files:"
 $copiedFiles | Sort-Object Name | ForEach-Object { Write-Host ("  - " + $_.Name) }
 Write-Host "  - SHA256SUMS.txt"
+if (Test-Path $envExample) {
+  Write-Host "  - .env.example"
+}

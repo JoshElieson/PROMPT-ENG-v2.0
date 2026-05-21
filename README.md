@@ -64,7 +64,17 @@ Use this to generate upload-ready files in one command:
 npm run release:beta
 ```
 
-This creates `release/1.0.0-1/` and copies installer artifacts plus `SHA256SUMS.txt` for integrity checks.
+This creates `release/1.0.0-1/` and copies installer artifacts plus `SHA256SUMS.txt` and `.env.example`.
+
+### API keys for installed beta builds
+
+Installed users should create:
+
+- Windows: `%APPDATA%\FORGE\.env`
+
+1. Copy `.env.example` from your release bundle into `%APPDATA%\FORGE\.env`
+2. Fill in real API keys (for example `OPENAI_API_KEY=...`)
+3. Restart FORGE after editing
 
 ---
 
