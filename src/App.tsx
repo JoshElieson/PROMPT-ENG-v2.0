@@ -8,6 +8,7 @@ import { AppSelectionProvider } from "@/contexts/AppSelectionContext";
 import { ApiUsageProvider } from "@/contexts/ApiUsageContext";
 import { ChatsProvider } from "@/contexts/ChatsContext";
 import { FocusedWorkspacePaneRoundTableProvider } from "@/contexts/FocusedWorkspacePaneRoundTableProvider";
+import { ModelModeProvider } from "@/contexts/ModelModeContext";
 import { RoundTableProvider } from "@/contexts/RoundTableContext";
 import { GitProvider } from "@/contexts/GitContext";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -37,6 +38,7 @@ function App() {
     <AuthProvider>
       <LayoutProvider>
         <RoundTableProvider>
+          <ModelModeProvider>
           <ApiUsageProvider>
           <ChatsProvider>
             <ProjectsProvider>
@@ -52,6 +54,7 @@ function App() {
             </ProjectsProvider>
           </ChatsProvider>
           </ApiUsageProvider>
+          </ModelModeProvider>
         </RoundTableProvider>
       </LayoutProvider>
     </AuthProvider>

@@ -26,6 +26,7 @@ export function CommitMessageChat({
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<CommitChatMessage[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const pushAssistant = useCallback((msg: CommitChatMessage) => {
@@ -36,7 +37,7 @@ export function CommitMessageChat({
   }, []);
 
   const send = useCallback(
-    (text: string) => {
+    async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
 
@@ -47,7 +48,12 @@ export function CommitMessageChat({
       };
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
-      pushAssistant(replyToCommitChat(trimmed, changes, draft));
+      setIsGenerating(true);
+      try {
+        pushAssistant(await replyToCommitChat(trimmed, changes, draft));
+      } finally {
+        setIsGenerating(false);
+      }
     },
     [changes, draft, pushAssistant],
   );
@@ -114,19 +120,19 @@ export function CommitMessageChat({
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                send(input);
+                void send(input);
               }
             }}
             placeholder="Ask me to run git commands"
-            disabled={disabled}
+            disabled={disabled || isGenerating}
             className="min-w-0 flex-1 rounded border border-border-subtle bg-panel px-2 py-1 text-[11px] text-foreground outline-none focus:border-accent"
           />
           <Button
             type="button"
             size="icon"
             className="h-7 w-7 shrink-0"
-            disabled={disabled || !input.trim()}
-            onClick={() => send(input)}
+            disabled={disabled || isGenerating || !input.trim()}
+            onClick={() => void send(input)}
           >
             <ArrowUp className="h-3.5 w-3.5" />
           </Button>

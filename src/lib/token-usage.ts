@@ -83,8 +83,10 @@ export function mergeApiUsage(
   };
 }
 
-/** Mirrors Tauri `default_synthesis_provider` preference order. */
-export function defaultSynthesisModelId(): string {
+/** Mirrors Tauri `synthesis_provider_for_models` (first participant, then fallback). */
+export function synthesisModelIdForParticipants(modelIds: string[]): string {
+  const supported = modelIds.filter(isAiModelSupported);
+  if (supported.length > 0) return supported[0];
   return "gpt4o";
 }
 
@@ -161,7 +163,9 @@ export function recordResponseEstimates(
     );
   }
 
-  const synthModelId = defaultSynthesisModelId();
+  const synthModelId = synthesisModelIdForParticipants(
+    outputs.map((o) => o.modelId),
+  );
   const synthIn = estimateSynthesisInputTokens(
     userContent,
     outputs.map((o) => o.content),

@@ -1,5 +1,8 @@
 use crate::ai_config::{
-    api_key, base_url, default_synthesis_provider, resolve_api_model, Provider,
+    api_key, base_url, resolve_api_model, synthesis_provider_for_models, Provider,
+};
+use crate::xai_models::{
+    default_account_chat_model, invalidate_cache, is_model_not_found_error, resolve_runtime_model,
 };
 use crate::ai_workspace::{
     tool_clear_directory, tool_list_directory, tool_read_file, tool_remove_path, tool_write_file,
@@ -40,8 +43,30 @@ fn provider_error(provider: Provider, context: &str, detail: &str) -> String {
         Provider::Anthropic => "Anthropic",
         Provider::Google => "Gemini",
         Provider::DeepSeek => "DeepSeek",
+        Provider::Xai => "xAI",
     };
     format!("{name} {context}: {detail}")
+}
+
+fn extract_error_detail(data: &serde_json::Value, raw: &str) -> String {
+    data["error"]["message"]
+        .as_str()
+        .or_else(|| data["error"]["error"].as_str())
+        .or_else(|| data["error"]["detail"].as_str())
+        .or_else(|| data["error"]["type"].as_str())
+        .or_else(|| data["message"].as_str())
+        .or_else(|| data["detail"].as_str())
+        .or_else(|| data["error"].as_str())
+        .or_else(|| {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        })
+        .unwrap_or("Unknown error")
+        .to_string()
 }
 
 fn tools_schema_openai() -> Vec<serde_json::Value> {
@@ -125,13 +150,20 @@ Formatting:\n\
 - When sharing code, commands, or config snippets, use fenced markdown code blocks with a language tag (e.g. ```python).\n\
 - Put a short plain-language intro before or after the block when helpful; keep the code itself inside the fence.\n";
 
+const UI_PANE_GUIDANCE: &str = "\n\
+UI pane controls:\n\
+- If the user explicitly asks you to open or close a UI pane, include one directive token on its own line using this exact format: [[FORGE_PANE action=\"open|close\" target=\"terminal|websites|models|workflow|right-sidebar|explorer|agent-cart\"]]\n\
+- You may include multiple directive lines if the user asked for multiple pane changes.\n\
+- Keep your normal conversational response in plain text around the directive lines.\n\
+- Do not output pane directives unless the user asked to change panes.\n";
+
 const DEFAULT_CHAT_SYSTEM: &str = "You are a helpful assistant in a multi-model AI workspace. \
 When sharing code or shell commands, use fenced markdown code blocks with a language tag (e.g. ```python).";
 
 fn chat_system_prompt(user: Option<&str>) -> String {
     match user.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(custom) => format!("{custom}{CODE_FORMATTING_GUIDANCE}"),
-        None => DEFAULT_CHAT_SYSTEM.to_string(),
+        Some(custom) => format!("{custom}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}"),
+        None => format!("{DEFAULT_CHAT_SYSTEM}{UI_PANE_GUIDANCE}"),
     }
 }
 
@@ -152,7 +184,7 @@ Rules:\n\
 - Prefer read_file or list_directory before overwriting files.\n\
 - write_file replaces the entire file contents; it does not delete files.\n\
 - remove_path cannot delete an AI-enabled folder root in one step—use clear_directory on that folder instead.\n\
-- Use absolute paths exactly as they appear on disk.{CODE_FORMATTING_GUIDANCE}",
+- Use absolute paths exactly as they appear on disk.{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}",
         policy.roots_summary()
     )
 }
@@ -530,6 +562,202 @@ async fn deepseek_agent_loop(
     }
 
     Err("DeepSeek: stopped after too many tool rounds (possible loop).".to_string())
+}
+
+async fn complete_xai_once(
+    api_model: &str,
+    messages: &[ChatTurn],
+    system: Option<&str>,
+) -> Result<String, String> {
+    let key = api_key(Provider::Xai).expect("key checked");
+    let base = base_url(Provider::Xai, "https://api.x.ai/v1");
+    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+
+    let mut api_messages: Vec<serde_json::Value> = Vec::new();
+    if let Some(sys) = system {
+        api_messages.push(json!({
+            "role": "system",
+            "content": sys,
+        }));
+    }
+    for turn in messages {
+        let role = if turn.role == "assistant" {
+            "assistant"
+        } else {
+            "user"
+        };
+        api_messages.push(json!({
+            "role": role,
+            "content": turn.content,
+        }));
+    }
+
+    let body = json!({
+        "model": api_model,
+        "messages": api_messages,
+        "max_tokens": 4096,
+    });
+
+    let client = http_client()?;
+    let res = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {key}"))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| provider_error(Provider::Xai, "request failed", &e.to_string()))?;
+
+    let status = res.status();
+    let raw = res
+        .text()
+        .await
+        .map_err(|e| provider_error(Provider::Xai, "invalid response", &e.to_string()))?;
+    let data: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
+
+    if !status.is_success() {
+        let detail = extract_error_detail(&data, &raw);
+        return Err(provider_error(
+            Provider::Xai,
+            &format!("HTTP {status}"),
+            &detail,
+        ));
+    }
+
+    data["choices"][0]["message"]["content"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| provider_error(Provider::Xai, "response", "missing message content"))
+}
+
+async fn complete_xai(
+    api_model: &str,
+    messages: &[ChatTurn],
+    system: Option<&str>,
+) -> Result<String, String> {
+    let api_model = resolve_runtime_model(api_model).await;
+    match complete_xai_once(&api_model, messages, system).await {
+        Ok(content) => Ok(content),
+        Err(err) if is_model_not_found_error(&err) => {
+            invalidate_cache();
+            let fallback = default_account_chat_model().await;
+            if fallback == api_model {
+                return Err(err);
+            }
+            complete_xai_once(&fallback, messages, system).await
+        }
+        Err(err) => Err(err),
+    }
+}
+
+async fn xai_agent_loop_once(
+    api_model: &str,
+    chat_messages: &[ChatTurn],
+    policy: &WorkspacePolicy,
+) -> Result<String, String> {
+    let key = api_key(Provider::Xai).expect("key checked");
+    let base = base_url(Provider::Xai, "https://api.x.ai/v1");
+    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+    let client = http_client()?;
+    let tools = tools_schema_openai();
+
+    let mut api_messages: Vec<serde_json::Value> = vec![json!({
+        "role": "system",
+        "content": workspace_system_prompt(policy),
+    })];
+    for turn in chat_messages {
+        let role = if turn.role == "assistant" {
+            "assistant"
+        } else {
+            "user"
+        };
+        api_messages.push(json!({ "role": role, "content": turn.content }));
+    }
+
+    for _ in 0..MAX_TOOL_ROUNDS {
+        let body = json!({
+            "model": api_model,
+            "messages": api_messages,
+            "tools": tools,
+            "tool_choice": "auto",
+            "max_tokens": 4096,
+        });
+
+        let res = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", key.as_str()))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| provider_error(Provider::Xai, "request failed", &e.to_string()))?;
+
+        let status = res.status();
+        let raw = res
+            .text()
+            .await
+            .map_err(|e| provider_error(Provider::Xai, "invalid response", &e.to_string()))?;
+        let data: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_| json!({}));
+
+        if !status.is_success() {
+            let detail = extract_error_detail(&data, &raw);
+            return Err(provider_error(
+                Provider::Xai,
+                &format!("HTTP {status}"),
+                &detail,
+            ));
+        }
+
+        let msg = &data["choices"][0]["message"];
+        let tool_calls = msg["tool_calls"].as_array();
+
+        if let Some(calls) = tool_calls {
+            if !calls.is_empty() {
+                api_messages.push(msg.clone());
+
+                for call in calls {
+                    let id = call["id"].as_str().unwrap_or("");
+                    let name = call["function"]["name"].as_str().unwrap_or("");
+                    let args = call["function"]["arguments"].as_str().unwrap_or("{}");
+                    let output = run_tool(policy, name, args);
+                    api_messages.push(json!({
+                        "role": "tool",
+                        "tool_call_id": id,
+                        "content": output,
+                    }));
+                }
+                continue;
+            }
+        }
+
+        return msg["content"]
+            .as_str()
+            .map(|s| s.to_string())
+            .filter(|s| !s.trim().is_empty())
+            .ok_or_else(|| provider_error(Provider::Xai, "response", "empty assistant message"));
+    }
+
+    Err("xAI: stopped after too many tool rounds (possible loop).".to_string())
+}
+
+async fn xai_agent_loop(
+    api_model: &str,
+    chat_messages: &[ChatTurn],
+    policy: &WorkspacePolicy,
+) -> Result<String, String> {
+    let api_model = resolve_runtime_model(api_model).await;
+    match xai_agent_loop_once(&api_model, chat_messages, policy).await {
+        Ok(content) => Ok(content),
+        Err(err) if is_model_not_found_error(&err) => {
+            invalidate_cache();
+            let fallback = default_account_chat_model().await;
+            if fallback == api_model {
+                return Err(err);
+            }
+            xai_agent_loop_once(&fallback, chat_messages, policy).await
+        }
+        Err(err) => Err(err),
+    }
 }
 
 fn anthropic_tools() -> Vec<serde_json::Value> {
@@ -1038,6 +1266,7 @@ async fn complete_for_model(
         Provider::Anthropic => complete_anthropic(&api_model, messages, system).await,
         Provider::Google => complete_gemini(&api_model, messages, system).await,
         Provider::DeepSeek => complete_deepseek(&api_model, messages, system).await,
+        Provider::Xai => complete_xai(&api_model, messages, system).await,
     }
 }
 
@@ -1056,6 +1285,7 @@ async fn complete_for_model_with_workspace(
         Provider::Anthropic => anthropic_agent_loop(&api_model, messages, policy).await,
         Provider::Google => gemini_agent_loop(&api_model, messages, policy).await,
         Provider::DeepSeek => deepseek_agent_loop(&api_model, messages, policy).await,
+        Provider::Xai => xai_agent_loop(&api_model, messages, policy).await,
     }
 }
 
@@ -1112,8 +1342,13 @@ Write one cohesive answer for the user."
         content: user_prompt,
     }];
 
-    let (provider, _) = default_synthesis_provider().ok_or_else(|| {
-        "No AI API keys configured. Add OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, or DEEPSEEK_API_KEY to .env.".to_string()
+    let participant_ids: Vec<&str> = model_responses
+        .iter()
+        .map(|entry| entry.model_id.as_str())
+        .collect();
+
+    let (provider, _) = synthesis_provider_for_models(&participant_ids).ok_or_else(|| {
+        "No AI API keys configured. Add OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, or GROK_API_KEY to .env.".to_string()
     })?;
 
     let model_id = match provider {
@@ -1121,6 +1356,7 @@ Write one cohesive answer for the user."
         Provider::Anthropic => "claude",
         Provider::Google => "gemini",
         Provider::DeepSeek => "deepseek",
+        Provider::Xai => "grok",
     };
 
     complete_for_model(model_id, &messages, Some(system)).await

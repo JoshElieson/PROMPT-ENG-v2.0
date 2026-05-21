@@ -32,6 +32,7 @@ import { useProjects } from "@/contexts/ProjectsContext";
 import {
   GENERATE_COMMIT_AI_TOOLTIP,
   generateCommitMessageWithAi,
+  suggestCommitMessage,
 } from "@/lib/commit-message";
 import type { GitFileChange, GitFileStatus } from "@/types/git";
 import { cn } from "@/lib/utils";
@@ -146,6 +147,7 @@ export function GitPanel({ active }: GitPanelProps) {
   const [commitMessage, setCommitMessage] = useState("");
   const [showClone, setShowClone] = useState(false);
   const [cloneUrl, setCloneUrl] = useState("");
+  const [isGeneratingCommitMessage, setIsGeneratingCommitMessage] = useState(false);
 
   const busy = isLoading || isOperating;
   const isRepo = status?.isRepo ?? false;
@@ -181,6 +183,18 @@ export function GitPanel({ active }: GitPanelProps) {
       setCloneUrl("");
     }
   };
+
+  const handleGenerateCommitMessage = useCallback(async () => {
+    setIsGeneratingCommitMessage(true);
+    try {
+      setCommitMessage(await generateCommitMessageWithAi(allChanges));
+    } catch (error) {
+      console.error("Could not generate commit message with AI.", error);
+      setCommitMessage(suggestCommitMessage(allChanges).split("\n")[0] ?? "chore: update files");
+    } finally {
+      setIsGeneratingCommitMessage(false);
+    }
+  }, [allChanges]);
 
   const menuActions = (
     <DropdownMenu>
@@ -289,10 +303,8 @@ export function GitPanel({ active }: GitPanelProps) {
                     size="icon"
                     className="absolute right-1 top-1 h-6 w-6 text-muted-foreground hover:text-accent"
                     title={GENERATE_COMMIT_AI_TOOLTIP}
-                    disabled={busy}
-                    onClick={() =>
-                      setCommitMessage(generateCommitMessageWithAi(allChanges))
-                    }
+                    disabled={busy || isGeneratingCommitMessage}
+                    onClick={() => void handleGenerateCommitMessage()}
                   >
                     <Sparkles className="h-3.5 w-3.5" />
                   </Button>

@@ -1,5 +1,6 @@
 mod ai_chat;
 mod ai_config;
+mod xai_models;
 mod ai_workspace;
 mod embedded_browser;
 mod file_drag;

@@ -63,35 +63,47 @@ function OrgFlyout({
   onPointerLeave: () => void;
 }) {
   const selectedCount = models.filter((m) => isSelected(m.id)).length;
+  const viewportPad = 12;
+  const maxFlyoutHeight = 360;
+  const spaceBelow = window.innerHeight - anchor.top - viewportPad;
+  const spaceAbove = anchor.top - viewportPad;
+  const openUpward = spaceBelow < 200 && spaceAbove > spaceBelow;
+  const maxHeight = Math.min(
+    maxFlyoutHeight,
+    Math.max(120, openUpward ? spaceAbove : spaceBelow),
+  );
 
   return createPortal(
     <section
-      className="fixed z-50 min-w-[220px] rounded-lg border border-border bg-panel shadow-lg"
+      className="fixed z-50 flex min-w-[220px] flex-col overflow-hidden rounded-lg border border-border bg-panel shadow-lg"
       style={{
-        top: anchor.top,
+        top: openUpward ? undefined : anchor.top,
+        bottom: openUpward ? window.innerHeight - anchor.top : undefined,
         left: anchor.right + 6,
-        maxHeight: `min(360px, calc(100vh - ${anchor.top}px - 12px))`,
+        maxHeight,
       }}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
     >
-      <header className="border-b border-border-subtle px-3 py-2">
+      <header className="shrink-0 border-b border-border-subtle px-3 py-2">
         <p className="text-xs font-semibold text-foreground">{org.name}</p>
         <p className="text-[10px] text-muted">
           {selectedCount} of {models.length} in Round Table
         </p>
       </header>
-      <ul className="overflow-y-auto py-1">
-        {models.map((model) => (
-          <li key={model.id}>
-            <FlyoutModelItem
-              model={model}
-              selected={isSelected(model.id)}
-              onToggle={() => toggleModel(model.id)}
-            />
-          </li>
-        ))}
-      </ul>
+      <ScrollArea className="min-h-0 flex-1">
+        <ul className="py-1">
+          {models.map((model) => (
+            <li key={model.id}>
+              <FlyoutModelItem
+                model={model}
+                selected={isSelected(model.id)}
+                onToggle={() => toggleModel(model.id)}
+              />
+            </li>
+          ))}
+        </ul>
+      </ScrollArea>
     </section>,
     document.body,
   );

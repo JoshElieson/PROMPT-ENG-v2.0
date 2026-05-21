@@ -40,6 +40,8 @@ import {
   reconcileWorkspaceThreads,
 } from "@/lib/center-workspace-layout";
 import { createDefaultWorkspaceLayout } from "@/lib/workspace-pane-storage";
+import { useLayout } from "@/contexts/LayoutContext";
+import { extractAssistantPaneActions } from "@/lib/assistant-pane-actions";
 import type { NodePermissions } from "@/types/project";
 import type {
   AiWorkspacePayload,
@@ -262,6 +264,13 @@ function appendAssistantToThread(
 
 export function ChatsProvider({ children }: { children: ReactNode }) {
   const { addUsage } = useApiUsage();
+  const {
+    requestBottomPanelTab,
+    setWorkspaceBottomPanelOpen,
+    setRightPanelVisible,
+    setRightSidebarCollapsed,
+    setLeftSidebarViewVisible,
+  } = useLayout();
   const boot = useMemo(() => {
     const loaded = loadChats();
     return partitionLoadedChats(loaded, loadActiveChatId());
@@ -635,18 +644,53 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
       const finish = (content: string) => {
         if (responseRunRef.current !== runId) return;
+        const { visibleContent, actions } = extractAssistantPaneActions(content);
+
+        for (const action of actions) {
+          if (action.target === "terminal") {
+            if (action.verb === "open") requestBottomPanelTab("terminal");
+            else setWorkspaceBottomPanelOpen(false);
+            continue;
+          }
+          if (action.target === "websites") {
+            if (action.verb === "open") requestBottomPanelTab("browser");
+            else setWorkspaceBottomPanelOpen(false);
+            continue;
+          }
+          if (action.target === "models") {
+            setRightPanelVisible("roundTable", action.verb === "open");
+            continue;
+          }
+          if (action.target === "workflow") {
+            setRightPanelVisible("workflow", action.verb === "open");
+            continue;
+          }
+          if (action.target === "right-sidebar") {
+            setRightSidebarCollapsed(action.verb === "close");
+            continue;
+          }
+          if (action.target === "explorer") {
+            setLeftSidebarViewVisible("explorer", action.verb === "open");
+            continue;
+          }
+          if (action.target === "agent-cart") {
+            setLeftSidebarViewVisible("agents", action.verb === "open");
+          }
+        }
+
+        const finalContent = visibleContent || content;
         addUsage(
           recordResponseEstimates(
             targetModelIds,
             userContent,
             modelOutputs,
-            content,
+            finalContent,
           ),
         );
         const assistantMessage: ChatMessage = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content,
+          content: finalContent,
           createdAt: Date.now(),
           modelContributions:
             targetModelIds.length > 1 ? contributions : undefined,
@@ -683,7 +727,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           .map((id) => getModelById(id)?.name ?? id)
           .join(", ");
         fail(
-          `${names} ${unsupported.length === 1 ? "is" : "are"} not connected to a provider yet. Use GPT-4o, Claude, or Gemini models.`,
+          `${names} ${unsupported.length === 1 ? "is" : "are"} not connected to a provider yet. Use GPT-4o, Claude, Gemini, DeepSeek, or Grok models.`,
         );
         return;
       }
@@ -763,7 +807,14 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         fail(message);
       }
     },
-    [addUsage],
+    [
+      addUsage,
+      requestBottomPanelTab,
+      setWorkspaceBottomPanelOpen,
+      setRightPanelVisible,
+      setRightSidebarCollapsed,
+      setLeftSidebarViewVisible,
+    ],
   );
 
   const startThreadAiRun = useCallback(

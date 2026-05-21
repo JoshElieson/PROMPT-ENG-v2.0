@@ -1,4 +1,5 @@
 import { getModelById, type AiModel } from "@/data/ai-models";
+import { selectAutoModels } from "@/lib/auto-model-select";
 
 /** Composer @-tokens include display names while typing (e.g. @GPT-4o). */
 const COMPOSER_MENTION_PATTERN = /@([^\s@]*)/g;
@@ -185,18 +186,41 @@ export function isModelMentioned(
   return parseMentions(content, cartIds).includes(modelId);
 }
 
+export type ResolveTargetOptions = {
+  goal?: string | null;
+  autoEnabled?: boolean;
+  deeperEnabled?: boolean;
+  hasWorkspace?: boolean;
+};
+
 export function resolveTargetModelIds(
   content: string,
   cartSelectedIds: string[],
   roundTableActiveIds: string[],
+  options?: ResolveTargetOptions,
 ): string[] {
   const mentioned = parseMentions(content, cartSelectedIds);
   if (mentioned.length > 0) {
+    if (options?.autoEnabled) {
+      return mentioned.filter((id) => cartSelectedIds.includes(id));
+    }
     const activeMentioned = mentioned.filter((id) =>
       roundTableActiveIds.includes(id),
     );
     return activeMentioned.length > 0 ? activeMentioned : [];
   }
+
+  if (options?.autoEnabled) {
+    const picked = selectAutoModels({
+      message: content,
+      goal: options.goal,
+      candidateIds: cartSelectedIds,
+      deeperEnabled: options.deeperEnabled,
+      hasWorkspace: options.hasWorkspace,
+    });
+    return picked;
+  }
+
   return [...roundTableActiveIds];
 }
 

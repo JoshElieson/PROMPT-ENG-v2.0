@@ -29,6 +29,7 @@ import { MentionAutocomplete } from "@/components/chat/MentionAutocomplete";
 import { SlashCommandAutocomplete } from "@/components/chat/SlashCommandAutocomplete";
 import { Button } from "@/components/ui/button";
 import { useAppSelection } from "@/contexts/AppSelectionContext";
+import { useModelMode } from "@/contexts/ModelModeContext";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { useChats } from "@/contexts/ChatsContext";
 import { useProjects } from "@/contexts/ProjectsContext";
@@ -103,6 +104,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     useChats();
   const { selectWorkspaceScreen, focusWorkspaceScreen } = useAppSelection();
   const { setPermissions, setDirectoryPermissions } = useProjects();
+  const { autoEnabled, deeperEnabled, setLastAutoPickedIds } = useModelMode();
   const { selectedIds, activeIds, roundTableModels } = useChatRoundTable();
 
   const mentionableIds = useMemo(
@@ -668,11 +670,33 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     const trimmed = input.trim();
     if (!trimmed && attachments.length === 0) return;
 
-    const targets = resolveTargetModelIds(trimmed, selectedIds, activeIds);
+    const chatGoal =
+      activeChat?.id === chatId
+        ? activeChat.title
+        : chats.find((c) => c.id === chatId)?.title;
 
-    if (parseMentions(trimmed, selectedIds).length > 0 && targets.length === 0) {
+    const hasMentions = parseMentions(trimmed, selectedIds).length > 0;
+
+    if (autoEnabled) {
+      setLastAutoPickedIds([]);
+    }
+
+    const targets = resolveTargetModelIds(trimmed, selectedIds, activeIds, {
+      autoEnabled,
+      deeperEnabled,
+      goal: chatGoal,
+      hasWorkspace: (aiWorkspace?.enabledPaths.length ?? 0) > 0,
+    });
+
+    if (autoEnabled) {
+      setLastAutoPickedIds(targets);
+    }
+
+    if (hasMentions && targets.length === 0) {
       setError(
-        "Turn on mentioned models in the Round Table, or remove their @ mentions.",
+        autoEnabled
+          ? "Add mentioned models to your Model Cart, or remove their @ mentions."
+          : "Turn on mentioned models in the Round Table, or remove their @ mentions.",
       );
       return;
     }
@@ -680,6 +704,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     if (targets.length === 0) {
       if (selectedIds.length === 0) {
         setError("Add at least one model to your Model Cart to send a message.");
+      } else if (autoEnabled) {
+        setError(
+          "No supported models in your Model Cart. Add GPT, Claude, Gemini, DeepSeek, or Grok.",
+        );
       } else if (activeIds.length === 0) {
         setError("Turn on at least one agent in the Round Table to send a message.");
       } else {
@@ -959,33 +987,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
             </div>
           )}
 
-          {(isResponding || queuedCount > 0) && (
+          {queuedCount > 0 && (
             <section
-              className={cn(
-                "flex items-center gap-2 border-b border-border-subtle px-3 py-2 text-xs",
-                queuedCount > 0
-                  ? "bg-amber-500/10 text-amber-200/90"
-                  : "bg-panel-elevated/75 text-muted-foreground",
-              )}
+              className="flex items-center gap-2 border-b border-border-subtle bg-amber-500/10 px-3 py-2 text-xs text-amber-200/90"
               aria-live="polite"
             >
               <Clock className="h-3.5 w-3.5 shrink-0 opacity-80" />
               <span className="min-w-0 flex-1">
-                {queuedCount > 0 ? (
-                  <>
-                    <span className="font-medium text-foreground/90">
-                      {queuedCount === 1
-                        ? "1 message queued"
-                        : `${queuedCount} messages queued`}
-                    </span>
-                    <span className="text-muted">
-                      {" "}
-                      — sends after the agent finishes
-                    </span>
-                  </>
-                ) : (
-                  "Agent responding — you can keep typing; send to queue another message"
-                )}
+                <span className="font-medium text-foreground/90">
+                  {queuedCount === 1
+                    ? "1 message queued"
+                    : `${queuedCount} messages queued`}
+                </span>
+                <span className="text-muted">
+                  {" "}
+                  — sends after the agent finishes
+                </span>
               </span>
             </section>
           )}
@@ -1018,7 +1035,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                 onDragOver={handleComposerDragOver}
                 onDrop={handleComposerDrop}
                 minRows={1}
-                placeholder="Ask anything… / for commands, @ for models"
+                placeholder="Plan, Build, / for commands, @ for context"
               />
             </div>
             <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5">

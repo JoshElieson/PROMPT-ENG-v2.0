@@ -49,7 +49,9 @@ interface LayoutContextValue {
   registerLeftSidebarToggle: (fn: SidebarControlFn) => () => void;
   notifyRightSidebarCollapsed: (collapsed: boolean) => void;
   notifyLeftSidebarCollapsed: (collapsed: boolean) => void;
+  rightSidebarCollapsed: boolean;
   leftSidebarCollapsed: boolean;
+  setRightSidebarCollapsed: (collapsed: boolean) => void;
   setLeftSidebarViewVisible: (view: "explorer" | "agents", visible: boolean) => void;
   dispatchMenuAction: (action: MenuActionId) => void;
   workspaceBottomPanelOpen: boolean;
@@ -93,6 +95,9 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     useState<BottomPanelBootTab | null>(null);
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() =>
     loadLayoutBool(LEFT_SIDEBAR_COLLAPSED_KEY, false),
+  );
+  const [rightSidebarCollapsed, setRightSidebarCollapsedState] = useState(() =>
+    loadLayoutBool(RIGHT_SIDEBAR_COLLAPSED_KEY, false),
   );
 
   const rightSidebarExpandRef = useRef<SidebarControlFn | null>(null);
@@ -174,6 +179,7 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   );
 
   const notifyRightSidebarCollapsed = useCallback((collapsed: boolean) => {
+    setRightSidebarCollapsedState(collapsed);
     if (collapsed) {
       setRightPanels(HIDDEN_RIGHT_PANELS);
     }
@@ -182,6 +188,21 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   const notifyLeftSidebarCollapsed = useCallback((collapsed: boolean) => {
     setLeftSidebarCollapsed(collapsed);
   }, []);
+
+  const setRightSidebarCollapsed = useCallback(
+    (collapsed: boolean) => {
+      if (collapsed) {
+        if (!rightSidebarCollapsed) {
+          toggleRightSidebar();
+        }
+        return;
+      }
+      if (rightSidebarCollapsed) {
+        expandRightSidebar();
+      }
+    },
+    [expandRightSidebar, rightSidebarCollapsed, toggleRightSidebar],
+  );
 
   const setLeftSidebarViewVisible = useCallback(
     (view: "explorer" | "agents", visible: boolean) => {
@@ -289,7 +310,9 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
         registerLeftSidebarToggle,
         notifyRightSidebarCollapsed,
         notifyLeftSidebarCollapsed,
+        rightSidebarCollapsed,
         leftSidebarCollapsed,
+        setRightSidebarCollapsed,
         setLeftSidebarViewVisible,
         dispatchMenuAction,
         workspaceBottomPanelOpen,

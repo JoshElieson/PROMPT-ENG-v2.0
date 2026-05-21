@@ -122,6 +122,7 @@ interface MessageBubbleProps {
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isSent = message.role === "user";
   const showModelBlend =
+    !isSent &&
     message.modelContributions != null &&
     message.modelContributions.length > 0;
 

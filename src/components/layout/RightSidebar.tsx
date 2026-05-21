@@ -14,9 +14,11 @@ import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import { ModelLogo } from "@/components/models/ModelLogo";
 import { popularAiModels } from "@/data/ai-models";
 import { useApiUsage } from "@/contexts/ApiUsageContext";
+import { useModelMode } from "@/contexts/ModelModeContext";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { useLayout, type RightPanelId } from "@/contexts/LayoutContext";
 import { formatCostUsd, formatTokenCount } from "@/lib/token-usage";
+import { workspaceHeaderRowClass } from "@/lib/workspace-header";
 import { cn } from "@/lib/utils";
 
 const ROUND_TABLE_DESCRIPTION =
@@ -90,8 +92,13 @@ const ModelRow = memo(function ModelRow({
 });
 
 function RoundTableSection({ onClose }: { onClose: () => void }) {
-  const [autoEnabled, setAutoEnabled] = useState(true);
-  const [deeperEnabled, setDeeperEnabled] = useState(false);
+  const {
+    autoEnabled,
+    deeperEnabled,
+    setAutoEnabled,
+    setDeeperEnabled,
+    lastAutoPickedIds,
+  } = useModelMode();
   const {
     selectedIds,
     activeIds,
@@ -114,109 +121,113 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
       fill
       onClose={onClose}
     >
-      <ScrollArea className="h-full">
-        <section className="p-4">
-          <section className="mb-2">
-            <div className="flex items-center justify-between gap-1.5 py-1">
-              <div className="flex shrink-0 items-center gap-1.5">
-                <Tooltip delayDuration={150}>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-medium text-muted-foreground">
-                        Auto
-                      </span>
-                      <Switch
-                        checked={autoEnabled}
-                        onCheckedChange={setAutoEnabled}
-                        aria-label="Toggle Auto mode"
-                        className="scale-[0.85]"
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" align="start" className="max-w-[260px]">
-                    <p className="text-sm font-semibold">Auto</p>
-                    <p>
-                      Uses models that balance intelligence and cost efficiency.
-                      Useful for everyday tasks.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip delayDuration={150}>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-medium text-muted-foreground">
-                        Deeper
-                      </span>
-                      <Switch
-                        checked={deeperEnabled}
-                        onCheckedChange={setDeeperEnabled}
-                        aria-label="Toggle Deeper mode"
-                        className="scale-[0.85]"
-                      />
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" align="start" className="max-w-[260px]">
-                    <p className="text-sm font-semibold">Deeper</p>
-                    <p>
-                      Uses the most capable models available. Recommended for
-                      complex tasks.
-                    </p>
-                    <p className="mt-1 text-muted">Billed at the model&apos;s API price.</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <p className="min-w-0 max-w-[11.5rem] text-right text-[10px] leading-[1.3] text-muted">
-                {activeCount > 0 ? (
-                  <span className="inline-flex flex-col items-start gap-0.5 text-left">
-                    <span>
-                      Active:{" "}
-                      <span className="font-medium text-foreground">
-                        {activeCount}
-                      </span>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <section className={workspaceHeaderRowClass(true, "justify-between gap-1.5 px-3")}>
+          <div className="flex shrink-0 items-center gap-1.5">
+              <Tooltip delayDuration={150}>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      Auto
                     </span>
-                    <span>
-                      Total Input:{" "}
-                      <span className="font-medium text-foreground">
-                        {allocationSum}%
-                      </span>
-                    </span>
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">
-                    No models active for chat
-                  </span>
-                )}
-              </p>
-            </div>
-          </section>
-          {tableModels.length === 0 ? (
-            <p className="text-xs text-muted">
-              Add models in the Model Cart to configure this panel.
-            </p>
-          ) : (
-            <>
-              <section className="space-y-1">
-                {tableModels.map((model) => {
-                  const active = isActive(model.id);
-                  return (
-                    <ModelRow
-                      key={model.id}
-                      modelId={model.id}
-                      name={model.name}
-                      role={model.role}
-                      orgId={model.orgId}
-                      weight={weightById.get(model.id) ?? 0}
-                      active={active}
-                      onToggle={toggleActive}
-                      onWeightChange={setModelWeight}
+                    <Switch
+                      checked={autoEnabled}
+                      onCheckedChange={setAutoEnabled}
+                      aria-label="Toggle Auto mode"
+                      className="scale-[0.85]"
                     />
-                  );
-                })}
-              </section>
-            </>
-          )}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start" className="max-w-[260px]">
+                  <p className="text-sm font-semibold">Auto</p>
+                  <p>
+                    Picks the best 1–2 models from your Model Cart for each
+                    message. Badges appear only after Auto chooses who responds.
+                  </p>
+                  {autoEnabled && lastAutoPickedIds.length > 0 && (
+                    <p className="mt-1 text-muted">
+                      Last send:{" "}
+                      {lastAutoPickedIds
+                        .map((id) => popularAiModels.find((m) => m.id === id)?.name ?? id)
+                        .join(" + ")}
+                    </p>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip delayDuration={150}>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      Deeper
+                    </span>
+                    <Switch
+                      checked={deeperEnabled}
+                      onCheckedChange={setDeeperEnabled}
+                      aria-label="Toggle Deeper mode"
+                      className="scale-[0.85]"
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start" className="max-w-[260px]">
+                  <p className="text-sm font-semibold">Deeper</p>
+                  <p>
+                    Uses the most capable models available. Recommended for
+                    complex tasks.
+                  </p>
+                  <p className="mt-1 text-muted">Billed at the model&apos;s API price.</p>
+                </TooltipContent>
+              </Tooltip>
+          </div>
+          <p className="shrink-0 text-[10px] leading-none text-muted">
+              {activeCount > 0 ? (
+                <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                  <span>
+                    Active:{" "}
+                    <span className="font-medium text-foreground">
+                      {activeCount}
+                    </span>
+                  </span>
+                  <span>
+                    Total Input:{" "}
+                    <span className="font-medium text-foreground">
+                      {allocationSum}%
+                    </span>
+                  </span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  No models active for chat
+                </span>
+              )}
+            </p>
         </section>
-      </ScrollArea>
+        <ScrollArea className="min-h-0 flex-1">
+          <section className="space-y-1 px-3 py-3">
+            {tableModels.length === 0 ? (
+              <p className="text-xs text-muted">
+                Add models in the Model Cart to configure this panel.
+              </p>
+            ) : (
+              tableModels.map((model) => {
+                const active = isActive(model.id);
+                return (
+                  <ModelRow
+                    key={model.id}
+                    modelId={model.id}
+                    name={model.name}
+                    role={model.role}
+                    orgId={model.orgId}
+                    weight={weightById.get(model.id) ?? 0}
+                    active={active}
+                    onToggle={toggleActive}
+                    onWeightChange={setModelWeight}
+                  />
+                );
+              })
+            )}
+          </section>
+        </ScrollArea>
+      </div>
     </SidebarPanel>
   );
 }

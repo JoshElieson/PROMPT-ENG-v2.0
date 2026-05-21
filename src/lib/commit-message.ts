@@ -1,4 +1,6 @@
 import type { GitFileChange } from "@/types/git";
+import { aiChatComplete, type ChatTurn } from "@/lib/ai-chat";
+import { formatInvokeError } from "@/lib/git";
 
 export interface CommitChatMessage {
   id: string;
@@ -43,10 +45,74 @@ function inferType(changes: GitFileChange[]): string {
   return "chore";
 }
 
-/** Placeholder — later this will call the model API with your staged diff. */
-export function generateCommitMessageWithAi(_changes: GitFileChange[]): string {
-  void _changes;
-  return "test 1.0";
+export const COMMIT_MESSAGE_MODEL_ID = "gpt4o";
+
+const COMMIT_MESSAGE_SYSTEM = `You write git commit messages.
+
+Rules:
+- Return exactly one single-line summary of what changed.
+- Output must be 1 to 7 words total.
+- Be as specific as possible about the actual change.
+- No prefixes like "feat:" or "fix:".
+- No body text, no quotes, no markdown, no backticks, no trailing period.
+- Prefer concrete nouns/verbs from the changed files.
+- If input is vague, return: update project files`;
+
+function toChangesContext(changes: GitFileChange[]): string {
+  return changes
+    .map((change) => {
+      const stagedLabel = change.staged ? "staged" : "unstaged";
+      return `- ${change.status} (${stagedLabel}): ${change.path}`;
+    })
+    .join("\n");
+}
+
+function normalizeCommitSubject(raw: string): string {
+  let text = raw.trim();
+  if (!text) return "";
+  if (text.startsWith("```")) {
+    const lines = text.split("\n");
+    if (lines[0]?.match(/^```/)) lines.shift();
+    const last = lines[lines.length - 1];
+    if (last?.match(/^```/)) lines.pop();
+    text = lines.join("\n").trim();
+  }
+  text = text.split(/\r?\n/)[0]?.trim() ?? "";
+  text = text.replace(/^["'`]+|["'`]+$/g, "").trim();
+  text = text.replace(/\.+$/, "").trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length > 7) {
+    text = words.slice(0, 7).join(" ");
+  }
+  return text;
+}
+
+export async function generateCommitMessageWithAi(
+  changes: GitFileChange[],
+): Promise<string> {
+  if (changes.length === 0) {
+    return "update project files";
+  }
+
+  const prompt = `Summarize exactly what changed in 1-7 words:
+${toChangesContext(changes)}
+`;
+  const messages: ChatTurn[] = [{ role: "user", content: prompt }];
+
+  try {
+    const raw = await aiChatComplete(
+      COMMIT_MESSAGE_MODEL_ID,
+      messages,
+      null,
+      COMMIT_MESSAGE_SYSTEM,
+    );
+    const normalized = normalizeCommitSubject(raw);
+    return normalized || "update project files";
+  } catch (error) {
+    throw new Error(
+      formatInvokeError(error, "Could not generate a commit message with AI."),
+    );
+  }
 }
 
 export const GENERATE_COMMIT_AI_TOOLTIP = "Generate using AI";
@@ -66,14 +132,13 @@ export function suggestCommitMessage(changes: GitFileChange[]): string {
   return `${type}: ${headline}\n\n${summary}`;
 }
 
-export function replyToCommitChat(
+export async function replyToCommitChat(
   userText: string,
   changes: GitFileChange[],
   currentDraft: string,
-): CommitChatMessage {
+): Promise<CommitChatMessage> {
   const lower = userText.toLowerCase();
   const suggested = suggestCommitMessage(changes);
-  const aiSuggested = generateCommitMessageWithAi(changes);
 
   if (
     lower.includes("generate") ||
@@ -81,13 +146,29 @@ export function replyToCommitChat(
     lower.includes("write") ||
     lower.trim() === ""
   ) {
+    let aiSuggested: string | undefined;
+    let content =
+      "Here's a commit message from AI. Click **Use message** to apply it.";
+    if (changes.length > 0) {
+      try {
+        aiSuggested = await generateCommitMessageWithAi(changes);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "AI generation failed.";
+        return {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `I couldn't generate with AI right now: ${message}`,
+          suggestedCommit: suggested.split("\n")[0] ?? "update project files",
+        };
+      }
+    } else {
+      content = "No pending changes to summarize. Stage or edit files first.";
+    }
     return {
       id: crypto.randomUUID(),
       role: "assistant",
-      content:
-        changes.length === 0
-          ? "No pending changes to summarize. Stage or edit files first."
-          : "Here's a commit message from AI. Click **Use message** to apply it.",
+      content,
       suggestedCommit: changes.length > 0 ? aiSuggested : undefined,
     };
   }

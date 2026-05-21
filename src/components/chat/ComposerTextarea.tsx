@@ -144,8 +144,21 @@ export const ComposerTextarea = forwardRef<
     [onChange, resizeToContent],
   );
 
+  const showPlaceholder = Boolean(placeholder) && value.length === 0;
+
   return (
     <div className="relative grid [&>*]:col-start-1 [&>*]:row-start-1">
+      {showPlaceholder && (
+        <div
+          aria-hidden
+          className={cn(
+            composerTextClass,
+            "pointer-events-none select-none whitespace-pre-wrap break-words text-muted-foreground/35",
+          )}
+        >
+          {placeholder}
+        </div>
+      )}
       <div
         ref={highlightRef}
         aria-hidden

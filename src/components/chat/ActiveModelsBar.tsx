@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { LayoutMenu } from "@/components/layout/LayoutMenu";
 import { ModelLogo } from "@/components/models/ModelLogo";
+import { useModelMode } from "@/contexts/ModelModeContext";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { getModelById, type AiModel } from "@/data/ai-models";
 import { cn } from "@/lib/utils";
@@ -39,14 +40,22 @@ export function ActiveModelsBar({
   /** When true, floats over chat content without a header background. */
   overlay?: boolean;
 }) {
+  const { autoEnabled, lastAutoPickedIds } = useModelMode();
   const { activeIds } = useChatRoundTable();
+
+  const displayIds = useMemo(() => {
+    if (autoEnabled) {
+      return lastAutoPickedIds;
+    }
+    return activeIds;
+  }, [autoEnabled, lastAutoPickedIds, activeIds]);
 
   const models = useMemo(
     () =>
-      activeIds
+      displayIds
         .map((id) => getModelById(id))
         .filter((m): m is AiModel => m != null),
-    [activeIds],
+    [displayIds],
   );
 
   if (models.length === 0 && !trailing && !showLayoutMenu) {
@@ -57,6 +66,7 @@ export function ActiveModelsBar({
   const hiddenCount = Math.max(0, models.length - MAX_VISIBLE_MODELS);
 
   if (overlay) {
+    if (models.length === 0) return null;
     return (
       <section className="pointer-events-none absolute bottom-[calc(var(--spacing-workspace-dock)+0.5rem)] left-0 z-10 p-2">
         <div className="pointer-events-auto flex flex-col-reverse gap-1.5">

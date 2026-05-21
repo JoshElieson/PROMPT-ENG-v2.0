@@ -4,10 +4,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import * as git from "@/lib/git";
+import { listenProjectFsChanged, syncProjectFsWatchers } from "@/lib/fs-watch";
+import { pathsEqual } from "@/lib/project-paths";
 import { useChats } from "@/contexts/ChatsContext";
 import { useProjects } from "@/contexts/ProjectsContext";
 import type { GitCommandResult, GitStatusResult } from "@/types/git";
@@ -42,6 +45,11 @@ const EMPTY_STATUS: GitStatusResult = {
   clean: true,
 };
 
+function isGitInternalPath(path: string): boolean {
+  const normalized = path.replace(/\\/g, "/").toLowerCase();
+  return normalized.includes("/.git/");
+}
+
 export function GitProvider({ children }: { children: ReactNode }) {
   const { projects } = useProjects();
   const { activeChatId, activeChat, setChatGitProject } = useChats();
@@ -73,6 +81,7 @@ export function GitProvider({ children }: { children: ReactNode }) {
   const [isOperating, setIsOperating] = useState(false);
   const [lastMessage, setLastMessage] = useState<string | null>(null);
   const [lastMessageOk, setLastMessageOk] = useState(true);
+  const fsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setMessage = useCallback((ok: boolean, text: string) => {
     setLastMessageOk(ok);
@@ -103,6 +112,47 @@ export function GitProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const roots = projects.map((project) => project.rootPath);
+    void syncProjectFsWatchers(roots);
+  }, [projects]);
+
+  useEffect(() => {
+    if (!repoPath) return;
+
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+
+    void listenProjectFsChanged((event) => {
+      if (cancelled) return;
+      if (!pathsEqual(event.rootPath, repoPath)) return;
+      if (
+        event.paths.length > 0 &&
+        event.paths.every((path) => isGitInternalPath(path))
+      ) {
+        return;
+      }
+      if (fsRefreshTimerRef.current) {
+        clearTimeout(fsRefreshTimerRef.current);
+      }
+      fsRefreshTimerRef.current = setTimeout(() => {
+        fsRefreshTimerRef.current = null;
+        void refresh();
+      }, 400);
+    }).then((fn) => {
+      if (!cancelled) unlisten = fn;
+    });
+
+    return () => {
+      cancelled = true;
+      if (fsRefreshTimerRef.current) {
+        clearTimeout(fsRefreshTimerRef.current);
+        fsRefreshTimerRef.current = null;
+      }
+      unlisten?.();
+    };
+  }, [repoPath, refresh]);
 
   const runOp = useCallback(
     async (label: string, fn: () => Promise<GitCommandResult>) => {

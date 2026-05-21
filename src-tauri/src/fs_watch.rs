@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use notify::event::{Event, EventKind};
+use notify::event::{CreateKind, DataChange, Event, EventKind, ModifyKind, RemoveKind, RenameMode};
 use notify::{Config, Error, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -43,7 +43,23 @@ fn normalize_root(path: &str) -> String {
 fn is_relevant(kind: &EventKind) -> bool {
     matches!(
         kind,
-        EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_) | EventKind::Any
+        EventKind::Any
+            | EventKind::Create(CreateKind::Any)
+            | EventKind::Create(CreateKind::File)
+            | EventKind::Create(CreateKind::Folder)
+            | EventKind::Remove(RemoveKind::Any)
+            | EventKind::Remove(RemoveKind::File)
+            | EventKind::Remove(RemoveKind::Folder)
+            | EventKind::Modify(ModifyKind::Any)
+            | EventKind::Modify(ModifyKind::Metadata(_))
+            | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
+            | EventKind::Modify(ModifyKind::Name(RenameMode::From))
+            | EventKind::Modify(ModifyKind::Name(RenameMode::To))
+            | EventKind::Modify(ModifyKind::Name(RenameMode::Both))
+            | EventKind::Modify(ModifyKind::Name(RenameMode::Other))
+            | EventKind::Modify(ModifyKind::Data(DataChange::Any))
+            | EventKind::Modify(ModifyKind::Data(DataChange::Content))
+            | EventKind::Modify(ModifyKind::Data(DataChange::Size))
     )
 }
 

@@ -16,7 +16,7 @@ export interface ModelResponsePayload {
   content: string;
 }
 
-/** App model ids backed by OpenAI, Anthropic, or Gemini in the Tauri layer. */
+/** App model ids backed by configured providers in the Tauri layer. */
 export const SUPPORTED_AI_MODEL_IDS = new Set([
   "gpt4o",
   "gpt4-turbo",
@@ -26,6 +26,11 @@ export const SUPPORTED_AI_MODEL_IDS = new Set([
   "gemini",
   "gemini-flash",
   "deepseek",
+  "grok",
+  "grok-fast",
+  "grok-reasoning",
+  "grok-multi",
+  "grok-code",
 ]);
 
 export function isAiModelSupported(modelId: string): boolean {
