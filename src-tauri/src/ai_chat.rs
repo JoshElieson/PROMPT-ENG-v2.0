@@ -1,5 +1,6 @@
 use crate::ai_config::{
-    api_key, base_url, resolve_api_model, synthesis_provider_for_models, Provider,
+    api_key, base_url, resolve_api_model, synthesis_provider_for_models, validate_base_url,
+    Provider,
 };
 use crate::xai_models::{
     default_account_chat_model, invalidate_cache, is_model_not_found_error, resolve_runtime_model,
@@ -245,6 +246,7 @@ async fn complete_openai(
 ) -> Result<String, String> {
     let key = api_key(Provider::OpenAi).expect("key checked");
     let base = base_url(Provider::OpenAi, "https://api.openai.com/v1");
+    validate_base_url(Provider::OpenAi, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
 
     let mut api_messages: Vec<serde_json::Value> = Vec::new();
@@ -315,6 +317,7 @@ async fn openai_agent_loop(
 ) -> Result<String, String> {
     let key = api_key(Provider::OpenAi).expect("key checked");
     let base = base_url(Provider::OpenAi, "https://api.openai.com/v1");
+    validate_base_url(Provider::OpenAi, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
     let tools = tools_schema_openai();
@@ -408,6 +411,7 @@ async fn complete_deepseek(
 ) -> Result<String, String> {
     let key = api_key(Provider::DeepSeek).expect("key checked");
     let base = base_url(Provider::DeepSeek, "https://api.deepseek.com/v1");
+    validate_base_url(Provider::DeepSeek, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
 
     let mut api_messages: Vec<serde_json::Value> = Vec::new();
@@ -478,6 +482,7 @@ async fn deepseek_agent_loop(
 ) -> Result<String, String> {
     let key = api_key(Provider::DeepSeek).expect("key checked");
     let base = base_url(Provider::DeepSeek, "https://api.deepseek.com/v1");
+    validate_base_url(Provider::DeepSeek, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
     let tools = tools_schema_openai();
@@ -571,6 +576,7 @@ async fn complete_xai_once(
 ) -> Result<String, String> {
     let key = api_key(Provider::Xai).expect("key checked");
     let base = base_url(Provider::Xai, "https://api.x.ai/v1");
+    validate_base_url(Provider::Xai, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
 
     let mut api_messages: Vec<serde_json::Value> = Vec::new();
@@ -657,6 +663,7 @@ async fn xai_agent_loop_once(
 ) -> Result<String, String> {
     let key = api_key(Provider::Xai).expect("key checked");
     let base = base_url(Provider::Xai, "https://api.x.ai/v1");
+    validate_base_url(Provider::Xai, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
     let tools = tools_schema_openai();
@@ -828,6 +835,7 @@ async fn complete_anthropic(
 ) -> Result<String, String> {
     let key = api_key(Provider::Anthropic).expect("key checked");
     let base = base_url(Provider::Anthropic, "https://api.anthropic.com");
+    validate_base_url(Provider::Anthropic, &base)?;
     let url = format!("{}/v1/messages", base.trim_end_matches('/'));
 
     let mut api_messages: Vec<serde_json::Value> = Vec::new();
@@ -909,6 +917,7 @@ async fn anthropic_agent_loop(
 ) -> Result<String, String> {
     let key = api_key(Provider::Anthropic).expect("key checked");
     let base = base_url(Provider::Anthropic, "https://api.anthropic.com");
+    validate_base_url(Provider::Anthropic, &base)?;
     let url = format!("{}/v1/messages", base.trim_end_matches('/'));
     let client = http_client()?;
     let tools = anthropic_tools();
@@ -1085,6 +1094,7 @@ async fn complete_gemini(
         Provider::Google,
         "https://generativelanguage.googleapis.com/v1beta",
     );
+    validate_base_url(Provider::Google, &base)?;
     let url = format!(
         "{}/models/{}:generateContent?key={}",
         base.trim_end_matches('/'),
@@ -1154,6 +1164,7 @@ async fn gemini_agent_loop(
         Provider::Google,
         "https://generativelanguage.googleapis.com/v1beta",
     );
+    validate_base_url(Provider::Google, &base)?;
     let url = format!(
         "{}/models/{}:generateContent?key={}",
         base.trim_end_matches('/'),
@@ -1312,6 +1323,7 @@ pub async fn ai_chat_complete(
 pub async fn ai_chat_synthesize(
     user_message: String,
     model_responses: Vec<ModelResponse>,
+    system: Option<String>,
 ) -> Result<String, String> {
     if model_responses.is_empty() {
         return Err("No model responses to synthesize.".to_string());
@@ -1327,10 +1339,15 @@ pub async fn ai_chat_synthesize(
         lines.push_str(&format!("### {label}\n{}\n\n", entry.content));
     }
 
-    let system = "You synthesize multiple AI assistant answers into one clear, unified reply. \
+    let default_system = "You synthesize multiple AI assistant answers into one clear, unified reply. \
 Incorporate the strongest points; avoid repeating the same idea. Do not mention round tables \
 or that you are merging sources unless the user asked for that process. \
 When the merged answer includes code, use fenced markdown code blocks with a language tag (e.g. ```python).";
+    let synthesis_system = system
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(default_system);
 
     let user_prompt = format!(
         "User message:\n{user_message}\n\nAssistant responses to merge:\n{lines}\n\
@@ -1359,5 +1376,5 @@ Write one cohesive answer for the user."
         Provider::Xai => "grok",
     };
 
-    complete_for_model(model_id, &messages, Some(system)).await
+    complete_for_model(model_id, &messages, Some(synthesis_system)).await
 }

@@ -67,6 +67,8 @@ export interface SendMessagePayload {
   attachments?: ChatAttachment[];
   targetModelIds: string[];
   modelContributions?: ModelContribution[];
+  /** When true, ask models to spend more effort on depth and quality. */
+  deepReasoning?: boolean;
   /** When set and non-empty, models may use read_file / write_file / list_directory tools. */
   workspace?: AiWorkspacePayload;
   /** Sidebar chat id (workspace container). */

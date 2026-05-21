@@ -728,6 +728,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       attachments: attachments.length > 0 ? attachments : undefined,
       targetModelIds: targets,
       modelContributions,
+      deepReasoning: deeperEnabled,
       workspace: aiWorkspace,
       chatId,
       threadId,

@@ -71,8 +71,10 @@ export async function aiChatComplete(
 export async function aiChatSynthesize(
   userMessage: string,
   modelResponses: ModelResponsePayload[],
+  system?: string | null,
 ): Promise<string> {
   requireTauri();
+  const systemPrompt = system?.trim();
   try {
     return await invoke<string>("ai_chat_synthesize", {
       userMessage,
@@ -81,6 +83,7 @@ export async function aiChatSynthesize(
         modelName: r.modelName ?? getModelById(r.modelId)?.name,
         content: r.content,
       })),
+      system: systemPrompt ? systemPrompt : null,
     });
   } catch (error) {
     throw new Error(

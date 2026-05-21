@@ -87,6 +87,84 @@ pub fn base_url(provider: Provider, default: &str) -> String {
         .unwrap_or_else(|| default.to_string())
 }
 
+fn provider_name(provider: Provider) -> &'static str {
+    match provider {
+        Provider::OpenAi => "OpenAI",
+        Provider::Anthropic => "Anthropic",
+        Provider::Google => "Gemini",
+        Provider::DeepSeek => "DeepSeek",
+        Provider::Xai => "xAI",
+    }
+}
+
+fn lowercase_trimmed(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+pub fn validate_resolved_model(provider: Provider, api_model: &str) -> Result<(), String> {
+    let model = lowercase_trimmed(api_model);
+    let matches_provider = match provider {
+        Provider::OpenAi => {
+            !(model.starts_with("claude")
+                || model.starts_with("gemini")
+                || model.starts_with("deepseek")
+                || model.starts_with("grok"))
+        }
+        Provider::Anthropic => model.starts_with("claude"),
+        Provider::Google => model.starts_with("gemini"),
+        Provider::DeepSeek => model.starts_with("deepseek"),
+        Provider::Xai => model.starts_with("grok"),
+    };
+
+    if matches_provider {
+        return Ok(());
+    }
+
+    let hint = match provider {
+        Provider::OpenAi => "Use OPENAI_MODEL for GPT/o-series models only.",
+        Provider::Anthropic => "Use ANTHROPIC_MODEL with a Claude model id.",
+        Provider::Google => "Use GEMINI_MODEL with a Gemini model id.",
+        Provider::DeepSeek => "Use DEEPSEEK_MODEL with a DeepSeek model id.",
+        Provider::Xai => "Use XAI_MODEL with a Grok model id.",
+    };
+
+    Err(format!(
+        "Resolved model \"{api_model}\" is not compatible with {}. {hint}",
+        provider_name(provider)
+    ))
+}
+
+pub fn validate_base_url(provider: Provider, url: &str) -> Result<(), String> {
+    let lower = lowercase_trimmed(url);
+    if lower.is_empty() {
+        return Ok(());
+    }
+
+    let looks_like_anthropic = lower.contains("anthropic.com");
+    let looks_like_openai = lower.contains("openai.com");
+    let looks_like_gemini = lower.contains("generativelanguage.googleapis.com");
+    let looks_like_deepseek = lower.contains("deepseek.com");
+    let looks_like_xai = lower.contains("x.ai");
+
+    let mismatch = match provider {
+        Provider::OpenAi => looks_like_anthropic || looks_like_gemini || looks_like_deepseek || looks_like_xai,
+        Provider::Anthropic => looks_like_openai || looks_like_gemini || looks_like_deepseek || looks_like_xai,
+        Provider::Google => looks_like_openai || looks_like_anthropic || looks_like_deepseek || looks_like_xai,
+        Provider::DeepSeek => looks_like_openai || looks_like_anthropic || looks_like_gemini || looks_like_xai,
+        Provider::Xai => looks_like_openai || looks_like_anthropic || looks_like_gemini || looks_like_deepseek,
+    };
+
+    if mismatch {
+        return Err(format!(
+            "{} base URL appears to target a different provider: {}",
+            provider_name(provider),
+            url.trim()
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn resolve_api_model(model_id: &str) -> Result<(Provider, String), String> {
     let model_id = model_id.trim();
     let provider = provider_for_model(model_id).ok_or_else(|| {
@@ -114,6 +192,7 @@ pub fn resolve_api_model(model_id: &str) -> Result<(Provider, String), String> {
         Provider::DeepSeek => resolve_deepseek_model(model_id),
         Provider::Xai => resolve_xai_model(model_id),
     };
+    validate_resolved_model(provider, &model)?;
 
     Ok((provider, model))
 }

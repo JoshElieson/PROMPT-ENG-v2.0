@@ -171,8 +171,9 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
                 <TooltipContent side="bottom" align="start" className="max-w-[260px]">
                   <p className="text-sm font-semibold">Deeper</p>
                   <p>
-                    Uses the most capable models available. Recommended for
-                    complex tasks.
+                    Toggle Deeper on to get higher-quality, more thoughtful
+                    responses and use the most capable models. This may take
+                    longer.
                   </p>
                   <p className="mt-1 text-muted">Billed at the model&apos;s API price.</p>
                 </TooltipContent>

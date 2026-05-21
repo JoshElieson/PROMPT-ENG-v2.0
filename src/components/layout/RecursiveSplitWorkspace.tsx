@@ -399,6 +399,17 @@ function ChatPaneBody({
     responseLoading.threadId === leaf.threadId
       ? responseLoading
       : null;
+  const loadingDisplayIds = useMemo(() => {
+    if (!loadingForPane) return [];
+    const speakingIdx = loadingForPane.speakingModelIndex;
+    if (
+      speakingIdx >= 0 &&
+      speakingIdx < loadingForPane.targetModelIds.length
+    ) {
+      return [loadingForPane.targetModelIds[speakingIdx]];
+    }
+    return loadingForPane.targetModelIds;
+  }, [loadingForPane]);
 
   const scrollElRef = useRef<HTMLDivElement>(null);
   const scrollWriteTimer = useRef(0);
@@ -550,7 +561,11 @@ function ChatPaneBody({
       tabIndex={-1}
       onMouseDown={handlePaneMouseDown}
     >
-      <ActiveModelsBar showLayoutMenu={false} overlay />
+      <ActiveModelsBar
+        showLayoutMenu={false}
+        overlay
+        displayIdsOverride={loadingDisplayIds}
+      />
 
       <div
         ref={scrollElRef}

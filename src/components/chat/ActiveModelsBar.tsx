@@ -33,22 +33,28 @@ export function ActiveModelsBar({
   trailing,
   showLayoutMenu = true,
   overlay = false,
+  displayIdsOverride,
 }: {
   trailing?: ReactNode;
   /** When false, hides the layouts menu (used inside chat thread tabs). */
   showLayoutMenu?: boolean;
   /** When true, floats over chat content without a header background. */
   overlay?: boolean;
+  /** Optional in-flight model ids to show instead of cart/auto defaults. */
+  displayIdsOverride?: string[];
 }) {
   const { autoEnabled, lastAutoPickedIds } = useModelMode();
   const { activeIds } = useChatRoundTable();
 
   const displayIds = useMemo(() => {
+    if (displayIdsOverride && displayIdsOverride.length > 0) {
+      return displayIdsOverride;
+    }
     if (autoEnabled) {
       return lastAutoPickedIds;
     }
     return activeIds;
-  }, [autoEnabled, lastAutoPickedIds, activeIds]);
+  }, [displayIdsOverride, autoEnabled, lastAutoPickedIds, activeIds]);
 
   const models = useMemo(
     () =>

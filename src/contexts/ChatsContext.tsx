@@ -91,6 +91,9 @@ interface ChatsContextValue {
 }
 
 const ChatsContext = createContext<ChatsContextValue | null>(null);
+const DEEP_REASONING_SYSTEM_PROMPT =
+  "Deep reasoning mode is enabled. Think carefully and take the time needed to produce a high-quality response. " +
+  "Prioritize correctness, depth, and clear structure over speed. Explain key assumptions, verify important steps, and avoid shallow answers.";
 
 function resolveActiveId(chats: Chat[], storedId: string | null): string | null {
   if (storedId && chats.some((c) => c.id === storedId)) return storedId;
@@ -174,6 +177,7 @@ type CommittedSend = {
   history: ChatTurn[];
   targetModelIds: string[];
   contributions: { modelId: string; percentage: number }[];
+  deepReasoning: boolean;
   workspace?: AiWorkspacePayload;
 };
 
@@ -638,6 +642,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       history: ChatTurn[],
       targetModelIds: string[],
       contributions: { modelId: string; percentage: number }[],
+      deepReasoning: boolean,
       workspace: AiWorkspacePayload | undefined,
     ) => {
       let modelOutputs: { modelId: string; content: string }[] = [];
@@ -744,6 +749,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       );
 
       try {
+        const systemPrompt = deepReasoning ? DEEP_REASONING_SYSTEM_PROMPT : null;
         if (targetModelIds.length === 1) {
           setResponseLoading({
             chatId,
@@ -757,6 +763,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             targetModelIds[0],
             history,
             workspace,
+            systemPrompt,
           );
           modelOutputs = [{ modelId: targetModelIds[0], content }];
           finish(content);
@@ -777,7 +784,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             speakingModelIndex: i,
           });
 
-          const content = await aiChatComplete(modelId, history, workspace);
+          const content = await aiChatComplete(
+            modelId,
+            history,
+            workspace,
+            systemPrompt,
+          );
           modelOutputs.push({ modelId, content });
         }
 
@@ -798,6 +810,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             modelName: getModelById(entry.modelId)?.name,
             content: entry.content,
           })),
+          systemPrompt,
         );
 
         finish(synthesized);
@@ -819,8 +832,14 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
   const startThreadAiRun = useCallback(
     (committed: CommittedSend) => {
-      const { resolvedChatId, finalThreadId, trimmed, history, targetModelIds } =
-        committed;
+      const {
+        resolvedChatId,
+        finalThreadId,
+        trimmed,
+        history,
+        targetModelIds,
+        deepReasoning,
+      } = committed;
       const key = threadResponseKey(resolvedChatId, finalThreadId);
       inFlightThreadsRef.current.add(key);
 
@@ -841,6 +860,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         history,
         targetModelIds,
         committed.contributions,
+        deepReasoning,
         committed.workspace,
       );
     },
@@ -884,6 +904,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         history,
         targetModelIds,
         contributions,
+        deepReasoning: payload.deepReasoning === true,
         workspace: payload.workspace,
       });
     },
@@ -983,6 +1004,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         history,
         targetModelIds,
         contributions,
+        deepReasoning: payload.deepReasoning === true,
         workspace: payload.workspace,
       });
     },
