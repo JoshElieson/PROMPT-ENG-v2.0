@@ -56,6 +56,16 @@ npm run tauri build
 
 Output: `src-tauri/target/release/bundle/`
 
+### Beta website release (v1.0)
+
+Use this to generate upload-ready files in one command:
+
+```bash
+npm run release:beta
+```
+
+This creates `release/1.0.0-1/` and copies installer artifacts plus `SHA256SUMS.txt` for integrity checks.
+
 ---
 
 ## Project layout
