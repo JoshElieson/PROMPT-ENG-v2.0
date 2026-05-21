@@ -142,7 +142,7 @@ export const appMenuGroups: MenuGroup[] = [
       { type: "separator" },
       {
         type: "item",
-        label: "Workspaces",
+        label: "Projects",
         shortcut: "Ctrl+Shift+E",
         action: "view.explorer",
         checkable: true,
@@ -152,12 +152,6 @@ export const appMenuGroups: MenuGroup[] = [
         label: "Agent Cart",
         shortcut: "Ctrl+Shift+A",
         action: "view.agentCart",
-        checkable: true,
-      },
-      {
-        type: "item",
-        label: "Models",
-        action: "view.roundTablePanel",
         checkable: true,
       },
       {

@@ -193,7 +193,9 @@ export function MenuBar({ className }: MenuBarProps) {
   const openMenuRef = useRef<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
 
-  openMenuRef.current = openMenu;
+  useEffect(() => {
+    openMenuRef.current = openMenu;
+  }, [openMenu]);
 
   const endSession = useCallback(() => {
     menuSession.current = false;

@@ -59,9 +59,9 @@ export function CommitMessageChat({
   );
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="shrink-0 border-t border-border-subtle">
+    <Collapsible open={open} onOpenChange={setOpen} className="border-border-subtle shrink-0 border-t">
       <div className="px-2 py-1">
-        <CollapsibleTrigger className="flex items-center gap-1 px-1 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground">
+        <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 px-1 py-0.5 text-[11px] font-medium">
           {open ? (
             <ChevronDown className="h-3 w-3" />
           ) : (
@@ -73,10 +73,10 @@ export function CommitMessageChat({
       <CollapsibleContent>
         <div
           ref={scrollRef}
-          className="mx-2 mb-2 max-h-36 space-y-2 overflow-y-auto rounded border border-border-subtle bg-surface p-2"
+          className="border-border-subtle bg-surface mx-2 mb-2 max-h-36 space-y-2 overflow-y-auto rounded border p-2"
         >
           {messages.length === 0 ? (
-            <p className="text-[11px] leading-relaxed text-muted">
+            <p className="text-muted text-[11px] leading-relaxed">
               Ask for a commit message based on your changes.
             </p>
           ) : (
@@ -88,13 +88,13 @@ export function CommitMessageChat({
                   msg.role === "user" ? "text-foreground" : "text-muted-foreground",
                 )}
               >
-                <span className="font-medium text-muted">
+                <span className="text-muted font-medium">
                   {msg.role === "user" ? "You" : "Assistant"}:{" "}
                 </span>
                 {msg.content}
                 {msg.suggestedCommit && (
-                  <div className="mt-1.5 rounded border border-border-subtle bg-panel p-2">
-                    <pre className="whitespace-pre-wrap font-sans text-[11px] text-foreground">
+                  <div className="border-border-subtle bg-panel mt-1.5 rounded border p-2">
+                    <pre className="text-foreground font-sans text-[11px] whitespace-pre-wrap">
                       {msg.suggestedCommit}
                     </pre>
                     <Button
@@ -125,7 +125,7 @@ export function CommitMessageChat({
             }}
             placeholder="Ask me to run git commands"
             disabled={disabled || isGenerating}
-            className="min-w-0 flex-1 rounded border border-border-subtle bg-panel px-2 py-1 text-[11px] text-foreground outline-none focus:border-accent"
+            className="border-border-subtle bg-panel text-foreground focus:border-accent min-w-0 flex-1 rounded border px-2 py-1 text-[11px] outline-none"
           />
           <Button
             type="button"

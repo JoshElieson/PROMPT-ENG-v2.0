@@ -10,5 +10,16 @@ export function useChatRoundTable(): PaneRoundTableContextValue {
   const pane = useContext(PaneRoundTableContext);
   const global = useRoundTable();
   if (pane) return pane;
-  return global as unknown as PaneRoundTableContextValue;
+  return {
+    selectedIds: global.selectedIds,
+    activeIds: global.activeIds,
+    roundTableModels: global.roundTableModels,
+    isSelected: global.isSelected,
+    isActive: global.isActive,
+    toggleModel: global.toggleModel,
+    deselectModels: global.deselectModels,
+    toggleActive: global.toggleActive,
+    activateOnlyModel: global.activateOnlyModel,
+    setModelWeight: global.setModelWeight,
+  };
 }

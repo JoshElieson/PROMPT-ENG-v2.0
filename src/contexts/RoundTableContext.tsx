@@ -9,8 +9,6 @@ import {
 } from "react";
 import {
   DEFAULT_ROUND_TABLE_IDS,
-  getModelById,
-  popularAiModels,
   type RoundTableModel,
 } from "@/data/ai-models";
 import {
@@ -18,6 +16,7 @@ import {
   DEFAULT_ROUND_TABLE_WEIGHTS,
   weightForModel,
 } from "@/lib/round-table-weights";
+import { buildRoundTableModels } from "@/lib/round-table-models";
 
 const WEIGHTS_STORAGE_KEY = "prompt:round-table-weights:v1";
 
@@ -36,19 +35,6 @@ function saveStoredWeights(weights: Record<string, number>): void {
   localStorage.setItem(WEIGHTS_STORAGE_KEY, JSON.stringify(weights));
 }
 
-function buildModelsFromWeights(
-  activeIds: string[],
-  weights: Record<string, number>,
-): RoundTableModel[] {
-  return activeIds
-    .map((id) => {
-      const model = getModelById(id);
-      if (!model) return null;
-      return { ...model, weight: weightForModel(weights, id) };
-    })
-    .filter((m): m is RoundTableModel => m != null);
-}
-
 interface RoundTableContextValue {
   selectedIds: string[];
   activeIds: string[];
@@ -58,6 +44,8 @@ interface RoundTableContextValue {
   toggleModel: (id: string) => void;
   deselectModels: (ids: string[]) => void;
   toggleActive: (id: string) => void;
+  /** Enable exactly one selected model for chat (disables all other active models). */
+  activateOnlyModel: (id: string) => void;
   setModelWeight: (id: string, weight: number) => void;
 }
 
@@ -141,6 +129,19 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
     });
   }, [selectedIds]);
 
+  const activateOnlyModel = useCallback((id: string) => {
+    if (!selectedIds.includes(id)) return;
+
+    setActiveIds([id]);
+    setWeights((w) => {
+      const restored = weightForModel(w, id);
+      return {
+        ...w,
+        [id]: restored > 0 ? restored : DEFAULT_ROUND_TABLE_WEIGHTS[id] ?? 100,
+      };
+    });
+  }, [selectedIds]);
+
   const setModelWeight = useCallback((id: string, weight: number) => {
     const clamped = clampWeight(weight);
     setWeights((prev) => ({
@@ -156,7 +157,7 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const roundTableModels = useMemo(
-    () => buildModelsFromWeights(activeIds, weights),
+    () => buildRoundTableModels(activeIds, weights),
     [activeIds, weights],
   );
 
@@ -180,6 +181,7 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
       toggleModel,
       deselectModels,
       toggleActive,
+      activateOnlyModel,
       setModelWeight,
     }),
     [
@@ -191,6 +193,7 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
       toggleModel,
       deselectModels,
       toggleActive,
+      activateOnlyModel,
       setModelWeight,
     ],
   );
@@ -209,5 +212,3 @@ export function useRoundTable() {
   }
   return ctx;
 }
-
-export { popularAiModels };

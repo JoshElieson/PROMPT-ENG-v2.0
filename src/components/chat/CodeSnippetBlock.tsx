@@ -53,23 +53,23 @@ export function CodeSnippetBlock({ language, code }: CodeSnippetBlockProps) {
   }, [canRun, code, repoPath]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-panel-elevated/85">
-      <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2">
-        <Code2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+    <div className="border-border bg-panel-elevated/85 overflow-hidden rounded-2xl border">
+      <div className="border-border-subtle flex items-center gap-2 border-b px-3 py-2">
+        <Code2 className="text-muted-foreground h-4 w-4 shrink-0" aria-hidden />
+        <span className="text-foreground min-w-0 flex-1 truncate text-sm font-semibold">
           {label}
         </span>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground h-7 w-7 shrink-0"
           title={copied ? "Copied" : "Copy code"}
           aria-label={copied ? "Copied" : "Copy code"}
           onClick={() => void handleCopy()}
         >
           {copied ? (
-            <Check className="h-3.5 w-3.5 text-success" aria-hidden />
+            <Check className="text-success h-3.5 w-3.5" aria-hidden />
           ) : (
             <Copy className="h-3.5 w-3.5" aria-hidden />
           )}
@@ -79,7 +79,7 @@ export function CodeSnippetBlock({ language, code }: CodeSnippetBlockProps) {
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 shrink-0 gap-1.5 rounded-full border-border bg-transparent px-3 text-xs font-medium text-foreground hover:bg-panel-elevated"
+            className="border-border text-foreground hover:bg-panel-elevated h-7 shrink-0 gap-1.5 rounded-full bg-transparent px-3 text-xs font-medium"
             title={
               repoPath
                 ? `Run in terminal (${repoPath})`
@@ -101,7 +101,7 @@ export function CodeSnippetBlock({ language, code }: CodeSnippetBlockProps) {
         />
       </pre>
       {runError && (
-        <p className="border-t border-border-subtle px-3 py-2 text-xs text-red-400">
+        <p className="border-border-subtle border-t px-3 py-2 text-xs text-red-400">
           {runError}
         </p>
       )}

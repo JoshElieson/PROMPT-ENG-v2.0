@@ -73,7 +73,7 @@ function ChatListItem({
 
   useEffect(() => {
     if (!isRenaming) return;
-    setDraftTitle(chat.title);
+    queueMicrotask(() => setDraftTitle(chat.title));
     const id = requestAnimationFrame(() => {
       const input = inputRef.current;
       input?.focus();
@@ -83,9 +83,9 @@ function ChatListItem({
   }, [isRenaming, chat.title]);
 
   const titleRow = (
-    <span className="flex min-w-0 max-w-full items-center gap-1.5">
+    <span className="flex max-w-full min-w-0 items-center gap-1.5">
       {chat.pinned ? (
-        <Pin className="h-3 w-3 shrink-0 text-accent" aria-label="Pinned" />
+        <Pin className="text-accent h-3 w-3 shrink-0" aria-label="Pinned" />
       ) : null}
       {isRenaming ? (
         <input
@@ -93,7 +93,7 @@ function ChatListItem({
           type="text"
           value={draftTitle}
           aria-label="Workspace name"
-          className="min-w-0 flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-sm text-foreground outline-none ring-1 ring-transparent focus:border-[#6366f1]/35 focus:ring-[#6366f1]/25"
+          className="border-border bg-background text-foreground min-w-0 flex-1 rounded border px-1.5 py-0.5 text-sm ring-1 ring-transparent outline-none focus:border-[#6366f1]/35 focus:ring-[#6366f1]/25"
           onChange={(e) => setDraftTitle(e.target.value)}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
@@ -144,11 +144,11 @@ function ChatListItem({
         )}
       >
         {isRenaming ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-0.5 overflow-hidden py-2 pl-3 pr-2">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-0.5 overflow-hidden py-2 pr-2 pl-3">
             {titleRow}
             {contextLine ? (
               <p
-                className="mb-0 block min-w-0 max-w-full truncate text-[10px] leading-snug text-muted"
+                className="text-muted mb-0 block max-w-full min-w-0 truncate text-[10px] leading-snug"
                 title={contextTooltip}
               >
                 {contextLine}
@@ -159,12 +159,12 @@ function ChatListItem({
           <button
             type="button"
             onClick={onSelect}
-            className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-0.5 overflow-hidden py-2 pl-3 pr-2 text-left outline-none focus-visible:ring-0"
+            className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-0.5 overflow-hidden py-2 pr-2 pl-3 text-left outline-none focus-visible:ring-0"
           >
             {titleRow}
             {contextLine ? (
               <p
-                className="mb-0 block min-w-0 max-w-full truncate text-[10px] leading-snug text-muted"
+                className="text-muted mb-0 block max-w-full min-w-0 truncate text-[10px] leading-snug"
                 title={contextTooltip}
               >
                 {contextLine}
@@ -176,7 +176,7 @@ function ChatListItem({
           type="button"
           variant="ghost"
           size="icon"
-          className="mr-1.5 h-7 w-7 shrink-0 self-center text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-300"
+          className="text-muted-foreground mr-1.5 h-7 w-7 shrink-0 self-center opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-300"
           title="Delete workspace"
           aria-label={`Delete ${chat.title}`}
           onClick={(e) => {
@@ -267,7 +267,7 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
 
     <SidebarPanel
 
-      title="Workspaces"
+      title="Projects"
 
       active={active}
 
@@ -279,7 +279,7 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
 
           size="sm"
 
-          className="h-6 gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground"
+          className="text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground h-6 gap-1 rounded-md px-2 text-xs"
 
           onClick={() => {
 
@@ -305,7 +305,7 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
 
         {savedChats.length === 0 ? (
 
-          <p className="px-3 py-6 text-center text-xs text-muted">
+          <p className="text-muted px-3 py-6 text-center text-xs">
 
             No chats yet. Start a new conversation.
 
@@ -317,7 +317,7 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
 
             ref={listRef}
 
-            className="box-border min-w-0 max-w-full space-y-0.5 pl-2.5 pr-3 pb-2 pt-0.5"
+            className="box-border max-w-full min-w-0 space-y-0.5 pt-0.5 pr-3 pb-2 pl-2.5"
 
           >
 

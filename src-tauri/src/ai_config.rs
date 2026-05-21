@@ -43,6 +43,49 @@ fn env_candidates() -> Vec<PathBuf> {
     candidates
 }
 
+fn managed_backend_url_raw() -> Option<String> {
+    std::env::var("FORGE_BACKEND_URL")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            option_env!("FORGE_BACKEND_URL")
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        })
+}
+
+fn managed_backend_token_raw() -> Option<String> {
+    std::env::var("FORGE_BACKEND_TOKEN")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            option_env!("FORGE_BACKEND_TOKEN")
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        })
+}
+
+pub fn has_managed_backend() -> bool {
+    managed_backend_url_raw().is_some()
+}
+
+fn managed_backend_url_for_provider(provider: Provider) -> Option<String> {
+    let base = managed_backend_url_raw()?;
+    let base = base.trim_end_matches('/');
+    let suffix = match provider {
+        Provider::OpenAi => "/openai/v1",
+        Provider::Anthropic => "/anthropic",
+        Provider::Google => "/gemini/v1beta",
+        Provider::DeepSeek => "/deepseek/v1",
+        Provider::Xai => "/xai/v1",
+    };
+    Some(format!("{base}{suffix}"))
+}
+
 pub fn load_dotenv() {
     for path in env_candidates() {
         if path.is_file() {
@@ -76,9 +119,19 @@ pub fn api_key(provider: Provider) -> Option<String> {
         Provider::Xai => std::env::var("GROK_API_KEY")
             .or_else(|_| std::env::var("XAI_API_KEY")),
     };
-    key.ok()
+    let explicit = key
+        .ok()
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty());
+    if explicit.is_some() {
+        return explicit;
+    }
+    if has_managed_backend() {
+        return Some(
+            managed_backend_token_raw().unwrap_or_else(|| "forge-desktop-managed".to_string()),
+        );
+    }
+    None
 }
 
 fn validate_api_key_format(provider: Provider, key: &str) -> Result<(), String> {
@@ -110,11 +163,14 @@ pub fn base_url(provider: Provider, default: &str) -> String {
         Provider::DeepSeek => "DEEPSEEK_BASE_URL",
         Provider::Xai => "XAI_BASE_URL",
     };
-    std::env::var(var)
+    if let Some(url) = std::env::var(var)
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| default.to_string())
+    {
+        return url;
+    }
+    managed_backend_url_for_provider(provider).unwrap_or_else(|| default.to_string())
 }
 
 fn provider_name(provider: Provider) -> &'static str {
@@ -204,20 +260,28 @@ pub fn resolve_api_model(model_id: &str) -> Result<(Provider, String), String> {
     })?;
 
     let key = api_key(provider).ok_or_else(|| {
-        let env = match provider {
-            Provider::OpenAi => "OPENAI_API_KEY",
-            Provider::Anthropic => "ANTHROPIC_API_KEY",
-            Provider::Google => "GEMINI_API_KEY",
-            Provider::DeepSeek => "DEEPSEEK_API_KEY",
-            Provider::Xai => "GROK_API_KEY (or XAI_API_KEY)",
-        };
-        format!(
-            "Missing {env}. Set it in a .env file and restart the app. \
+        if has_managed_backend() {
+            "Managed backend mode is enabled but FORGE_BACKEND_URL/credentials are invalid. \
+Set FORGE_BACKEND_URL (and optional FORGE_BACKEND_TOKEN) then restart the app."
+                .to_string()
+        } else {
+            let env = match provider {
+                Provider::OpenAi => "OPENAI_API_KEY",
+                Provider::Anthropic => "ANTHROPIC_API_KEY",
+                Provider::Google => "GEMINI_API_KEY",
+                Provider::DeepSeek => "DEEPSEEK_API_KEY",
+                Provider::Xai => "GROK_API_KEY (or XAI_API_KEY)",
+            };
+            format!(
+                "Missing {env}. Set it in a .env file and restart the app, or configure FORGE_BACKEND_URL for managed mode. \
 Checked common locations including the app folder and user config folders \
 (for Windows: %APPDATA%\\FORGE\\.env)."
-        )
+            )
+        }
     })?;
-    validate_api_key_format(provider, &key)?;
+    if !has_managed_backend() {
+        validate_api_key_format(provider, &key)?;
+    }
 
     let model = match provider {
         Provider::OpenAi => resolve_openai_model(model_id),

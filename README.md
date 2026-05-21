@@ -56,6 +56,25 @@ npm run tauri build
 
 Output: `src-tauri/target/release/bundle/`
 
+### Managed backend (single-file installer, no user API keys)
+
+Run a hosted backend that keeps provider keys server-side, then point the desktop app to it.
+
+```bash
+cd backend
+npm install
+cp .env.example .env
+# fill BACKEND_CLIENT_TOKEN + provider keys
+npm run start
+```
+
+The desktop app reads:
+
+- `FORGE_BACKEND_URL` (example: `https://forge-api.yourdomain.com`)
+- `FORGE_BACKEND_TOKEN` (must match backend `BACKEND_CLIENT_TOKEN`)
+
+When `FORGE_BACKEND_URL` is set, installed users do not need to create a local `.env` for AI keys.
+
 ### Beta website release (v1.0)
 
 Use this to generate upload-ready files in one command:
@@ -66,11 +85,24 @@ npm run release:beta
 
 This creates `release/1.0.0-1/` and copies installer artifacts plus `SHA256SUMS.txt` and `.env.example`.
 
-### API keys for installed beta builds
+### Managed backend installer release (no user config)
 
-Installed users should create:
+```powershell
+$env:FORGE_BACKEND_URL="https://forge-api.yourdomain.com"
+$env:FORGE_BACKEND_TOKEN="same-token-as-backend"
+npm run release:managed
+```
 
-- Windows: `%APPDATA%\FORGE\.env`
+This embeds managed-backend defaults into the desktop binary, so users can install and chat without entering API keys.
+
+### Installed app config
+
+Use one of these modes:
+
+- **Managed backend (recommended):** ship `FORGE_BACKEND_URL` + `FORGE_BACKEND_TOKEN`
+- **Local key mode:** each user sets their own provider keys in `%APPDATA%\FORGE\.env`
+
+In local key mode:
 
 1. Copy `.env.example` from your release bundle into `%APPDATA%\FORGE\.env`
 2. Fill in real API keys (for example `OPENAI_API_KEY=...`)

@@ -74,18 +74,13 @@ export function WorkspaceBottomPanel({
   const { bottomPanelBoot, clearBottomPanelBoot } = useLayout();
   const initialKind: BottomPanelTabKind =
     bottomPanelBoot === "browser" ? "browser" : "terminal";
-  const terminalCounterRef = useRef(1);
-  const browserCounterRef = useRef(0);
-  const [tabs, setTabs] = useState<BottomPanelTab[]>(() => {
-    if (initialKind === "browser") {
-      terminalCounterRef.current = 0;
-      browserCounterRef.current = 1;
-      return [createTab("browser", 1)];
-    }
-    terminalCounterRef.current = 1;
-    browserCounterRef.current = 0;
-    return [createTab("terminal", 1)];
-  });
+  const terminalCounterRef = useRef(initialKind === "browser" ? 0 : 1);
+  const browserCounterRef = useRef(initialKind === "browser" ? 1 : 0);
+  const [tabs, setTabs] = useState<BottomPanelTab[]>(() =>
+    initialKind === "browser"
+      ? [createTab("browser", 1)]
+      : [createTab("terminal", 1)],
+  );
   const [activeTabId, setActiveTabId] = useState(() => tabs[0]!.id);
   const [newTabMenuOpen, setNewTabMenuOpen] = useState(false);
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
@@ -229,7 +224,7 @@ export function WorkspaceBottomPanel({
       )}
       aria-label="Bottom panel"
     >
-      <header className="relative z-20 flex h-8 shrink-0 items-center gap-1 border-b border-border-subtle bg-panel pl-1 pr-2">
+      <header className="border-border-subtle bg-panel relative z-20 flex h-8 shrink-0 items-center gap-1 border-b pr-2 pl-1">
         <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
@@ -274,11 +269,11 @@ export function WorkspaceBottomPanel({
                 }}
               >
                 {dropHint?.targetTabId === tab.id && dropHint.side === "before" && (
-                  <span className="pointer-events-none absolute -left-0.5 inset-y-0 w-0.5 rounded-full bg-[#818cf8]" />
+                  <span className="pointer-events-none absolute inset-y-0 -left-0.5 w-0.5 rounded-full bg-[#818cf8]" />
                 )}
                 <button
                   type="button"
-                  className="flex items-center gap-1 py-1 pl-2 pr-0.5"
+                  className="flex items-center gap-1 py-1 pr-0.5 pl-2"
                   onClick={() => selectTab(tab.id)}
                 >
                   <Icon className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
@@ -286,7 +281,7 @@ export function WorkspaceBottomPanel({
                 </button>
                 <button
                   type="button"
-                  className="mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-panel-elevated hover:text-foreground group-hover:opacity-100"
+                  className="text-muted-foreground hover:bg-panel-elevated hover:text-foreground mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100"
                   title={`Close ${tab.title}`}
                   aria-label={`Close ${tab.title}`}
                   onClick={(e) => {
@@ -297,7 +292,7 @@ export function WorkspaceBottomPanel({
                   <X className="h-3 w-3" />
                 </button>
                 {dropHint?.targetTabId === tab.id && dropHint.side === "after" && (
-                  <span className="pointer-events-none absolute -right-0.5 inset-y-0 w-0.5 rounded-full bg-[#818cf8]" />
+                  <span className="pointer-events-none absolute inset-y-0 -right-0.5 w-0.5 rounded-full bg-[#818cf8]" />
                 )}
               </div>
             );
@@ -308,7 +303,7 @@ export function WorkspaceBottomPanel({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground"
+                className="text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground h-6 w-6 shrink-0 rounded-md"
                 title="New tab"
                 aria-label="New tab"
               >
@@ -337,7 +332,7 @@ export function WorkspaceBottomPanel({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground h-6 w-6 shrink-0"
           title="Close bottom panel"
           aria-label="Close bottom panel"
           onClick={onClose}

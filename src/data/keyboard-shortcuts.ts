@@ -8,7 +8,7 @@ export const staticKeyboardShortcuts = [
 export function buildModelKeyboardShortcuts(cartModelIds: string[]) {
   const cartModels = cartModelIds
     .map((id) => getModelById(id))
-    .filter((m): m is AiModel => m != null);
+    .filter((model): model is AiModel => model != null);
 
   const modelShortcuts = [1, 2, 3].map((slot) => {
     const model = cartModels[slot - 1];

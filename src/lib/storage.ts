@@ -1,3 +1,4 @@
+import type { ProjectMemory } from "@/types/agent-memory";
 import type { Chat, ChatMessage, ChatThread } from "@/types/chat";
 import type { NodePermissions, Project } from "@/types/project";
 import { DEFAULT_PERMISSIONS } from "@/types/project";
@@ -8,6 +9,7 @@ const PERMISSIONS_KEY = "prompt:permissions:v1";
 const CHATS_KEY = "prompt:chats:v1";
 const ACTIVE_CHAT_KEY = "prompt:active-chat:v1";
 const API_USAGE_KEY = "prompt:api-usage:v1";
+const PROJECT_MEMORY_KEY = "prompt:project-memory:v1";
 
 export function loadProjects(): Project[] {
   try {
@@ -221,4 +223,44 @@ export function loadApiUsage(): { tokens: number; costUsd: number } {
 
 export function saveApiUsage(usage: { tokens: number; costUsd: number }): void {
   localStorage.setItem(API_USAGE_KEY, JSON.stringify(usage));
+}
+
+export function loadProjectMemories(): Record<string, ProjectMemory> {
+  try {
+    const raw = localStorage.getItem(PROJECT_MEMORY_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed)) return {};
+    const result: Record<string, ProjectMemory> = {};
+    for (const [chatId, memory] of Object.entries(parsed)) {
+      if (!isRecord(memory)) continue;
+      if (
+        typeof memory.projectId !== "string" ||
+        !isRecord(memory.agents) ||
+        !Array.isArray(memory.records) ||
+        !Array.isArray(memory.sharedIndex)
+      ) {
+        continue;
+      }
+      result[chatId] = {
+        projectId: memory.projectId,
+        agents: memory.agents as ProjectMemory["agents"],
+        records: memory.records as ProjectMemory["records"],
+        sharedIndex: memory.sharedIndex as ProjectMemory["sharedIndex"],
+        lastUpdatedAt:
+          typeof memory.lastUpdatedAt === "number"
+            ? memory.lastUpdatedAt
+            : Date.now(),
+      };
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+export function saveProjectMemories(
+  memories: Record<string, ProjectMemory>,
+): void {
+  localStorage.setItem(PROJECT_MEMORY_KEY, JSON.stringify(memories));
 }

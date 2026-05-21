@@ -212,7 +212,7 @@ export const ComposerTextarea = forwardRef<
         onDrop={onDrop}
         className={cn(
           composerTextClass,
-          "text-transparent caret-foreground selection:bg-[#6366f1]/22 selection:text-transparent",
+          "text-transparent caret-foreground selection:bg-[#6366f1]/22 selection:text-transparent focus:outline-none focus-visible:outline-none focus-visible:ring-0",
           readOnly && "cursor-not-allowed opacity-70",
         )}
       />

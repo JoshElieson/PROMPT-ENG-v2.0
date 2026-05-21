@@ -150,17 +150,23 @@ export function ProjectTree({
   const pendingDescendIntoRef = useRef<string | null>(null);
   const lastProjectFocusRef = useRef<string | null>(null);
 
-  childrenByPathRef.current = childrenByPath;
+  useEffect(() => {
+    childrenByPathRef.current = childrenByPath;
+  }, [childrenByPath]);
 
   const projectRootPaths = useMemo(
     () => new Set(projects.map((p) => p.rootPath)),
     [projects],
   );
 
-  useEffect(() => {
-    if (!editingProjects) return;
-    setExpandedPaths(new Set());
-  }, [editingProjects]);
+  const [prevEditingProjects, setPrevEditingProjects] = useState(editingProjects);
+
+  if (editingProjects !== prevEditingProjects) {
+    setPrevEditingProjects(editingProjects);
+    if (editingProjects) {
+      setExpandedPaths(new Set());
+    }
+  }
 
   const visibleRows = useMemo(
     () => buildVisibleRows(projects, expandedPaths, childrenByPath),
@@ -180,7 +186,7 @@ export function ProjectTree({
         !visibleRows.some((r) => r.path === focusedPath);
 
       if (projectChanged || focusInvalid) {
-        setFocusedPath(projectFocusRootPath);
+        queueMicrotask(() => setFocusedPath(projectFocusRootPath));
       }
       return;
     }
@@ -188,14 +194,14 @@ export function ProjectTree({
     lastProjectFocusRef.current = null;
 
     if (visibleRows.length === 0) {
-      if (focusedPath !== null) setFocusedPath(null);
+      if (focusedPath !== null) queueMicrotask(() => setFocusedPath(null));
       return;
     }
     if (
       focusedPath != null &&
       !visibleRows.some((r) => r.path === focusedPath)
     ) {
-      setFocusedPath(null);
+      queueMicrotask(() => setFocusedPath(null));
     }
   }, [visibleRows, focusedPath, projectFocusRootPath, projectFocusPath]);
 
@@ -661,8 +667,6 @@ export function ProjectTree({
       focusedIndex,
       moveFocusVertical,
       expandedPaths,
-      childrenByPath,
-      loadChildren,
       toggleDirectory,
       toggleRowAccess,
       editingProjects,
@@ -702,7 +706,7 @@ export function ProjectTree({
 
   if (projects.length === 0) {
     return (
-      <p className="px-3 py-4 text-center text-xs leading-relaxed text-muted">
+      <p className="text-muted px-3 py-4 text-center text-xs leading-relaxed">
         No project folders yet.
         <br />
         Click <span className="text-muted-foreground">+</span> to add a directory
@@ -824,7 +828,7 @@ function ProjectTreeRow({
 
   useEffect(() => {
     if (!isRenaming) return;
-    setDraftName(row.name);
+    queueMicrotask(() => setDraftName(row.name));
     const id = requestAnimationFrame(() => {
       const input = renameInputRef.current;
       input?.focus();
@@ -986,12 +990,12 @@ function ProjectTreeRow({
 
         {row.isDirectory ? (
           isExpanded ? (
-            <FolderOpen className="h-3.5 w-3.5 shrink-0 text-accent/80" />
+            <FolderOpen className="text-accent/80 h-3.5 w-3.5 shrink-0" />
           ) : (
-            <Folder className="h-3.5 w-3.5 shrink-0 text-muted" />
+            <Folder className="text-muted h-3.5 w-3.5 shrink-0" />
           )
         ) : (
-          <File className="h-3.5 w-3.5 shrink-0 text-muted" />
+          <File className="text-muted h-3.5 w-3.5 shrink-0" />
         )}
 
         {isRenaming ? (
@@ -1000,7 +1004,7 @@ function ProjectTreeRow({
             type="text"
             value={draftName}
             aria-label={`Rename ${row.isDirectory ? "folder" : "file"}`}
-            className="min-w-0 flex-1 rounded border border-accent/60 bg-background px-1.5 py-0.5 text-sm text-foreground outline-none ring-1 ring-accent/30 focus:border-accent focus:ring-accent/50"
+            className="border-accent/60 bg-background text-foreground ring-accent/30 focus:border-accent focus:ring-accent/50 min-w-0 flex-1 rounded border px-1.5 py-0.5 text-sm ring-1 outline-none"
             onChange={(e) => setDraftName(e.target.value)}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
@@ -1079,7 +1083,7 @@ function ProjectTreeRow({
 
       {showEmptyFolder && (
         <p
-          className="py-0.5 text-[10px] text-muted"
+          className="text-muted py-0.5 text-[10px]"
           style={{ paddingLeft: `${(row.depth + 1) * 12 + 20}px` }}
         >
           Empty folder
@@ -1103,13 +1107,13 @@ export function ProjectsHeader({
   return (
     <section className="flex shrink-0 items-center justify-between gap-1 px-3 py-1">
       <section className="flex min-w-0 items-center gap-1">
-        <span className="text-xs font-medium uppercase tracking-wider text-muted">
-          Projects
+        <span className="text-muted text-xs font-medium tracking-wider uppercase">
+          Files
         </span>
         <PanelTitleInfo
-          label="Projects"
+          label="Files"
           description="Manage model access to files"
-          className="h-3.5 w-3.5 text-muted-foreground/70 hover:text-muted-foreground"
+          className="text-muted-foreground/70 hover:text-muted-foreground h-3.5 w-3.5"
         />
       </section>
       <section className="flex shrink-0 items-center gap-0.5">

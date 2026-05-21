@@ -20,14 +20,14 @@ export function AttachmentChips({
       {attachments.map((file) => (
         <li
           key={file.id}
-          className="flex max-w-[200px] items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-xs"
+          className="border-border bg-surface flex max-w-[200px] items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
         >
-          <FileText className="h-3.5 w-3.5 shrink-0 text-accent" />
-          <span className="truncate text-foreground" title={file.path}>
+          <FileText className="text-accent h-3.5 w-3.5 shrink-0" />
+          <span className="text-foreground truncate" title={file.path}>
             {file.name}
           </span>
           {file.size != null && (
-            <span className="shrink-0 text-muted">
+            <span className="text-muted shrink-0">
               {formatFileSize(file.size)}
             </span>
           )}
@@ -35,7 +35,7 @@ export function AttachmentChips({
             <button
               type="button"
               onClick={() => onRemove(file.id)}
-              className="shrink-0 rounded p-0.5 text-muted hover:bg-panel-elevated hover:text-foreground"
+              className="text-muted hover:bg-panel-elevated hover:text-foreground shrink-0 rounded p-0.5"
               aria-label={`Remove ${file.name}`}
             >
               <X className="h-3 w-3" />

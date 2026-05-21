@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import * as git from "@/lib/git";
+import { shouldRefreshGitFromFsPaths } from "@/lib/fs-ignore-paths";
 import { listenProjectFsChanged, syncProjectFsWatchers } from "@/lib/fs-watch";
 import { pathsEqual } from "@/lib/project-paths";
 import { useChats } from "@/contexts/ChatsContext";
@@ -45,9 +46,26 @@ const EMPTY_STATUS: GitStatusResult = {
   clean: true,
 };
 
-function isGitInternalPath(path: string): boolean {
-  const normalized = path.replace(/\\/g, "/").toLowerCase();
-  return normalized.includes("/.git/");
+function gitStatusEqual(
+  a: GitStatusResult,
+  b: GitStatusResult,
+): boolean {
+  if (
+    a.isRepo !== b.isRepo ||
+    a.branch !== b.branch ||
+    a.ahead !== b.ahead ||
+    a.behind !== b.behind ||
+    a.clean !== b.clean ||
+    a.changes.length !== b.changes.length
+  ) {
+    return false;
+  }
+  return a.changes.every((c, i) => {
+    const d = b.changes[i];
+    return (
+      c.path === d.path && c.status === d.status && c.staged === d.staged
+    );
+  });
 }
 
 export function GitProvider({ children }: { children: ReactNode }) {
@@ -88,29 +106,41 @@ export function GitProvider({ children }: { children: ReactNode }) {
     setLastMessage(text.trim() || (ok ? "Done." : "Command failed."));
   }, []);
 
-  const refresh = useCallback(async () => {
-    if (!repoPath) {
-      setStatus(null);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const result = await git.gitStatus(repoPath);
-      setStatus(result);
-      setLastMessage(null);
-    } catch (e) {
-      setStatus((prev) => prev ?? EMPTY_STATUS);
-      setMessage(
-        false,
-        git.formatInvokeError(e, "Failed to read git status."),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [repoPath, setMessage]);
+  const refresh = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!repoPath) {
+        setStatus(null);
+        return;
+      }
+      const silent = options?.silent ?? false;
+      if (!silent) {
+        setIsLoading(true);
+      }
+      try {
+        const result = await git.gitStatus(repoPath);
+        setStatus((prev) =>
+          prev && gitStatusEqual(prev, result) ? prev : result,
+        );
+        if (!silent) {
+          setLastMessage(null);
+        }
+      } catch (e) {
+        setStatus((prev) => prev ?? EMPTY_STATUS);
+        setMessage(
+          false,
+          git.formatInvokeError(e, "Failed to read git status."),
+        );
+      } finally {
+        if (!silent) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [repoPath, setMessage],
+  );
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => void refresh());
   }, [refresh]);
 
   useEffect(() => {
@@ -127,19 +157,14 @@ export function GitProvider({ children }: { children: ReactNode }) {
     void listenProjectFsChanged((event) => {
       if (cancelled) return;
       if (!pathsEqual(event.rootPath, repoPath)) return;
-      if (
-        event.paths.length > 0 &&
-        event.paths.every((path) => isGitInternalPath(path))
-      ) {
-        return;
-      }
+      if (!shouldRefreshGitFromFsPaths(event.paths)) return;
       if (fsRefreshTimerRef.current) {
         clearTimeout(fsRefreshTimerRef.current);
       }
       fsRefreshTimerRef.current = setTimeout(() => {
         fsRefreshTimerRef.current = null;
-        void refresh();
-      }, 400);
+        void refresh({ silent: true });
+      }, 600);
     }).then((fn) => {
       if (!cancelled) unlisten = fn;
     });

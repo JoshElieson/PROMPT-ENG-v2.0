@@ -16,7 +16,7 @@ export function SlashCommandAutocomplete({
 }: SlashCommandAutocompleteProps) {
   if (commands.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-panel p-3 text-xs text-muted shadow-lg">
+      <div className="border-border bg-panel text-muted rounded-lg border p-3 text-xs shadow-lg">
         No matching commands
       </div>
     );
@@ -24,7 +24,7 @@ export function SlashCommandAutocomplete({
 
   return (
     <ul
-      className="max-h-48 overflow-y-auto rounded-lg border border-border bg-panel py-1 shadow-lg"
+      className="border-border bg-panel max-h-48 overflow-y-auto rounded-lg border py-1 shadow-lg"
       role="listbox"
       aria-label="Slash commands"
     >
@@ -52,7 +52,7 @@ export function SlashCommandAutocomplete({
               {command.label}
             </span>
             {command.description && (
-              <span className="truncate text-xs text-muted">
+              <span className="text-muted truncate text-xs">
                 {command.description}
               </span>
             )}

@@ -1,4 +1,4 @@
-import { useCallback, useState, type KeyboardEvent } from "react";
+import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
 import {
   Check,
   ChevronDown,
@@ -59,13 +59,13 @@ function ChangeRow({ change }: { change: GitFileChange }) {
 
   return (
     <div
-      className="group flex w-full items-center gap-1.5 px-2 py-0.5 text-left hover:bg-panel-elevated"
+      className="group hover:bg-panel-elevated flex w-full items-center gap-1.5 px-2 py-0.5 text-left"
       title={change.path}
     >
       <GitFileIcon path={change.path} />
-      <span className="min-w-0 truncate text-[13px] text-foreground">{name}</span>
+      <span className="text-foreground min-w-0 truncate text-[13px]">{name}</span>
       {dir && (
-        <span className="min-w-0 truncate text-[12px] text-muted">{dir}</span>
+        <span className="text-muted min-w-0 truncate text-[12px]">{dir}</span>
       )}
       <span
         className={cn(
@@ -96,16 +96,16 @@ function ChangesSection({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex w-full items-center gap-1 bg-panel/50 px-2 py-1 text-left hover:bg-panel-elevated">
+      <CollapsibleTrigger className="bg-panel/50 hover:bg-panel-elevated flex w-full items-center gap-1 px-2 py-1 text-left">
         {open ? (
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          <ChevronDown className="text-muted-foreground h-3.5 w-3.5" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          <ChevronRight className="text-muted-foreground h-3.5 w-3.5" />
         )}
-        <span className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-foreground">
+        <span className="text-foreground flex-1 text-[11px] font-semibold tracking-wide uppercase">
           {title}
         </span>
-        <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1.5 text-[10px] font-semibold text-black">
+        <span className="bg-accent flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold text-black">
           {changes.length}
         </span>
       </CollapsibleTrigger>
@@ -151,7 +151,7 @@ export function GitPanel({ active }: GitPanelProps) {
 
   const busy = isLoading || isOperating;
   const isRepo = status?.isRepo ?? false;
-  const allChanges = status?.changes ?? [];
+  const allChanges = useMemo(() => status?.changes ?? [], [status?.changes]);
   const staged = allChanges.filter((c) => c.staged);
   const unstaged = allChanges.filter((c) => !c.staged);
   const hasStaged = staged.length > 0;
@@ -202,7 +202,7 @@ export function GitPanel({ active }: GitPanelProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 text-muted-foreground"
+          className="text-muted-foreground h-6 w-6"
           title="More Actions"
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
@@ -263,9 +263,9 @@ export function GitPanel({ active }: GitPanelProps) {
           </div>
         ) : (
           <>
-            <div className="border-b border-border-subtle px-2 py-1.5">
+            <div className="border-border-subtle border-b px-2 py-1.5">
               <select
-                className="w-full rounded border border-border-subtle bg-surface px-2 py-1 text-xs text-foreground outline-none focus:border-accent"
+                className="border-border-subtle bg-surface text-foreground focus:border-accent w-full rounded border px-2 py-1 text-xs outline-none"
                 value={projectId ?? ""}
                 onChange={(e) => setActiveProject(e.target.value || null)}
                 aria-label="Repository for this workspace"
@@ -280,13 +280,13 @@ export function GitPanel({ active }: GitPanelProps) {
             </div>
 
             {!projectId && (
-              <p className="px-3 py-4 text-center text-xs text-muted">
+              <p className="text-muted px-3 py-4 text-center text-xs">
                 Choose a repository for this workspace.
               </p>
             )}
 
             {projectId && isRepo && (
-              <div className="shrink-0 border-b border-border-subtle px-3 pb-2 pt-2">
+              <div className="border-border-subtle shrink-0 border-b px-3 pt-2 pb-2">
                 <div className="relative">
                   <textarea
                     value={commitMessage}
@@ -295,13 +295,13 @@ export function GitPanel({ active }: GitPanelProps) {
                     placeholder={`Message (Ctrl+Enter to commit on "${branchLabel}")`}
                     disabled={busy}
                     rows={3}
-                    className="w-full resize-none rounded border border-border-subtle bg-[#1e1e1e] px-2 py-1.5 pr-8 text-[13px] leading-snug text-foreground placeholder:text-muted outline-none focus:border-accent/60"
+                    className="border-border-subtle text-foreground placeholder:text-muted focus:border-accent/60 w-full resize-none rounded border bg-[#1e1e1e] px-2 py-1.5 pr-8 text-[13px] leading-snug outline-none"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="absolute right-1 top-1 h-6 w-6 text-muted-foreground hover:text-accent"
+                    className="text-muted-foreground hover:text-accent absolute top-1 right-1 h-6 w-6"
                     title={GENERATE_COMMIT_AI_TOOLTIP}
                     disabled={busy || isGeneratingCommitMessage}
                     onClick={() => void handleGenerateCommitMessage()}
@@ -376,8 +376,8 @@ export function GitPanel({ active }: GitPanelProps) {
             )}
 
             {showClone && (
-              <div className="mx-2 mt-2 shrink-0 space-y-2 rounded-md border border-border-subtle bg-surface p-2">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted">
+              <div className="border-border-subtle bg-surface mx-2 mt-2 shrink-0 space-y-2 rounded-md border p-2">
+                <p className="text-muted text-[10px] font-medium tracking-wide uppercase">
                   Clone repository
                 </p>
                 <input
@@ -385,7 +385,7 @@ export function GitPanel({ active }: GitPanelProps) {
                   placeholder="https://github.com/user/repo.git"
                   value={cloneUrl}
                   onChange={(e) => setCloneUrl(e.target.value)}
-                  className="w-full rounded border border-border-subtle bg-panel px-2 py-1 text-xs text-foreground outline-none focus:border-accent"
+                  className="border-border-subtle bg-panel text-foreground focus:border-accent w-full rounded border px-2 py-1 text-xs outline-none"
                 />
                 <div className="flex gap-1">
                   <Button
@@ -411,7 +411,7 @@ export function GitPanel({ active }: GitPanelProps) {
             <ScrollArea className="min-h-0 flex-1">
               {projectId && !isRepo && repoPath && (
                 <div className="px-3 py-6 text-center">
-                  <p className="text-xs text-muted">No repository found.</p>
+                  <p className="text-muted text-xs">No repository found.</p>
                   <Button
                     variant="outline"
                     size="sm"
@@ -425,7 +425,7 @@ export function GitPanel({ active }: GitPanelProps) {
               )}
 
               {projectId && isRepo && status?.clean && (
-                <p className="px-3 py-4 text-center text-xs text-muted">
+                <p className="text-muted px-3 py-4 text-center text-xs">
                   No changes. Working tree clean.
                 </p>
               )}

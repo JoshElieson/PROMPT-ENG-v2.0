@@ -168,9 +168,11 @@ async function pollGitHubDeviceFlowTauri(
         deviceCode: pending.deviceCode,
       });
     } catch (e) {
-      throw new Error(
+      const wrapped = new Error(
         e instanceof Error ? e.message : "Could not reach GitHub to complete sign-in.",
       );
+      Object.assign(wrapped, { cause: e });
+      throw wrapped;
     }
 
     const status = String(result.status ?? "").toLowerCase();

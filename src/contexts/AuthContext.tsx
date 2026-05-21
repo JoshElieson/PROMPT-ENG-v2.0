@@ -166,8 +166,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!deviceFlow?.deviceCode || session) return;
-    void runPoll(deviceFlow);
-  }, [deviceFlow?.deviceCode, session, runPoll]);
+    queueMicrotask(() => void runPoll(deviceFlow));
+  }, [deviceFlow, session, runPoll]);
 
   useEffect(() => {
     const onVisible = () => {

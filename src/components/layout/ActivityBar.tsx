@@ -37,7 +37,7 @@ function ActivityButton({
       )}
     >
       {active && (
-        <span className="absolute left-1/2 top-1 h-0.5 w-3 -translate-x-1/2 rounded-full bg-[#6366f1]/75" />
+        <span className="absolute top-1 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-[#6366f1]/75" />
       )}
       {children}
     </button>
@@ -61,7 +61,7 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
       : "Source Control";
 
   return (
-    <aside className="flex w-12 shrink-0 flex-col items-center border-r border-border-subtle bg-surface/90 py-3 backdrop-blur-sm">
+    <aside className="border-border-subtle bg-surface/90 flex w-12 shrink-0 flex-col items-center border-r py-3 backdrop-blur-sm">
       <div className="flex flex-col gap-1.5">
         <ActivityButton
           title="Model Cart"
@@ -74,7 +74,7 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
           <Bot className="h-3.5 w-3.5" />
         </ActivityButton>
         <ActivityButton
-          title="Workspaces"
+          title="Projects"
           active={activeView === "explorer" || explorerSidebarSelected}
           onClick={() => {
             onViewChange("explorer");
@@ -99,7 +99,7 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
         <button
           type="button"
           title="Settings"
-          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-all duration-150 hover:border-border hover:bg-panel-elevated/70 hover:text-foreground"
+          className="text-muted-foreground hover:border-border hover:bg-panel-elevated/70 hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-transparent transition-all duration-150"
         >
           <Settings className="h-3.5 w-3.5" />
         </button>

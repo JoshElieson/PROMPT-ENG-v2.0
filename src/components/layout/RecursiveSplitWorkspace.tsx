@@ -35,7 +35,7 @@ import {
 import { useChats } from "@/contexts/ChatsContext";
 import { useLayout } from "@/contexts/LayoutContext";
 import { useWorkspacePanes } from "@/contexts/WorkspacePanesContext";
-import { buildModelKeyboardShortcuts } from "@/data/mock";
+import { buildModelKeyboardShortcuts } from "@/data/keyboard-shortcuts";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { threadDisplayTitle } from "@/lib/chat-utils";
 import { collectLeaves, findLeaf } from "@/lib/center-workspace-layout";
@@ -115,7 +115,7 @@ function ChatThreadTab({
 
   useEffect(() => {
     if (!isRenaming) return;
-    setDraftTitle(title);
+    queueMicrotask(() => setDraftTitle(title));
     const id = requestAnimationFrame(() => {
       const input = inputRef.current;
       input?.focus();
@@ -167,7 +167,7 @@ function ChatThreadTab({
           onDragEnd={onDragEnd}
         >
           {dropIndicatorSide === "before" && (
-            <span className="pointer-events-none absolute -left-0.5 inset-y-0 w-0.5 rounded-full bg-[#818cf8]" />
+            <span className="pointer-events-none absolute inset-y-0 -left-0.5 w-0.5 rounded-full bg-[#818cf8]" />
           )}
           {isRenaming ? (
             <input
@@ -175,7 +175,7 @@ function ChatThreadTab({
               type="text"
               value={draftTitle}
               aria-label="Agent name"
-              className="mx-1 min-w-[4rem] max-w-[10rem] rounded border border-border bg-background px-1.5 py-0.5 text-xs text-foreground outline-none ring-1 ring-transparent focus:border-[#6366f1]/35 focus:ring-[#6366f1]/25"
+              className="border-border bg-background text-foreground mx-1 max-w-[10rem] min-w-[4rem] rounded border px-1.5 py-0.5 text-xs ring-1 ring-transparent outline-none focus:border-[#6366f1]/35 focus:ring-[#6366f1]/25"
               onChange={(e) => setDraftTitle(e.target.value)}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
@@ -216,7 +216,7 @@ function ChatThreadTab({
           {paneCount > 1 ? (
             <button
               type="button"
-              className="mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-panel-elevated hover:text-foreground group-hover:opacity-100"
+              className="text-muted-foreground hover:bg-panel-elevated hover:text-foreground mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100"
               title={`Close ${title}`}
               aria-label={`Close ${title}`}
               onClick={(e) => {
@@ -228,7 +228,7 @@ function ChatThreadTab({
             </button>
           ) : null}
           {dropIndicatorSide === "after" && (
-            <span className="pointer-events-none absolute -right-0.5 inset-y-0 w-0.5 rounded-full bg-[#818cf8]" />
+            <span className="pointer-events-none absolute inset-y-0 -right-0.5 w-0.5 rounded-full bg-[#818cf8]" />
           )}
         </div>
       </ContextMenuTrigger>
@@ -267,7 +267,7 @@ function ChatThreadTabStatus({
   }
   return (
     <span
-      className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/55"
+      className="bg-muted-foreground/55 h-1.5 w-1.5 shrink-0 rounded-full"
       aria-hidden
     />
   );
@@ -319,7 +319,6 @@ function WelcomePane({
   const [sloganVisibleCount, setSloganVisibleCount] = useState(0);
 
   useEffect(() => {
-    setSloganVisibleCount(0);
     const timers = SLOGAN_SENTENCES.map((_, index) =>
       window.setTimeout(
         () => setSloganVisibleCount(index + 1),
@@ -334,7 +333,7 @@ function WelcomePane({
       <h1 className="flex items-center gap-3 text-[1.55rem] font-medium tracking-tight">
         Welcome to <ForgeWordmark height={36} className="translate-y-px" />
       </h1>
-      <p className="mt-2 w-full text-center text-muted">
+      <p className="text-muted mt-2 w-full text-center">
         {SLOGAN_SENTENCES.map((sentence, index) => (
           <span
             key={sentence}
@@ -350,11 +349,11 @@ function WelcomePane({
         ))}
       </p>
 
-      <section className="mt-8 rounded-xl border border-border bg-panel/80 p-4 backdrop-blur-sm">
+      <section className="border-border bg-panel/80 mt-8 rounded-xl border p-4 backdrop-blur-sm">
         <ul className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
           {keyboardShortcuts.map((shortcut) => (
             <li key={shortcut.keys} className="flex items-center gap-3">
-              <kbd className="min-w-[3rem] rounded border border-border bg-surface px-2 py-0.5 text-center text-xs font-medium text-muted-foreground">
+              <kbd className="border-border bg-surface text-muted-foreground min-w-[3rem] rounded border px-2 py-0.5 text-center text-xs font-medium">
                 {shortcut.keys}
               </kbd>
               <span className="text-muted-foreground">{shortcut.label}</span>
@@ -373,7 +372,8 @@ function ChatPaneBody({
   leaf: WorkspaceLeafNode;
   isActive: boolean;
 }) {
-  const { activeChat, activeChatId, responseLoading } = useChats();
+  const { activeChat, activeChatId, responseLoading, getStreamingActivities } =
+    useChats();
   const {
     isWorkspaceScreenSelected,
     selectWorkspaceScreen,
@@ -399,7 +399,11 @@ function ChatPaneBody({
     responseLoading.threadId === leaf.threadId
       ? responseLoading
       : null;
-  const loadingDisplayIds = useMemo(() => {
+  const loadingActivities = useMemo(() => {
+    if (!loadingForPane || !activeChatId) return [];
+    return getStreamingActivities(activeChatId, leaf.threadId);
+  }, [activeChatId, getStreamingActivities, leaf.threadId, loadingForPane]);
+  const loadingHighlightIds = useMemo(() => {
     if (!loadingForPane) return [];
     const speakingIdx = loadingForPane.speakingModelIndex;
     if (
@@ -564,7 +568,7 @@ function ChatPaneBody({
       <ActiveModelsBar
         showLayoutMenu={false}
         overlay
-        displayIdsOverride={loadingDisplayIds}
+        highlightIdsOverride={loadingHighlightIds}
       />
 
       <div
@@ -605,7 +609,10 @@ function ChatPaneBody({
             ))}
 
             {loadingForPane && (
-              <ResponseLoadingView loading={loadingForPane} />
+              <ResponseLoadingView
+                loading={loadingForPane}
+                activities={loadingActivities}
+              />
             )}
 
             <div aria-hidden className="h-px" />
@@ -672,12 +679,14 @@ function ChatThreadTabs() {
   } | null>(null);
 
   useEffect(() => {
-    setOrderedLeafIds((prev) => {
-      const nextIds = leaves.map((leaf) => leaf.id);
-      const nextSet = new Set(nextIds);
-      const kept = prev.filter((id) => nextSet.has(id));
-      const missing = nextIds.filter((id) => !kept.includes(id));
-      return [...kept, ...missing];
+    queueMicrotask(() => {
+      setOrderedLeafIds((prev) => {
+        const nextIds = leaves.map((leaf) => leaf.id);
+        const nextSet = new Set(nextIds);
+        const kept = prev.filter((id) => nextSet.has(id));
+        const missing = nextIds.filter((id) => !kept.includes(id));
+        return [...kept, ...missing];
+      });
     });
   }, [leaves]);
 
@@ -711,10 +720,13 @@ function ChatThreadTabs() {
   const prevResponseLoadingRef = useRef<ResponseLoadingState | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const [prevActiveChatForTabs, setPrevActiveChatForTabs] = useState(activeChatId);
+
+  if (activeChatId !== prevActiveChatForTabs) {
+    setPrevActiveChatForTabs(activeChatId);
     setUnreadThreadIds(new Set());
     setRenamingThreadId(null);
-  }, [activeChatId]);
+  }
 
   useEffect(() => {
     const prev = prevResponseLoadingRef.current;
@@ -996,7 +1008,7 @@ function ChatThreadTabs() {
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 shrink-0 rounded-md text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground"
+          className="text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground h-6 w-6 shrink-0 rounded-md"
           title={
             paneCount >= maxPanes
               ? "Remove active agents before opening more"

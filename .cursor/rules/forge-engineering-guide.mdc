@@ -1,0 +1,28 @@
+---
+description: Read FORGE_ENGINEERING_GUIDE.md and repo conventions before any code change
+alwaysApply: true
+---
+
+# Forge engineering standards (required)
+
+Before generating or editing code in this repository:
+
+1. **Read** `FORGE_ENGINEERING_GUIDE.md` at the repo root (product vision, architecture, state, UI, styling).
+2. **Match existing conventions** in nearby files: imports (`@/` aliases), naming, folder layout, context/hook patterns, Tailwind tokens, and TypeScript types.
+3. **Inspect before inventing** — reuse `src/lib`, `src/hooks`, `src/contexts`, and `src/components/ui` instead of duplicating logic.
+
+## Non-negotiables
+
+- **Agent-first, modular Forge** — no monolithic files, god components, or tightly coupled UI/business logic.
+- **Preserve behavior** unless the task explicitly requests a change; no drive-by redesigns or feature removal.
+- **Minimal diffs** — smallest correct change; avoid over-abstraction and unrelated edits.
+- **UI** — calm premium UX per the guide; shared primitives in `src/components/ui`; feature UI in feature folders.
+- **State** — local when possible; shared via existing contexts; no redundant derived state; memoize provider values where peers already do.
+- **Async** — loading, error, cancellation, and streaming patterns for AI/long-running work (see guide).
+
+## Workflow
+
+- For unfamiliar areas: read the guide section + 1–2 representative files in that feature before writing.
+- After edits: run `npm run build` when TypeScript/React changes are in scope (no `lint` script in this repo yet).
+
+The full guide is authoritative; this rule is a gate, not a replacement.

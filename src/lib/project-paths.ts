@@ -4,6 +4,10 @@ function normalizeKey(path: string): string {
   return normalizeFsPath(path).toLowerCase();
 }
 
+function normalizeComparePath(path: string): string {
+  return normalizeFsPath(path).replace(/\\/g, "/").toLowerCase();
+}
+
 export function normalizeFsPath(path: string): string {
   return path.replace(/[/\\]+$/, "");
 }
@@ -18,6 +22,23 @@ export function isPathUnderRoot(rootPath: string, path: string): boolean {
   const target = normalizeKey(path);
   if (target === root) return true;
   return target.startsWith(`${root}/`) || target.startsWith(`${root}\\`);
+}
+
+/** True when `path` is the same as or inside `prefixPath` (separator-agnostic). */
+export function isPathWithinPrefix(prefixPath: string, path: string): boolean {
+  const prefix = normalizeComparePath(prefixPath);
+  const target = normalizeComparePath(path);
+  return target === prefix || target.startsWith(`${prefix}/`);
+}
+
+/** True when `ancestorPath` strictly contains `descendantPath`. */
+export function isStrictAncestorPath(
+  ancestorPath: string,
+  descendantPath: string,
+): boolean {
+  const ancestor = normalizeComparePath(ancestorPath);
+  const descendant = normalizeComparePath(descendantPath);
+  return descendant !== ancestor && descendant.startsWith(`${ancestor}/`);
 }
 
 /** Project whose root contains `path` (prefers the longest matching root). */

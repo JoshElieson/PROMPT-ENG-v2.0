@@ -63,7 +63,10 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const activePermissions = activeChat?.permissions ?? {};
+  const activePermissions = useMemo(
+    () => activeChat?.permissions ?? {},
+    [activeChat?.permissions],
+  );
 
   const allChats = useMemo(() => {
     if (activeChat && !chats.some((c) => c.id === activeChat.id)) {

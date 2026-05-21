@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2, LogOut, User } from "lucide-react";
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { GitHubAuthStatus } from "@/components/auth/GitHubAuthStatus";
+import { UserXpBar } from "@/components/auth/UserXpBar";
 import { useAuth } from "@/contexts/AuthContext";
 import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
@@ -31,14 +32,11 @@ export function AccountMenu() {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const isLoggedIn = session != null;
-
-  useEffect(() => {
-    if (isLoggedIn) setMenuOpen(false);
-  }, [isLoggedIn]);
+  const menuOpenEffective = menuOpen && !isLoggedIn;
 
   return (
     <DropdownMenu
-      open={menuOpen}
+      open={menuOpenEffective}
       onOpenChange={(open) => {
         if (!open && isLoggingIn) return;
         setMenuOpen(open);
@@ -67,12 +65,12 @@ export function AccountMenu() {
               className="h-6 w-6 rounded-full object-cover"
             />
           ) : isLoggingIn ? (
-            <Loader2 className="h-4 w-4 animate-spin text-accent" />
+            <Loader2 className="text-accent h-4 w-4 animate-spin" />
           ) : (
             <User className="h-4 w-4" />
           )}
           {isLoggedIn && (
-            <span className="absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full bg-success ring-2 ring-surface" />
+            <span className="bg-success ring-surface absolute right-1.5 bottom-1.5 h-2 w-2 rounded-full ring-2" />
           )}
         </button>
       </DropdownMenuTrigger>
@@ -86,12 +84,13 @@ export function AccountMenu() {
         {isLoggedIn ? (
           <>
             <DropdownMenuLabel className="font-normal">
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-foreground text-sm font-medium">
                 {session.user.name ?? session.user.login}
               </p>
-              <p className="text-xs font-normal text-muted">
+              <p className="text-muted text-xs font-normal">
                 @{session.user.login}
               </p>
+              <UserXpBar className="mt-3" />
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="gap-2 text-red-400">
@@ -106,10 +105,10 @@ export function AccountMenu() {
 
             {deviceFlow && (
               <section className="space-y-2 px-2 py-2">
-                <p className="text-[11px] leading-snug text-muted">
+                <p className="text-muted text-[11px] leading-snug">
                   Enter this code on GitHub to finish signing in:
                 </p>
-                <p className="text-center font-mono text-lg font-semibold tracking-widest text-foreground">
+                <p className="text-foreground text-center font-mono text-lg font-semibold tracking-widest">
                   {deviceFlow.userCode}
                 </p>
                 <Button
@@ -121,13 +120,13 @@ export function AccountMenu() {
                   <GitHubIcon className="h-3.5 w-3.5" />
                   Open GitHub
                 </Button>
-                <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted">
+                <p className="text-muted flex items-center justify-center gap-1.5 text-[11px]">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   {pollAttempt > 0
                     ? `Checking with GitHub… (${pollAttempt})`
                     : "Waiting for authorization…"}
                 </p>
-                <p className="text-center text-[10px] leading-snug text-muted">
+                <p className="text-muted text-center text-[10px] leading-snug">
                   Approve on GitHub, then return here. Sign-in completes
                   automatically.
                 </p>
@@ -175,14 +174,14 @@ export function AccountMenu() {
             )}
 
             {isLoggingIn && !deviceFlow && (
-              <p className="flex items-center justify-center gap-1.5 px-2 py-3 text-[11px] text-muted">
+              <p className="text-muted flex items-center justify-center gap-1.5 px-2 py-3 text-[11px]">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Starting sign-in…
               </p>
             )}
 
             {!isConfigured && (
-              <p className="px-2 py-2 text-[10px] leading-snug text-muted">
+              <p className="text-muted px-2 py-2 text-[10px] leading-snug">
                 Create a GitHub OAuth app with Device Flow enabled, set{" "}
                 <code className="text-foreground">VITE_GITHUB_CLIENT_ID</code> in
                 .env, then restart the app. See GITHUB_SETUP.md.
@@ -191,7 +190,7 @@ export function AccountMenu() {
 
             {error && (
               <section className="mx-2 mb-2 rounded border border-red-400/40 bg-red-400/10 px-2 py-2">
-                <p className="text-[11px] font-medium leading-snug text-red-400">
+                <p className="text-[11px] leading-snug font-medium text-red-400">
                   Sign-in failed
                 </p>
                 <p className="mt-1 text-[11px] leading-snug text-red-300/90">

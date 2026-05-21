@@ -17,7 +17,7 @@ export function MentionAutocomplete({
 }: MentionAutocompleteProps) {
   if (models.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-panel p-3 text-xs text-muted shadow-lg">
+      <div className="border-border bg-panel text-muted rounded-lg border p-3 text-xs shadow-lg">
         Add models to your Model Cart first
       </div>
     );
@@ -25,7 +25,7 @@ export function MentionAutocomplete({
 
   return (
     <ul
-      className="max-h-48 overflow-y-auto rounded-lg border border-border bg-panel py-1 shadow-lg"
+      className="border-border bg-panel max-h-48 overflow-y-auto rounded-lg border py-1 shadow-lg"
       role="listbox"
     >
       {models.map((model, index) => (
@@ -51,7 +51,7 @@ export function MentionAutocomplete({
             <ModelLogo orgId={model.orgId} size="sm" />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{model.name}</span>
-              <span className="block truncate text-xs text-muted">
+              <span className="text-muted block truncate text-xs">
                 @{model.id}
               </span>
             </span>

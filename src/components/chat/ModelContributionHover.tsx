@@ -42,7 +42,7 @@ export function ModelContributionHover({
         side="top"
         align="start"
         sideOffset={8}
-        className="max-w-none border-border bg-panel-elevated p-0 shadow-lg"
+        className="border-border bg-panel-elevated max-w-none p-0 shadow-lg"
       >
         <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
           {contributions.map((entry) => {

@@ -111,7 +111,7 @@ export function ResizablePanels({
 
   useEffect(() => {
     if (isControlled || layoutResetNonce === 0) return;
-    setUncontrolledSizes(normalizeSizes(defaultSizes));
+    queueMicrotask(() => setUncontrolledSizes(normalizeSizes(defaultSizes)));
   }, [layoutResetNonce, defaultSizes, isControlled]);
 
   const onPointerDown = useCallback(
@@ -285,9 +285,11 @@ export function ResizableSidebar({
 
   useEffect(() => {
     if (layoutResetNonce === 0) return;
-    setWidth(defaultWidth);
-    setCollapsed(false);
-    setSnapHighlight(false);
+    queueMicrotask(() => {
+      setWidth(defaultWidth);
+      setCollapsed(false);
+      setSnapHighlight(false);
+    });
   }, [layoutResetNonce, defaultWidth]);
 
   useEffect(() => {

@@ -26,6 +26,8 @@ export interface ChatMessage {
   targetModelIds?: string[];
   /** Round-table blend breakdown for assistant replies */
   modelContributions?: ModelContribution[];
+  /** Enabled file-tree roots used when AI file tools executed for this reply. */
+  toolContextRoots?: string[];
 }
 
 /** One conversation stream inside a sidebar chat (up to 7 per chat for workspace tabs). */
@@ -87,5 +89,3 @@ export interface ResponseLoadingState {
   /** Active speaker during roundtable phase; -1 when synthesizing */
   speakingModelIndex: number;
 }
-
-export const RESPONSE_TURN_MS = 2000;

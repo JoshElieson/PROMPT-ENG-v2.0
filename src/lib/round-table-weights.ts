@@ -69,3 +69,15 @@ export function buildModelContributions(
     .map(({ modelId, percentage }) => ({ modelId, percentage }))
     .sort((a, b) => b.percentage - a.percentage);
 }
+
+/** Split 100 evenly across models (integer percentages summing to 100). */
+export function evenContributions(modelIds: string[]): ModelContribution[] {
+  if (modelIds.length === 0) return [];
+  const base = Math.floor(100 / modelIds.length);
+  let remainder = 100 - base * modelIds.length;
+  return modelIds.map((modelId) => {
+    const extra = remainder > 0 ? 1 : 0;
+    if (extra) remainder -= 1;
+    return { modelId, percentage: base + extra };
+  });
+}

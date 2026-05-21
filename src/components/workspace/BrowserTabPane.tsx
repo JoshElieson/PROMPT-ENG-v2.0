@@ -117,7 +117,10 @@ export function BrowserTabPane({
   const [addressBar, setAddressBar] = useState(DEFAULT_URL);
   const [pageUrl, setPageUrl] = useState(DEFAULT_URL);
   const pageUrlRef = useRef(pageUrl);
-  pageUrlRef.current = pageUrl;
+
+  useEffect(() => {
+    pageUrlRef.current = pageUrl;
+  }, [pageUrl]);
   const nativeUrlRef = useRef(DEFAULT_URL);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [historyPos, setHistoryPos] = useState({ index: 0, length: 1 });
@@ -331,12 +334,12 @@ export function BrowserTabPane({
         !isActive && "pointer-events-none invisible",
       )}
     >
-      <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border-subtle bg-panel px-1.5">
+      <div className="border-border-subtle bg-panel flex h-8 shrink-0 items-center gap-1 border-b px-1.5">
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground h-6 w-6 shrink-0"
           title="Back"
           aria-label="Back"
           disabled={!canGoBack}
@@ -348,7 +351,7 @@ export function BrowserTabPane({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground h-6 w-6 shrink-0"
           title="Forward"
           aria-label="Forward"
           disabled={!canGoForward}
@@ -360,7 +363,7 @@ export function BrowserTabPane({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground h-6 w-6 shrink-0"
           title="Reload"
           aria-label="Reload"
           onClick={reload}
@@ -381,7 +384,7 @@ export function BrowserTabPane({
                 e.stopPropagation();
               }
             }}
-            className="min-w-0 flex-1 rounded-md border border-border-subtle bg-zinc-800 px-2 py-0.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-accent/50"
+            className="border-border-subtle text-foreground focus:ring-accent/50 min-w-0 flex-1 rounded-md border bg-zinc-800 px-2 py-0.5 text-xs outline-none focus:ring-1"
             aria-label="Address bar"
             spellCheck={false}
           />
@@ -389,7 +392,7 @@ export function BrowserTabPane({
             type="submit"
             variant="ghost"
             size="sm"
-            className="h-6 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground h-6 shrink-0 px-2 text-xs"
           >
             Go
           </Button>
@@ -398,7 +401,7 @@ export function BrowserTabPane({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground h-6 w-6 shrink-0"
           title="Open in default browser"
           aria-label="Open in default browser"
           onClick={() => void openExternal(pageUrl)}
@@ -440,7 +443,7 @@ export function BrowserTabPane({
                 )
               }
             />
-            <p className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-[10px] text-muted-foreground">
+            <p className="text-muted-foreground pointer-events-none absolute inset-x-0 bottom-2 text-center text-[10px]">
               Use the Forge desktop app (tauri:dev) for full in-panel browsing.
             </p>
           </>

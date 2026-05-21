@@ -31,7 +31,7 @@ export function LayoutThumbnail({
         )}
         aria-hidden
       >
-        <span className="text-lg font-light leading-none text-muted group-data-[highlighted]:text-foreground">
+        <span className="text-muted group-data-[highlighted]:text-foreground text-lg leading-none font-light">
           +
         </span>
       </span>

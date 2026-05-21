@@ -109,9 +109,11 @@ ${toChangesContext(changes)}
     const normalized = normalizeCommitSubject(raw);
     return normalized || "update project files";
   } catch (error) {
-    throw new Error(
+    const wrapped = new Error(
       formatInvokeError(error, "Could not generate a commit message with AI."),
     );
+    Object.assign(wrapped, { cause: error });
+    throw wrapped;
   }
 }
 

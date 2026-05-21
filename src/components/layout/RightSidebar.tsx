@@ -65,10 +65,10 @@ const ModelRow = memo(function ModelRow({
         <ModelLogo orgId={orgId} size="md" muted={!active} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{name}</span>
-          <span className="block truncate text-xs text-muted">{role}</span>
+          <span className="text-muted block truncate text-xs">{role}</span>
         </span>
         <span
-          className="text-sm font-medium tabular-nums text-muted-foreground"
+          className="text-muted-foreground text-sm font-medium tabular-nums"
           title="Model allocation"
         >
           {active ? `${weight}%` : "Off"}
@@ -127,7 +127,7 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
               <Tooltip delayDuration={150}>
                 <TooltipTrigger asChild>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-medium text-muted-foreground">
+                    <span className="text-muted-foreground text-[11px] font-medium">
                       Auto
                     </span>
                     <Switch
@@ -145,7 +145,7 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
                     message. Badges appear only after Auto chooses who responds.
                   </p>
                   {autoEnabled && lastAutoPickedIds.length > 0 && (
-                    <p className="mt-1 text-muted">
+                    <p className="text-muted mt-1">
                       Last send:{" "}
                       {lastAutoPickedIds
                         .map((id) => popularAiModels.find((m) => m.id === id)?.name ?? id)
@@ -157,7 +157,7 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
               <Tooltip delayDuration={150}>
                 <TooltipTrigger asChild>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-medium text-muted-foreground">
+                    <span className="text-muted-foreground text-[11px] font-medium">
                       Deeper
                     </span>
                     <Switch
@@ -175,22 +175,22 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
                     responses and use the most capable models. This may take
                     longer.
                   </p>
-                  <p className="mt-1 text-muted">Billed at the model&apos;s API price.</p>
+                  <p className="text-muted mt-1">Billed at the model&apos;s API price.</p>
                 </TooltipContent>
               </Tooltip>
           </div>
-          <p className="shrink-0 text-[10px] leading-none text-muted">
+          <p className="text-muted shrink-0 text-[10px] leading-none">
               {activeCount > 0 ? (
                 <span className="inline-flex items-center gap-2 whitespace-nowrap">
                   <span>
                     Active:{" "}
-                    <span className="font-medium text-foreground">
+                    <span className="text-foreground font-medium">
                       {activeCount}
                     </span>
                   </span>
                   <span>
                     Total Input:{" "}
-                    <span className="font-medium text-foreground">
+                    <span className="text-foreground font-medium">
                       {allocationSum}%
                     </span>
                   </span>
@@ -205,7 +205,7 @@ function RoundTableSection({ onClose }: { onClose: () => void }) {
         <ScrollArea className="min-h-0 flex-1">
           <section className="space-y-1 px-3 py-3">
             {tableModels.length === 0 ? (
-              <p className="text-xs text-muted">
+              <p className="text-muted text-xs">
                 Add models in the Model Cart to configure this panel.
               </p>
             ) : (
@@ -256,7 +256,7 @@ function WorkflowSection({ onClose }: { onClose: () => void }) {
           type="button"
           variant="ghost"
           size="sm"
-          className="h-6 px-2 text-xs text-muted-foreground hover:bg-panel-elevated hover:text-foreground"
+          className="text-muted-foreground hover:bg-panel-elevated hover:text-foreground h-6 px-2 text-xs"
         >
           Edit
         </Button>
@@ -277,7 +277,7 @@ function WorkflowSection({ onClose }: { onClose: () => void }) {
 export function RightSidebar() {
   const { usage } = useApiUsage();
   const { rightPanels, setRightPanelVisible } = useLayout();
-  const showRoundTable = rightPanels.roundTable;
+  const showRoundTable = false;
   const showWorkflow = rightPanels.workflow;
   const closePanel = (id: RightPanelId) => setRightPanelVisible(id, false);
 
@@ -300,7 +300,7 @@ export function RightSidebar() {
           <div className="min-h-0 flex-1" aria-hidden />
         )}
         {!showRoundTable && !showWorkflow && (
-          <p className="flex flex-1 items-center justify-center px-4 text-center text-xs text-muted">
+          <p className="text-muted flex flex-1 items-center justify-center px-4 text-center text-xs">
             Use View to select a panel.
           </p>
         )}
@@ -316,7 +316,7 @@ export function RightSidebar() {
         )}
       </div>
 
-      <footer className="flex min-h-workspace-dock shrink-0 flex-col gap-2 border-t border-border-subtle px-3 pb-2.5 pt-3">
+      <footer className="min-h-workspace-dock border-border-subtle flex shrink-0 flex-col gap-2 border-t px-3 pt-3 pb-2.5">
         <section className="grid min-h-0 flex-1 grid-cols-2 gap-2">
           {[
             {
@@ -333,9 +333,9 @@ export function RightSidebar() {
             <section
               key={stat.label}
               title={stat.title}
-              className="flex h-full min-h-0 flex-col items-center justify-center rounded-xl border border-border bg-panel-elevated/65 px-2 py-2 text-center"
+              className="border-border bg-panel-elevated/65 flex h-full min-h-0 flex-col items-center justify-center rounded-xl border px-2 py-2 text-center"
             >
-              <p className="text-[10px] uppercase tracking-wider text-muted">
+              <p className="text-muted text-[10px] tracking-wider uppercase">
                 {stat.label}
               </p>
               <p className="mt-1 text-sm font-medium tabular-nums">

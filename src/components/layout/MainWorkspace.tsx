@@ -224,9 +224,9 @@ export function MainWorkspace() {
 
     return (
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+      <main className="bg-background flex min-w-0 flex-1 flex-col overflow-hidden">
 
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center text-sm text-muted-foreground">
+        <div className="text-muted-foreground flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center text-sm">
 
           No chat selected. Create or open a chat from the left sidebar.
 

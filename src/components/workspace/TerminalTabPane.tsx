@@ -44,7 +44,10 @@ export function TerminalTabPane({
   const spawnCwdRef = useRef<string | null | undefined>(undefined);
   const wasActiveRef = useRef(false);
   const zoneRef = useRef(zone);
-  zoneRef.current = zone;
+
+  useEffect(() => {
+    zoneRef.current = zone;
+  }, [zone]);
 
   const focusPane = useCallback(() => {
     selectBottomPanel();
@@ -53,7 +56,10 @@ export function TerminalTabPane({
   }, [sessionId, selectBottomPanel, onRequestFocus]);
 
   const focusPaneRef = useRef(focusPane);
-  focusPaneRef.current = focusPane;
+
+  useEffect(() => {
+    focusPaneRef.current = focusPane;
+  }, [focusPane]);
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -194,7 +200,7 @@ export function TerminalTabPane({
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [sessionId, selectBottomPanel, cwdReady]);
+  }, [sessionId, selectBottomPanel, cwdReady, cwd, isActive]);
 
   useEffect(() => {
     if (!isActive || !termRef.current) return;

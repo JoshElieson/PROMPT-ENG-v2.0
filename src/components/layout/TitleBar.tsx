@@ -59,7 +59,7 @@ export function TitleBar() {
             type="button"
             title="Minimize"
             onClick={() => void appWindow.minimize()}
-            className="inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-panel-elevated/85 hover:text-foreground"
+            className="text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground inline-flex w-11 items-center justify-center transition-colors"
           >
             <Minus className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
@@ -67,7 +67,7 @@ export function TitleBar() {
             type="button"
             title={isMaximized ? "Restore" : "Maximize"}
             onClick={() => void appWindow.toggleMaximize()}
-            className="inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-panel-elevated/85 hover:text-foreground"
+            className="text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground inline-flex w-11 items-center justify-center transition-colors"
           >
             <Square className="h-3 w-3" strokeWidth={2} />
           </button>
@@ -75,7 +75,7 @@ export function TitleBar() {
             type="button"
             title="Close"
             onClick={() => void appWindow.close()}
-            className="inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-red-600 hover:text-white"
+            className="text-muted-foreground inline-flex w-11 items-center justify-center transition-colors hover:bg-red-600 hover:text-white"
           >
             <X className="h-3.5 w-3.5" strokeWidth={2} />
           </button>

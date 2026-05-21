@@ -1,30 +1,17 @@
 import {
   createContext,
   useCallback,
-  useContext,
   useMemo,
   type ReactNode,
 } from "react";
-import { getModelById, type RoundTableModel } from "@/data/ai-models";
+import type { RoundTableModel } from "@/data/ai-models";
 import {
   clampWeight,
   DEFAULT_ROUND_TABLE_WEIGHTS,
   weightForModel,
 } from "@/lib/round-table-weights";
+import { buildRoundTableModels } from "@/lib/round-table-models";
 import type { PaneModelSession } from "@/types/workspace-pane";
-
-function buildModelsFromWeights(
-  activeIds: string[],
-  weights: Record<string, number>,
-): RoundTableModel[] {
-  return activeIds
-    .map((id) => {
-      const model = getModelById(id);
-      if (!model) return null;
-      return { ...model, weight: weightForModel(weights, id) };
-    })
-    .filter((m): m is RoundTableModel => m != null);
-}
 
 export interface PaneRoundTableContextValue {
   selectedIds: string[];
@@ -35,6 +22,8 @@ export interface PaneRoundTableContextValue {
   toggleModel: (id: string) => void;
   deselectModels: (ids: string[]) => void;
   toggleActive: (id: string) => void;
+  /** Enable exactly one selected model for chat (disables all other active models). */
+  activateOnlyModel: (id: string) => void;
   setModelWeight: (id: string, weight: number) => void;
 }
 
@@ -136,6 +125,23 @@ export function PaneRoundTableProvider({
     [selectedIds, activeIds, weights, patch],
   );
 
+  const activateOnlyModel = useCallback(
+    (id: string) => {
+      if (!selectedIds.includes(id)) return;
+
+      const restored = weightForModel(weights, id);
+      patch({
+        selectedIds: [...selectedIds],
+        activeIds: [id],
+        weights: {
+          ...weights,
+          [id]: restored > 0 ? restored : DEFAULT_ROUND_TABLE_WEIGHTS[id] ?? 100,
+        },
+      });
+    },
+    [selectedIds, weights, patch],
+  );
+
   const setModelWeight = useCallback(
     (id: string, weight: number) => {
       const clamped = clampWeight(weight);
@@ -154,7 +160,7 @@ export function PaneRoundTableProvider({
   );
 
   const roundTableModels = useMemo(
-    () => buildModelsFromWeights(activeIds, weights),
+    () => buildRoundTableModels(activeIds, weights),
     [activeIds, weights],
   );
 
@@ -178,6 +184,7 @@ export function PaneRoundTableProvider({
       toggleModel,
       deselectModels,
       toggleActive,
+      activateOnlyModel,
       setModelWeight,
     }),
     [
@@ -189,6 +196,7 @@ export function PaneRoundTableProvider({
       toggleModel,
       deselectModels,
       toggleActive,
+      activateOnlyModel,
       setModelWeight,
     ],
   );
@@ -200,10 +208,3 @@ export function PaneRoundTableProvider({
   );
 }
 
-export function usePaneRoundTable() {
-  const ctx = useContext(PaneRoundTableContext);
-  if (!ctx) {
-    throw new Error("usePaneRoundTable must be used within PaneRoundTableProvider");
-  }
-  return ctx;
-}

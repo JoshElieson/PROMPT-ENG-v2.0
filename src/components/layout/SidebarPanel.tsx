@@ -54,7 +54,7 @@ export function SidebarPanel({
     <button
       type="button"
       onClick={onClose}
-      className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground"
+      className="text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground flex h-6 w-6 items-center justify-center rounded-md"
       aria-label={title ? `Close ${title}` : "Close panel"}
     >
       <X className="h-3.5 w-3.5" />

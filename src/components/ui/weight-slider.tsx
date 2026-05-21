@@ -53,7 +53,9 @@ export function WeightSlider({
   const pendingRef = useRef<number | null>(null);
   const rafRef = useRef(0);
 
-  displayRef.current = displayValue;
+  useEffect(() => {
+    displayRef.current = displayValue;
+  }, [displayValue]);
 
   useEffect(() => {
     if (!draggingRef.current) setDisplayValue(value);
@@ -136,7 +138,7 @@ export function WeightSlider({
       )}
     >
       <div
-        className="pointer-events-none absolute inset-0 overflow-hidden rounded-full bg-border"
+        className="bg-border pointer-events-none absolute inset-0 overflow-hidden rounded-full"
         aria-hidden
       >
         <div

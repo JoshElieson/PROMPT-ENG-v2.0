@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -33,8 +34,6 @@ interface AppSelectionContextValue {
   isWorkspaceScreenSelected: boolean;
   isWorkspaceAgentTabsSelected: boolean;
   isBottomPanelSelected: boolean;
-  /** @deprecated Use isBottomPanelSelected */
-  isTerminalSelected: boolean;
   selectProject: (rootPath: string) => void;
   /** Focus a path inside an existing project (expands ancestors in the tree). */
   selectProjectPath: (path: string) => void;
@@ -44,8 +43,6 @@ interface AppSelectionContextValue {
   selectWorkspaceScreen: () => void;
   selectWorkspaceAgentTabs: () => void;
   selectBottomPanel: () => void;
-  /** @deprecated Use selectBottomPanel */
-  selectTerminal: () => void;
   moveChatListFocus: (delta: number) => void;
   focusComposer: () => void;
   focusWorkspaceScreen: () => void;
@@ -166,8 +163,6 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
       active.blur();
     }
   }, []);
-
-  const selectTerminal = selectBottomPanel;
 
   const focusComposer = useCallback(() => {
     focusComposerRef.current?.();
@@ -362,40 +357,65 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
     selectWorkspaceAgentTabs,
   ]);
 
-  const value: AppSelectionContextValue = {
-    zone,
-    chatListFocusId,
-    projectFocusRootPath,
-    projectFocusPath,
-    isProjectsSelected:
-      zone === "projects" && projectFocusRootPath != null,
-    isChatListSelected: zone === "chat-list" && chatListFocusId != null,
-    isWorkspaceScreenSelected:
-      zone === "workspace" && workspaceSelectionTarget === "screen",
-    isWorkspaceAgentTabsSelected:
-      zone === "workspace" && workspaceSelectionTarget === "agent-tabs",
-    isBottomPanelSelected: zone === "bottom-panel",
-    isTerminalSelected: zone === "bottom-panel",
-    selectProject,
-    selectProjectPath,
-    selectTopProject,
-    selectChat,
-    selectChatList,
-    selectWorkspaceScreen,
-    selectWorkspaceAgentTabs,
-    selectBottomPanel,
-    selectTerminal,
-    moveChatListFocus,
-    focusComposer,
-    focusWorkspaceScreen,
-    focusWorkspaceAgentTabs,
-    registerFocusComposer,
-    registerFocusWorkspaceScreen,
-    registerFocusWorkspaceAgentTabs,
-    registerFocusProjectTree,
-    clearProjectFocusPath,
-    selectTopChat,
-  };
+  const value = useMemo<AppSelectionContextValue>(
+    () => ({
+      zone,
+      chatListFocusId,
+      projectFocusRootPath,
+      projectFocusPath,
+      isProjectsSelected:
+        zone === "projects" && projectFocusRootPath != null,
+      isChatListSelected: zone === "chat-list" && chatListFocusId != null,
+      isWorkspaceScreenSelected:
+        zone === "workspace" && workspaceSelectionTarget === "screen",
+      isWorkspaceAgentTabsSelected:
+        zone === "workspace" && workspaceSelectionTarget === "agent-tabs",
+      isBottomPanelSelected: zone === "bottom-panel",
+      selectProject,
+      selectProjectPath,
+      selectTopProject,
+      selectChat,
+      selectChatList,
+      selectWorkspaceScreen,
+      selectWorkspaceAgentTabs,
+      selectBottomPanel,
+      moveChatListFocus,
+      focusComposer,
+      focusWorkspaceScreen,
+      focusWorkspaceAgentTabs,
+      registerFocusComposer,
+      registerFocusWorkspaceScreen,
+      registerFocusWorkspaceAgentTabs,
+      registerFocusProjectTree,
+      clearProjectFocusPath,
+      selectTopChat,
+    }),
+    [
+      zone,
+      chatListFocusId,
+      projectFocusRootPath,
+      projectFocusPath,
+      workspaceSelectionTarget,
+      selectProject,
+      selectProjectPath,
+      selectTopProject,
+      selectChat,
+      selectChatList,
+      selectWorkspaceScreen,
+      selectWorkspaceAgentTabs,
+      selectBottomPanel,
+      moveChatListFocus,
+      focusComposer,
+      focusWorkspaceScreen,
+      focusWorkspaceAgentTabs,
+      registerFocusComposer,
+      registerFocusWorkspaceScreen,
+      registerFocusWorkspaceAgentTabs,
+      registerFocusProjectTree,
+      clearProjectFocusPath,
+      selectTopChat,
+    ],
+  );
 
   return (
     <AppSelectionContext.Provider value={value}>

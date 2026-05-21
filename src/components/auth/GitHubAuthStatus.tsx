@@ -65,8 +65,8 @@ export function GitHubAuthStatus({
         title={`Signed in to GitHub as ${session.user.login}`}
       >
         <span className="relative flex h-2 w-2 shrink-0">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-40" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+          <span className="bg-success absolute inline-flex h-full w-full animate-ping rounded-full opacity-40" />
+          <span className="bg-success relative inline-flex h-2 w-2 rounded-full" />
         </span>
         {session.user.avatar_url ? (
           <img
@@ -83,7 +83,7 @@ export function GitHubAuthStatus({
         <span className={cn("min-w-0 truncate", isMenu ? "text-xs" : "text-[11px]")}>
           {isMenu ? (
             <>
-              <span className="font-medium text-success">Signed in</span>
+              <span className="text-success font-medium">Signed in</span>
               <span className="text-muted"> · @{session.user.login}</span>
             </>
           ) : (
@@ -110,12 +110,12 @@ export function GitHubAuthStatus({
           : "GitHub sign-in is not configured"
       }
     >
-      <span className="h-2 w-2 shrink-0 rounded-full bg-muted/80" />
+      <span className="bg-muted/80 h-2 w-2 shrink-0 rounded-full" />
       <GitHubIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
       <span className={isMenu ? "text-xs" : "text-[11px]"}>
         {isMenu ? (
           <>
-            <span className="font-medium text-muted-foreground">Not signed in</span>
+            <span className="text-muted-foreground font-medium">Not signed in</span>
             <span className="text-muted"> · GitHub</span>
           </>
         ) : (

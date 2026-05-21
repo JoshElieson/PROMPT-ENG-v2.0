@@ -40,6 +40,33 @@ fn normalize_root(path: &str) -> String {
     path.trim_end_matches(|c| c == '/' || c == '\\').to_string()
 }
 
+fn should_skip_segment(name: &str) -> bool {
+    matches!(
+        name,
+        "node_modules"
+            | ".git"
+            | ".svn"
+            | "target"
+            | "dist"
+            | "build"
+            | ".next"
+            | "__pycache__"
+            | "incremental"
+            | ".cursor"
+            | ".tauri"
+            | "coverage"
+            | ".vite"
+            | "out"
+    ) || (name.starts_with('.') && name != ".env" && name != ".cursor")
+}
+
+fn path_has_ignored_segment(path: &str) -> bool {
+    let normalized = path.replace('\\', "/").to_lowercase();
+    normalized
+        .split('/')
+        .any(|segment| !segment.is_empty() && should_skip_segment(segment))
+}
+
 fn is_relevant(kind: &EventKind) -> bool {
     matches!(
         kind,
@@ -121,7 +148,11 @@ fn start_watcher(app: AppHandle, root_path: String) -> Result<RootWatch, String>
                 return;
             }
             for path in event.paths {
-                let _ = tx.send(path.to_string_lossy().to_string());
+                let path_str = path.to_string_lossy().to_string();
+                if path_has_ignored_segment(&path_str) {
+                    continue;
+                }
+                let _ = tx.send(path_str);
             }
         },
         Config::default(),

@@ -24,7 +24,7 @@ export function RoundTableDiscussion({
 
   return (
     <section className="space-y-2">
-      <p className="text-[11px] text-muted">
+      <p className="text-muted text-[11px]">
         {isSynthesizing
           ? "Synthesizing a combined answer…"
           : models.length === 1

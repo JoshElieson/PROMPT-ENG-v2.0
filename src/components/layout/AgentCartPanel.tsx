@@ -36,11 +36,11 @@ function FlyoutModelItem({
         type="checkbox"
         checked={selected}
         onChange={onToggle}
-        className="h-3.5 w-3.5 shrink-0 border-border bg-panel accent-foreground"
+        className="border-border bg-panel accent-foreground h-3.5 w-3.5 shrink-0"
       />
       <ModelLogo orgId={model.orgId} size="sm" />
       <span className="min-w-0 flex-1 truncate font-medium">{model.name}</span>
-      <span className="shrink-0 text-[10px] text-muted">{model.role}</span>
+      <span className="text-muted shrink-0 text-[10px]">{model.role}</span>
     </label>
   );
 }
@@ -75,7 +75,7 @@ function OrgFlyout({
 
   return createPortal(
     <section
-      className="fixed z-50 flex min-w-[220px] flex-col overflow-hidden rounded-lg border border-border bg-panel shadow-lg"
+      className="border-border bg-panel fixed z-50 flex min-w-[220px] flex-col overflow-hidden rounded-lg border shadow-lg"
       style={{
         top: openUpward ? undefined : anchor.top,
         bottom: openUpward ? window.innerHeight - anchor.top : undefined,
@@ -85,9 +85,9 @@ function OrgFlyout({
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
     >
-      <header className="shrink-0 border-b border-border-subtle px-3 py-2">
-        <p className="text-xs font-semibold text-foreground">{org.name}</p>
-        <p className="text-[10px] text-muted">
+      <header className="border-border-subtle shrink-0 border-b px-3 py-2">
+        <p className="text-foreground text-xs font-semibold">{org.name}</p>
+        <p className="text-muted text-[10px]">
           {selectedCount} of {models.length} in Round Table
         </p>
       </header>
@@ -167,7 +167,7 @@ function OrgCartRow({
         <ModelLogo orgId={org.id} size="md" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{org.name}</span>
-          <span className="mt-0.5 block truncate text-[11px] text-muted">
+          <span className="text-muted mt-0.5 block truncate text-[11px]">
             {models.length} {models.length === 1 ? "model" : "models"}
             {selectedCount > 0 && (
               <span className="text-muted-foreground">
@@ -178,7 +178,7 @@ function OrgCartRow({
           </span>
         </span>
       </button>
-      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
+      <ChevronRight className="text-muted h-3.5 w-3.5 shrink-0" aria-hidden />
     </div>
   );
 }
@@ -230,11 +230,11 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
     <SidebarPanel
       title="Model Cart"
       active={active}
-      headerExtra={<ShoppingCart className="h-3.5 w-3.5 text-accent" />}
+      headerExtra={<ShoppingCart className="text-accent h-3.5 w-3.5" />}
     >
-      <section className="shrink-0 border-b border-border-subtle px-2 py-2">
+      <section className="border-border-subtle shrink-0 border-b px-2 py-2">
         <label className="relative block w-full min-w-0">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+          <Search className="text-muted pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
           <input
             type="search"
             value={search}
@@ -258,7 +258,7 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
                 setOpenOrgId(null);
                 setFlyoutAnchor(null);
               }}
-              className="absolute right-2 flex h-5 w-5 items-center justify-center text-muted hover:text-foreground"
+              className="text-muted hover:text-foreground absolute right-2 flex h-5 w-5 items-center justify-center"
               aria-label="Clear search"
             >
               <X className="h-3 w-3" />
@@ -270,7 +270,7 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
       <ScrollArea className="h-full">
         <section className="space-y-1 p-2">
           {filteredGroups.length === 0 ? (
-            <p className="px-2 py-6 text-center text-xs text-muted">
+            <p className="text-muted px-2 py-6 text-center text-xs">
               No models or providers match &ldquo;{search.trim()}&rdquo;
             </p>
           ) : (
@@ -311,8 +311,8 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
       )}
 
       <footer className="shrink-0 px-3 py-2">
-        <p className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">{selectedIds.length}</span>
+        <p className="text-muted-foreground text-xs">
+          <span className="text-foreground font-medium">{selectedIds.length}</span>
           {selectedIds.length === 1 ? " model" : " models"} selected
         </p>
       </footer>
