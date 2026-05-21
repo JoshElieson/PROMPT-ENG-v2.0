@@ -7,6 +7,7 @@ import {
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppSelection } from "@/contexts/AppSelectionContext";
+import { useLayout } from "@/contexts/LayoutContext";
 import {
   canUseEmbeddedBrowser,
   closeBrowserWebview,
@@ -106,25 +107,34 @@ export function BrowserTabPane({
   suppressNativeOverlay = false,
   onRequestFocus,
 }: BrowserTabPaneProps) {
+  const { pendingBrowserUrl, setPendingBrowserUrl } = useLayout();
+  const initialUrl = pendingBrowserUrl || DEFAULT_URL;
+
   const showNativeWebview = isActive && !suppressNativeOverlay;
   const useNative = canUseEmbeddedBrowser();
   const { selectBottomPanel } = useAppSelection();
   const hostRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [webviewReady, setWebviewReady] = useState(false);
-  const historyRef = useRef<string[]>([DEFAULT_URL]);
+  const historyRef = useRef<string[]>([initialUrl]);
   const historyIndexRef = useRef(0);
-  const [addressBar, setAddressBar] = useState(DEFAULT_URL);
-  const [pageUrl, setPageUrl] = useState(DEFAULT_URL);
+  const [addressBar, setAddressBar] = useState(initialUrl);
+  const [pageUrl, setPageUrl] = useState(initialUrl);
   const pageUrlRef = useRef(pageUrl);
   pageUrlRef.current = pageUrl;
-  const nativeUrlRef = useRef(DEFAULT_URL);
+  const nativeUrlRef = useRef(initialUrl);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [historyPos, setHistoryPos] = useState({ index: 0, length: 1 });
   const [nativeNav, setNativeNav] = useState({
     canGoBack: false,
     canGoForward: false,
   });
+
+  useEffect(() => {
+    if (pendingBrowserUrl) {
+      setPendingBrowserUrl(null);
+    }
+  }, [pendingBrowserUrl, setPendingBrowserUrl]);
 
   const focusPane = useCallback(() => {
     selectBottomPanel();
@@ -184,11 +194,12 @@ export function BrowserTabPane({
           await setBrowserWebviewBounds(tabId, readBounds(host));
         }
       } catch (err) {
-        const message =
-          err instanceof Error
-            ? err.message
+        const message = typeof err === "string" 
+          ? err 
+          : err instanceof Error 
+            ? err.message 
             : "Could not start embedded browser.";
-        setLoadError(message);
+        setLoadError(`Browser Error: ${message}`);
       }
     };
 

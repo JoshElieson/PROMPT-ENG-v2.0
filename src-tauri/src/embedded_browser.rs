@@ -17,6 +17,13 @@ pub struct BrowserBounds {
 #[derive(Clone, Default)]
 pub struct BrowserWebviewState(Arc<Mutex<HashMap<String, BrowserSession>>>);
 
+impl BrowserWebviewState {
+    pub fn get_active_sessions(&self) -> Vec<String> {
+        let sessions = self.0.lock().expect("browser state lock");
+        sessions.keys().cloned().collect()
+    }
+}
+
 struct BrowserSession {
     history: Vec<String>,
     index: usize,
@@ -36,7 +43,10 @@ fn webview_label(id: &str) -> String {
 }
 
 fn parse_url(url: &str) -> Result<Url, String> {
-    url.parse::<Url>().map_err(|e| e.to_string())
+    url.parse::<Url>().or_else(|_| {
+        let with_scheme = format!("https://{}", url);
+        with_scheme.parse::<Url>()
+    }).map_err(|e| e.to_string())
 }
 
 /// Normalize URLs so history entries match despite trailing slashes, fragments, etc.
@@ -176,7 +186,7 @@ pub async fn browser_webview_open(
     let app_for_nav = app.clone();
     let state_for_nav = (*state).clone();
 
-    let webview = window
+    let webview_result = window
         .add_child(
             tauri::webview::WebviewBuilder::new(&label, WebviewUrl::External(parsed))
                 .on_navigation(move |nav_url| {
@@ -194,8 +204,20 @@ pub async fn browser_webview_open(
                 }),
             LogicalPosition::new(bounds.x, bounds.y),
             LogicalSize::new(bounds.width.max(1.0), bounds.height.max(1.0)),
-        )
-        .map_err(|e| e.to_string())?;
+        );
+
+    let webview = match webview_result {
+        Ok(wv) => wv,
+        Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("already exists") {
+                // If it already exists, just navigate and update bounds.
+                browser_webview_navigate(app.clone(), id.clone(), url).await?;
+                return browser_webview_set_bounds(app, id, bounds).await;
+            }
+            return Err(err_str);
+        }
+    };
 
     if bounds.width < 1.0 || bounds.height < 1.0 {
         webview.hide().map_err(|e| e.to_string())?;

@@ -5,8 +5,10 @@ use crate::ai_workspace::{
     tool_clear_directory, tool_list_directory, tool_read_file, tool_remove_path, tool_write_file,
     AiWorkspace, WorkspacePolicy,
 };
+use crate::embedded_browser::{BrowserWebviewState, browser_webview_navigate};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tauri::{AppHandle, State, Emitter};
 
 const FORGE_USER_AGENT: &str = "FORGE/2.0 (Tauri)";
 const MAX_TOOL_ROUNDS: u32 = 14;
@@ -117,6 +119,20 @@ fn tools_schema_openai() -> Vec<serde_json::Value> {
                 }
             }
         }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "browser_navigate",
+                "description": "Navigate the embedded browser to a specific URL. If no browser tab is currently open, it will automatically open one.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": { "type": "string", "description": "The URL to navigate to (e.g. 'https://supabase.com/dashboard')" }
+                    },
+                    "required": ["url"]
+                }
+            }
+        }),
     ]
 }
 
@@ -125,19 +141,16 @@ Formatting:\n\
 - When sharing code, commands, or config snippets, use fenced markdown code blocks with a language tag (e.g. ```python).\n\
 - Put a short plain-language intro before or after the block when helpful; keep the code itself inside the fence.\n";
 
-const DEFAULT_CHAT_SYSTEM: &str = "You are a helpful assistant in a multi-model AI workspace. \
-When sharing code or shell commands, use fenced markdown code blocks with a language tag (e.g. ```python).";
-
-fn chat_system_prompt(user: Option<&str>) -> String {
-    match user.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(custom) => format!("{custom}{CODE_FORMATTING_GUIDANCE}"),
-        None => DEFAULT_CHAT_SYSTEM.to_string(),
-    }
-}
-
-fn workspace_system_prompt(policy: &WorkspacePolicy) -> String {
-    format!(
-        "The user enabled the following locations for AI file access. You have tools read_file, write_file, list_directory, remove_path, and clear_directory to work on their real project on disk.\n\
+fn workspace_system_prompt(policy: &WorkspacePolicy, system: Option<&str>) -> String {
+    let mut base = if policy.roots_summary().is_empty() {
+        "You are an AI programming assistant. You have access to external tools like browser_navigate to interact with web applications. However, no local project folders have been enabled, so you cannot read or write any local files.\n\
+\n\
+How to work:\n\
+- To navigate or open any website (e.g. Supabase, Vercel, localhost, or any target page), call browser_navigate with the target URL.\n\
+- You do NOT have access to read_file, write_file, list_directory, remove_path, or clear_directory.\n".to_string()
+    } else {
+        format!(
+            "The user enabled the following locations for AI file access. You have tools read_file, write_file, list_directory, remove_path, clear_directory, and browser_navigate to work on their project and interact with web applications.\n\
 \n\
 How to work:\n\
 - Whenever the request depends on this codebase (behavior, errors, structure, config, or \"what does X do\"), use list_directory and/or read_file early instead of guessing.\n\
@@ -145,6 +158,7 @@ How to work:\n\
 - When the user asks to delete files, remove folders, or empty/clear a directory, use remove_path or clear_directory—do not claim deletion without calling a tool.\n\
 - To empty a folder but keep the folder itself, call clear_directory with that folder's absolute path (works even when only files inside are AI-enabled).\n\
 - remove_path deletes any file, including individually AI-enabled files. It deletes subfolders recursively. Only an AI-enabled folder root itself must be cleared with clear_directory, not remove_path.\n\
+- To navigate or open any website (e.g. Supabase, Vercel, localhost, or any target page), call browser_navigate with the target URL.\n\
 - If you are unsure which file matters, list_directory near the roots below, then read the most relevant paths.\n\
 \n\
 Rules:\n\
@@ -152,13 +166,29 @@ Rules:\n\
 - Prefer read_file or list_directory before overwriting files.\n\
 - write_file replaces the entire file contents; it does not delete files.\n\
 - remove_path cannot delete an AI-enabled folder root in one step—use clear_directory on that folder instead.\n\
-- Use absolute paths exactly as they appear on disk.{CODE_FORMATTING_GUIDANCE}",
-        policy.roots_summary()
-    )
+- Use absolute paths exactly as they appear on disk.{CODE_FORMATTING_GUIDANCE}\n",
+            policy.roots_summary()
+        )
+    };
+
+    if let Some(s) = system {
+        if !s.trim().is_empty() {
+            base.push_str("\n");
+            base.push_str(s.trim());
+        }
+    }
+    
+    base
 }
 
-fn run_tool(policy: &WorkspacePolicy, name: &str, args: &str) -> String {
-    let result = (|| -> Result<String, String> {
+async fn run_tool(
+    app: &AppHandle,
+    browser_state: &BrowserWebviewState,
+    policy: &WorkspacePolicy,
+    name: &str,
+    args: &str,
+) -> String {
+    let result = (|| async {
         let v: serde_json::Value =
             serde_json::from_str(args).map_err(|e| format!("Invalid tool arguments JSON: {e}"))?;
         match name {
@@ -193,9 +223,25 @@ fn run_tool(policy: &WorkspacePolicy, name: &str, args: &str) -> String {
                     .ok_or_else(|| "clear_directory: missing path".to_string())?;
                 tool_clear_directory(policy, path)
             }
+            "browser_navigate" => {
+                let url = v["url"]
+                    .as_str()
+                    .ok_or_else(|| "browser_navigate: missing url".to_string())?;
+                let active_sessions = browser_state.get_active_sessions();
+                if let Some(session_id) = active_sessions.first() {
+                    browser_webview_navigate(app.clone(), session_id.clone(), url.to_string())
+                        .await
+                        .map_err(|e| format!("Failed to navigate browser: {e}"))?;
+                    Ok(format!("Navigated active browser tab to {url}"))
+                } else {
+                    app.emit("open-browser-tab", url)
+                        .map_err(|e| format!("Failed to emit open-browser-tab event: {e}"))?;
+                    Ok(format!("No active browser tab found. Sent request to open a new tab navigated to {url}"))
+                }
+            }
             _ => Err(format!("Unknown tool: {name}")),
         }
-    })();
+    })().await;
     match result {
         Ok(s) => s,
         Err(e) => format!("ERROR: {e}"),
@@ -277,9 +323,12 @@ async fn complete_openai(
 }
 
 async fn openai_agent_loop(
+    app: AppHandle,
+    browser_state: State<'_, BrowserWebviewState>,
     api_model: &str,
     chat_messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
 ) -> Result<String, String> {
     let key = api_key(Provider::OpenAi).expect("key checked");
     let base = base_url(Provider::OpenAi, "https://api.openai.com/v1");
@@ -289,7 +338,7 @@ async fn openai_agent_loop(
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
-        "content": workspace_system_prompt(policy),
+        "content": workspace_system_prompt(policy, system),
     })];
     for turn in chat_messages {
         let role = if turn.role == "assistant" {
@@ -346,7 +395,7 @@ async fn openai_agent_loop(
                     let id = call["id"].as_str().unwrap_or("");
                     let name = call["function"]["name"].as_str().unwrap_or("");
                     let args = call["function"]["arguments"].as_str().unwrap_or("{}");
-                    let output = run_tool(policy, name, args);
+                    let output = run_tool(&app, &browser_state, policy, name, args).await;
                     api_messages.push(json!({
                         "role": "tool",
                         "tool_call_id": id,
@@ -440,19 +489,22 @@ async fn complete_deepseek(
 }
 
 async fn deepseek_agent_loop(
+    app: AppHandle,
+    browser_state: State<'_, BrowserWebviewState>,
     api_model: &str,
     chat_messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
 ) -> Result<String, String> {
     let key = api_key(Provider::DeepSeek).expect("key checked");
-    let base = base_url(Provider::DeepSeek, "https://api.deepseek.com/v1");
+    let base = base_url(Provider::DeepSeek, "https://api.deepseek.com");
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
     let tools = tools_schema_openai();
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
-        "content": workspace_system_prompt(policy),
+        "content": workspace_system_prompt(policy, system),
     })];
     for turn in chat_messages {
         let role = if turn.role == "assistant" {
@@ -509,7 +561,7 @@ async fn deepseek_agent_loop(
                     let id = call["id"].as_str().unwrap_or("");
                     let name = call["function"]["name"].as_str().unwrap_or("");
                     let args = call["function"]["arguments"].as_str().unwrap_or("{}");
-                    let output = run_tool(policy, name, args);
+                    let output = run_tool(&app, &browser_state, policy, name, args).await;
                     api_messages.push(json!({
                         "role": "tool",
                         "tool_call_id": id,
@@ -588,6 +640,17 @@ fn anthropic_tools() -> Vec<serde_json::Value> {
                     "path": { "type": "string", "description": "Absolute directory path" }
                 },
                 "required": ["path"]
+            }
+        }),
+        json!({
+            "name": "browser_navigate",
+            "description": "Navigate the embedded browser to a specific URL. If no browser tab is currently open, it will automatically open one.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "The URL to navigate to (e.g. 'https://supabase.com/dashboard')" }
+                },
+                "required": ["url"]
             }
         }),
     ]
@@ -675,13 +738,16 @@ async fn complete_anthropic(
 }
 
 async fn anthropic_agent_loop(
+    app: AppHandle,
+    browser_state: State<'_, BrowserWebviewState>,
     api_model: &str,
     chat_messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
 ) -> Result<String, String> {
     let key = api_key(Provider::Anthropic).expect("key checked");
-    let base = base_url(Provider::Anthropic, "https://api.anthropic.com");
-    let url = format!("{}/v1/messages", base.trim_end_matches('/'));
+    let base = base_url(Provider::Anthropic, "https://api.anthropic.com/v1");
+    let url = format!("{}/messages", base.trim_end_matches('/'));
     let client = http_client()?;
     let tools = anthropic_tools();
 
@@ -692,17 +758,14 @@ async fn anthropic_agent_loop(
         } else {
             "user"
         };
-        api_messages.push(json!({
-            "role": role,
-            "content": [{ "type": "text", "text": turn.content }],
-        }));
+        api_messages.push(json!({ "role": role, "content": turn.content }));
     }
 
     for _ in 0..MAX_TOOL_ROUNDS {
         let body = json!({
             "model": api_model,
             "max_tokens": 4096,
-            "system": workspace_system_prompt(policy),
+            "system": workspace_system_prompt(policy, system),
             "tools": tools,
             "messages": api_messages,
         });
@@ -758,7 +821,7 @@ async fn anthropic_agent_loop(
         if !tool_uses.is_empty() {
             let mut results: Vec<serde_json::Value> = Vec::new();
             for (id, name, args) in tool_uses {
-                let out = run_tool(policy, &name, &args);
+                let out = run_tool(&app, &browser_state, policy, &name, &args).await;
                 results.push(json!({
                     "type": "tool_result",
                     "tool_use_id": id,
@@ -842,6 +905,17 @@ fn gemini_tool_declarations() -> serde_json::Value {
                     },
                     "required": ["path"]
                 }
+            },
+            {
+                "name": "browser_navigate",
+                "description": "Navigate the embedded browser to a specific URL. If no browser tab is currently open, it will automatically open one.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": { "type": "string" }
+                    },
+                    "required": ["url"]
+                }
             }
         ]
     }])
@@ -917,43 +991,36 @@ async fn complete_gemini(
 }
 
 async fn gemini_agent_loop(
+    app: AppHandle,
+    browser_state: State<'_, BrowserWebviewState>,
     api_model: &str,
     chat_messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
 ) -> Result<String, String> {
     let key = api_key(Provider::Google).expect("key checked");
-    let base = base_url(
-        Provider::Google,
-        "https://generativelanguage.googleapis.com/v1beta",
-    );
-    let url = format!(
-        "{}/models/{}:generateContent?key={}",
-        base.trim_end_matches('/'),
-        api_model,
-        key
-    );
+    let base = base_url(Provider::Google, "https://generativelanguage.googleapis.com/v1beta/models");
+    let url = format!("{}/{api_model}:generateContent?key={key}", base.trim_end_matches('/'));
     let client = http_client()?;
+    let tools = gemini_tool_declarations();
 
-    let mut contents: Vec<serde_json::Value> = Vec::new();
+    let mut api_messages: Vec<serde_json::Value> = Vec::new();
     for turn in chat_messages {
         let role = if turn.role == "assistant" {
             "model"
         } else {
             "user"
         };
-        contents.push(json!({
-            "role": role,
-            "parts": [{ "text": turn.content }],
-        }));
+        api_messages.push(json!({ "role": role, "parts": [{ "text": turn.content }] }));
     }
 
     for _ in 0..MAX_TOOL_ROUNDS {
         let body = json!({
-            "contents": contents,
+            "contents": api_messages,
             "systemInstruction": {
-                "parts": [{ "text": workspace_system_prompt(policy) }],
+                "parts": [{ "text": workspace_system_prompt(policy, system) }]
             },
-            "tools": gemini_tool_declarations(),
+            "tools": tools,
         });
 
         let res = client
@@ -1001,13 +1068,13 @@ async fn gemini_agent_loop(
             }
         }
 
-        contents.push(json!({ "role": "model", "parts": parts }));
+        api_messages.push(json!({ "role": "model", "parts": parts }));
 
         if !function_calls.is_empty() {
             let mut response_parts: Vec<serde_json::Value> = Vec::new();
             for (name, args_val) in function_calls {
                 let args_str = serde_json::to_string(&args_val).unwrap_or_else(|_| "{}".to_string());
-                let out = run_tool(policy, &name, &args_str);
+                let out = run_tool(&app, &browser_state, policy, &name, &args_str).await;
                 response_parts.push(json!({
                     "functionResponse": {
                         "name": name,
@@ -1015,7 +1082,7 @@ async fn gemini_agent_loop(
                     }
                 }));
             }
-            contents.push(json!({ "role": "user", "parts": response_parts }));
+            api_messages.push(json!({ "role": "user", "parts": response_parts }));
             continue;
         }
 
@@ -1042,25 +1109,30 @@ async fn complete_for_model(
 }
 
 async fn complete_for_model_with_workspace(
+    app: AppHandle,
+    browser_state: State<'_, BrowserWebviewState>,
     model_id: &str,
     messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
 ) -> Result<String, String> {
     let (provider, api_model) = resolve_api_model(model_id)?;
     if !model_supports_tools(model_id) {
-        let sys = Some(workspace_system_prompt(policy));
+        let sys = Some(workspace_system_prompt(policy, system));
         return complete_for_model(model_id, messages, sys.as_deref()).await;
     }
     match provider {
-        Provider::OpenAi => openai_agent_loop(&api_model, messages, policy).await,
-        Provider::Anthropic => anthropic_agent_loop(&api_model, messages, policy).await,
-        Provider::Google => gemini_agent_loop(&api_model, messages, policy).await,
-        Provider::DeepSeek => deepseek_agent_loop(&api_model, messages, policy).await,
+        Provider::OpenAi => openai_agent_loop(app, browser_state, &api_model, messages, policy, system).await,
+        Provider::Anthropic => anthropic_agent_loop(app, browser_state, &api_model, messages, policy, system).await,
+        Provider::Google => gemini_agent_loop(app, browser_state, &api_model, messages, policy, system).await,
+        Provider::DeepSeek => deepseek_agent_loop(app, browser_state, &api_model, messages, policy, system).await,
     }
 }
 
 #[tauri::command]
 pub async fn ai_chat_complete(
+    app: AppHandle,
+    browser_state: State<'_, BrowserWebviewState>,
     model_id: String,
     messages: Vec<ChatTurn>,
     workspace: Option<AiWorkspace>,
@@ -1069,13 +1141,12 @@ pub async fn ai_chat_complete(
     if messages.is_empty() {
         return Err("No messages to send.".to_string());
     }
-    if let Some(ws) = workspace.as_ref() {
-        if let Some(policy) = WorkspacePolicy::from_workspace(ws) {
-            return complete_for_model_with_workspace(&model_id, &messages, &policy).await;
-        }
-    }
-    let sys = chat_system_prompt(system.as_deref());
-    complete_for_model(&model_id, &messages, Some(sys.as_str())).await
+    let policy = workspace
+        .as_ref()
+        .and_then(WorkspacePolicy::from_workspace)
+        .unwrap_or_else(WorkspacePolicy::empty);
+
+    complete_for_model_with_workspace(app, browser_state, &model_id, &messages, &policy, system.as_deref()).await
 }
 
 #[tauri::command]

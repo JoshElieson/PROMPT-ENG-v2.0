@@ -20,6 +20,10 @@ pub struct WorkspacePolicy {
 }
 
 impl WorkspacePolicy {
+    pub fn empty() -> Self {
+        Self { roots: vec![] }
+    }
+
     pub fn from_workspace(ws: &AiWorkspace) -> Option<Self> {
         let roots: Vec<std::path::PathBuf> = ws
             .enabled_paths

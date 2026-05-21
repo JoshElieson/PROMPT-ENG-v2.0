@@ -57,6 +57,8 @@ interface LayoutContextValue {
   bottomPanelBoot: BottomPanelBootTab | null;
   requestBottomPanelTab: (kind: BottomPanelBootTab) => void;
   clearBottomPanelBoot: () => void;
+  pendingBrowserUrl: string | null;
+  setPendingBrowserUrl: (url: string | null) => void;
 }
 
 const LayoutContext = createContext<LayoutContextValue | null>(null);
@@ -91,6 +93,7 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   );
   const [bottomPanelBoot, setBottomPanelBoot] =
     useState<BottomPanelBootTab | null>(null);
+  const [pendingBrowserUrl, setPendingBrowserUrl] = useState<string | null>(null);
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() =>
     loadLayoutBool(LEFT_SIDEBAR_COLLAPSED_KEY, false),
   );
@@ -202,6 +205,27 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     setWorkspaceBottomPanelOpen(true);
   }, []);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    const setup = async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        const fn = await listen<string>("open-browser-tab", (event) => {
+          const url = event.payload;
+          setPendingBrowserUrl(url);
+          requestBottomPanelTab("browser");
+        });
+        unlisten = fn;
+      } catch (e) {
+        console.warn("Failed to listen to open-browser-tab event:", e);
+      }
+    };
+    void setup();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [requestBottomPanelTab]);
+
   const clearBottomPanelBoot = useCallback(() => {
     setBottomPanelBoot(null);
   }, []);
@@ -297,6 +321,8 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
         bottomPanelBoot,
         requestBottomPanelTab,
         clearBottomPanelBoot,
+        pendingBrowserUrl,
+        setPendingBrowserUrl,
       }}
     >
       {children}
