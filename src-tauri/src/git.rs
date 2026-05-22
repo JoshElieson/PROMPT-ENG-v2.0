@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use crate::fs::remove_path;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -74,6 +75,20 @@ fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
     } else {
         Err(if stderr.is_empty() { stdout } else { stderr })
     }
+}
+
+fn normalize_pathspec(repo_path: &Path, raw_path: &str) -> String {
+    let trimmed = raw_path.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let candidate = Path::new(trimmed);
+    if candidate.is_absolute() {
+        if let Ok(relative) = candidate.strip_prefix(repo_path) {
+            return relative.to_string_lossy().replace('\\', "/");
+        }
+    }
+    trimmed.replace('\\', "/")
 }
 
 fn is_git_repo(path: &str) -> bool {
@@ -341,4 +356,67 @@ pub fn git_clone(url: String, parent_path: String) -> Result<GitCommandResult, S
             output: e,
         }),
     }
+}
+
+#[tauri::command]
+pub fn git_restore_paths(path: String, paths: Vec<String>) -> Result<GitCommandResult, String> {
+    if !is_git_repo(&path) {
+        return Err("Not a git repository.".to_string());
+    }
+    let repo_path = Path::new(&path);
+
+    let mut restored = 0usize;
+    let mut deleted_untracked = 0usize;
+    let mut skipped = 0usize;
+    let mut errors: Vec<String> = Vec::new();
+
+    for raw in paths {
+        let pathspec = normalize_pathspec(repo_path, &raw);
+        if pathspec.is_empty() {
+            skipped += 1;
+            continue;
+        }
+
+        let tracked = run_git(&path, &["ls-files", "--error-unmatch", "--", &pathspec]).is_ok();
+        if tracked {
+            match run_git(
+                &path,
+                &["restore", "--staged", "--worktree", "--", &pathspec],
+            ) {
+                Ok(_) => restored += 1,
+                Err(err) => errors.push(format!("{pathspec}: {err}")),
+            }
+            continue;
+        }
+
+        let target = {
+            let raw_path = Path::new(raw.trim());
+            if raw_path.is_absolute() {
+                raw_path.to_path_buf()
+            } else {
+                repo_path.join(&pathspec)
+            }
+        };
+        if target.exists() {
+            if let Err(err) = remove_path(&target) {
+                errors.push(format!("{}: {err}", target.display()));
+            } else {
+                deleted_untracked += 1;
+            }
+        } else {
+            skipped += 1;
+        }
+    }
+
+    let mut output = format!(
+        "Restored {restored} tracked path(s), removed {deleted_untracked} untracked path(s), skipped {skipped} path(s)."
+    );
+    if !errors.is_empty() {
+        output.push_str("\n\n");
+        output.push_str(&errors.join("\n"));
+    }
+    Ok(GitCommandResult {
+        success: errors.is_empty(),
+        output,
+    })
 }

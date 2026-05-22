@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -17,16 +18,10 @@ import {
   type MenuEntry,
 } from "@/data/menu-items";
 import type { SidebarView } from "@/components/layout/ActivityBar";
+import { useChats } from "@/contexts/ChatsContext";
+import { useAppSelection } from "@/contexts/AppSelectionContext";
 import { menuActionChecked, useLayout } from "@/contexts/LayoutContext";
 import { cn } from "@/lib/utils";
-
-function menuActionToRightPanel(
-  action: MenuActionId,
-): "roundTable" | "workflow" | null {
-  if (action === "view.roundTablePanel") return "roundTable";
-  if (action === "view.workflowPanel") return "workflow";
-  return null;
-}
 
 function menuActionToSidebarView(action: MenuActionId): Exclude<SidebarView, "git"> | null {
   if (action === "view.explorer") return "explorer";
@@ -35,16 +30,42 @@ function menuActionToSidebarView(action: MenuActionId): Exclude<SidebarView, "gi
 }
 
 function MenuEntries({ items }: { items: MenuEntry[] }) {
+  const { createChat, startNewProject, expandActiveWorkspaceLayout } = useChats();
+  const { selectWorkspaceScreen } = useAppSelection();
   const {
-    rightPanels,
     workspaceBottomPanelOpen,
+    bottomPanelKindsVisible,
     sidebarView,
     leftSidebarCollapsed,
-    setRightPanelVisible,
     setLeftSidebarViewVisible,
-    requestBottomPanelTab,
+    toggleBottomPanelKind,
     dispatchMenuAction,
   } = useLayout();
+  const runMenuAction = useCallback(
+    (action: MenuActionId) => {
+      if (action === "file.newAgent") {
+        if (!expandActiveWorkspaceLayout(true)) {
+          createChat();
+        }
+        selectWorkspaceScreen();
+        return;
+      }
+      if (action === "file.newProject") {
+        setLeftSidebarViewVisible("explorer", true);
+        startNewProject();
+        return;
+      }
+      dispatchMenuAction(action);
+    },
+    [
+      createChat,
+      startNewProject,
+      setLeftSidebarViewVisible,
+      dispatchMenuAction,
+      expandActiveWorkspaceLayout,
+      selectWorkspaceScreen,
+    ],
+  );
   return (
     <>
       {items.map((entry, index) => {
@@ -66,28 +87,28 @@ function MenuEntries({ items }: { items: MenuEntry[] }) {
         }
 
         if (entry.checkable && entry.action) {
-          const panel = menuActionToRightPanel(entry.action);
           const sidebarViewTarget = menuActionToSidebarView(entry.action);
           const checked =
             menuActionChecked(
               entry.action,
-              rightPanels,
               workspaceBottomPanelOpen,
               sidebarView,
               leftSidebarCollapsed,
+              bottomPanelKindsVisible,
             ) ?? false;
 
           return (
-            <DropdownMenuItem
+            <DropdownMenuCheckboxItem
               key={entry.label}
               disabled={entry.disabled}
+              checked={checked}
               onSelect={() => {
-                const next = !checked;
-                if (panel) setRightPanelVisible(panel, next);
-                else if (entry.action === "view.workspaceTerminal") {
-                  requestBottomPanelTab("terminal");
+                if (entry.action === "view.workspaceTerminal") {
+                  toggleBottomPanelKind("terminal");
+                } else if (entry.action === "view.workspaceBrowser") {
+                  toggleBottomPanelKind("browser");
                 } else if (sidebarViewTarget) {
-                  setLeftSidebarViewVisible(sidebarViewTarget, next);
+                  setLeftSidebarViewVisible(sidebarViewTarget, !checked);
                 }
               }}
             >
@@ -95,7 +116,7 @@ function MenuEntries({ items }: { items: MenuEntry[] }) {
               {entry.shortcut && (
                 <DropdownMenuShortcut>{entry.shortcut}</DropdownMenuShortcut>
               )}
-            </DropdownMenuItem>
+            </DropdownMenuCheckboxItem>
           );
         }
 
@@ -104,11 +125,7 @@ function MenuEntries({ items }: { items: MenuEntry[] }) {
             key={entry.label}
             disabled={entry.disabled}
             onSelect={() => {
-              if (entry.action === "view.workspaceBrowser") {
-                requestBottomPanelTab("browser");
-                return;
-              }
-              if (entry.action) dispatchMenuAction(entry.action);
+              if (entry.action) runMenuAction(entry.action);
             }}
           >
             {getMenuDisplayLabel(entry)}

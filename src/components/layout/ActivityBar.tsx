@@ -3,6 +3,7 @@ import { AccountMenu } from "@/components/auth/AccountMenu";
 import { SourceControlIcon } from "@/components/git/SourceControlIcon";
 import { useAppSelection } from "@/contexts/AppSelectionContext";
 import { useGit } from "@/contexts/GitContext";
+import { useLayout } from "@/contexts/LayoutContext";
 import { getGitChangeCount } from "@/lib/git-utils";
 import { cn } from "@/lib/utils";
 
@@ -17,11 +18,13 @@ function ActivityButton({
   title,
   active,
   onClick,
+  targetId,
   children,
 }: {
   title: string;
   active?: boolean;
   onClick: () => void;
+  targetId?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -29,6 +32,7 @@ function ActivityButton({
       type="button"
       title={title}
       onClick={onClick}
+      data-ai-target={targetId}
       className={cn(
         "relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-transparent transition-all duration-150",
         active
@@ -45,6 +49,7 @@ function ActivityButton({
 }
 
 export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
+  const { settingsOpen, openSettings, closeSettings } = useLayout();
   const { status } = useGit();
   const {
     isProjectsSelected,
@@ -61,12 +66,17 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
       : "Source Control";
 
   return (
-    <aside className="border-border-subtle bg-surface/90 flex w-12 shrink-0 flex-col items-center border-r py-3 backdrop-blur-sm">
+    <aside
+      className="border-border-subtle bg-surface/90 flex w-12 shrink-0 flex-col items-center border-r py-3 backdrop-blur-sm"
+      data-ai-scope="sidebar"
+    >
       <div className="flex flex-col gap-1.5">
         <ActivityButton
           title="Model Cart"
-          active={activeView === "agents"}
+          targetId="sidebar.agents.selector"
+          active={!settingsOpen && activeView === "agents"}
           onClick={() => {
+            closeSettings();
             onViewChange("agents");
             selectWorkspaceScreen();
           }}
@@ -75,8 +85,13 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
         </ActivityButton>
         <ActivityButton
           title="Projects"
-          active={activeView === "explorer" || explorerSidebarSelected}
+          targetId="sidebar.projects.selector"
+          active={
+            !settingsOpen &&
+            (activeView === "explorer" || explorerSidebarSelected)
+          }
           onClick={() => {
+            closeSettings();
             onViewChange("explorer");
             selectChatList();
           }}
@@ -85,8 +100,10 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
         </ActivityButton>
         <ActivityButton
           title={scTitle}
-          active={activeView === "git"}
+          targetId="sidebar.git.selector"
+          active={!settingsOpen && activeView === "git"}
           onClick={() => {
+            closeSettings();
             onViewChange("git");
             selectWorkspaceScreen();
           }}
@@ -96,13 +113,14 @@ export function ActivityBar({ activeView, onViewChange }: ActivityBarProps) {
       </div>
 
       <div className="mt-auto flex flex-col items-center gap-2">
-        <button
-          type="button"
+        <ActivityButton
           title="Settings"
-          className="text-muted-foreground hover:border-border hover:bg-panel-elevated/70 hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-transparent transition-all duration-150"
+          targetId="sidebar.settings.button"
+          active={settingsOpen}
+          onClick={openSettings}
         >
           <Settings className="h-3.5 w-3.5" />
-        </button>
+        </ActivityButton>
         <AccountMenu />
       </div>
     </aside>

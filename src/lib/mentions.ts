@@ -189,7 +189,6 @@ export function isModelMentioned(
 export type ResolveTargetOptions = {
   goal?: string | null;
   autoEnabled?: boolean;
-  deeperEnabled?: boolean;
   hasWorkspace?: boolean;
 };
 
@@ -215,7 +214,6 @@ export function resolveTargetModelIds(
       message: content,
       goal: options.goal,
       candidateIds: cartSelectedIds,
-      deeperEnabled: options.deeperEnabled,
       hasWorkspace: options.hasWorkspace,
     });
     return picked;

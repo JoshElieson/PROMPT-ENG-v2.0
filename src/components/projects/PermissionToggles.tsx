@@ -5,16 +5,19 @@ interface AccessCheckboxProps {
   enabled: boolean;
   disabled?: boolean;
   onChange: (enabled: boolean) => void;
+  targetId?: string;
 }
 
 export function AccessCheckbox({
   enabled,
   disabled = false,
   onChange,
+  targetId = "chat.settings.file-access",
 }: AccessCheckboxProps) {
   return (
     <label
       title="Give AI full access — context, read & write"
+      data-ai-target={targetId}
       className={cn(
         "relative flex h-[18px] w-[18px] shrink-0 items-center justify-center",
         "opacity-0 transition-opacity duration-200 group-hover:opacity-100",

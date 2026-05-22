@@ -19,21 +19,30 @@ import {
   startGitHubDeviceFlow,
 } from "@/lib/github-auth";
 import {
+  completeGoogleLogin,
+  isGoogleAuthConfigured,
+  startGoogleOAuthBrowser,
+} from "@/lib/google-auth";
+import {
   clearPendingGitHubAuth,
   loadPendingGitHubAuth,
   savePendingGitHubAuth,
 } from "@/lib/github-pending-auth";
-import type { AuthSession, DeviceFlowPending } from "@/types/auth";
+import { isTauri } from "@/lib/tauri";
+import type { AuthProvider, AuthSession, DeviceFlowPending } from "@/types/auth";
 
 interface AuthContextValue {
   session: AuthSession | null;
   isHydrated: boolean;
-  isConfigured: boolean;
+  isGitHubConfigured: boolean;
+  isGoogleConfigured: boolean;
   isLoggingIn: boolean;
+  loginProvider: AuthProvider | null;
   deviceFlow: DeviceFlowPending | null;
   pollAttempt: number;
   error: string | null;
   startGitHubLogin: () => Promise<void>;
+  startGoogleLogin: () => Promise<void>;
   cancelLogin: () => void;
   logout: () => void;
   clearError: () => void;
@@ -42,16 +51,17 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function getErrorMessage(error: unknown): string {
+function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
-  return "GitHub sign-in failed. Please try again.";
+  return fallback;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginProvider, setLoginProvider] = useState<AuthProvider | null>(null);
   const [deviceFlow, setDeviceFlow] = useState<DeviceFlowPending | null>(null);
   const [pollAttempt, setPollAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginGenerationRef = useRef(0);
   const pollingDeviceCodeRef = useRef<string | null>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
+  const googleAbortRef = useRef<AbortController | null>(null);
 
   const refreshSession = useCallback(async () => {
     const stored = await loadAuthSession();
@@ -84,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     pollAbortRef.current = controller;
 
     setIsLoggingIn(true);
+    setLoginProvider("github");
     setDeviceFlow(pending);
     setError(null);
     setPollAttempt(0);
@@ -105,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearPendingGitHubAuth();
       setSession(nextSession);
       setDeviceFlow(null);
+      setLoginProvider(null);
       setError(null);
       pollingDeviceCodeRef.current = null;
       void saveAuthSession(nextSession);
@@ -113,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (controller.signal.aborted) return;
 
       pollingDeviceCodeRef.current = null;
-      const message = getErrorMessage(e);
+      const message = getErrorMessage(e, "GitHub sign-in failed. Please try again.");
       console.error("[auth] GitHub sign-in failed:", message);
       setError(message);
       setDeviceFlow(loadPendingGitHubAuth() ?? pending);
@@ -154,7 +167,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearPendingGitHubAuth();
       } else {
         const pending = loadPendingGitHubAuth();
-        if (pending) setDeviceFlow(pending);
+        if (pending) {
+          setDeviceFlow(pending);
+          setLoginProvider("github");
+        }
       }
       setIsHydrated(true);
     })();
@@ -182,9 +198,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginGenerationRef.current += 1;
     pollAbortRef.current?.abort();
     pollAbortRef.current = null;
+    googleAbortRef.current?.abort();
+    googleAbortRef.current = null;
     pollingDeviceCodeRef.current = null;
     clearPendingGitHubAuth();
     setIsLoggingIn(false);
+    setLoginProvider(null);
     setDeviceFlow(null);
     setPollAttempt(0);
   }, []);
@@ -211,12 +230,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     pollAbortRef.current?.abort();
     pollAbortRef.current = null;
+    googleAbortRef.current?.abort();
+    googleAbortRef.current = null;
     pollingDeviceCodeRef.current = null;
     clearPendingGitHubAuth();
 
     setError(null);
     setPollAttempt(0);
     setIsLoggingIn(true);
+    setLoginProvider("github");
     setDeviceFlow(null);
 
     try {
@@ -226,24 +248,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       savePendingGitHubAuth(pending);
       setDeviceFlow(pending);
     } catch (e) {
-      setError(getErrorMessage(e));
+      setError(getErrorMessage(e, "GitHub sign-in failed. Please try again."));
       setDeviceFlow(null);
       setIsLoggingIn(false);
+      setLoginProvider(null);
+    }
+  }, []);
+
+  const startGoogleLogin = useCallback(async () => {
+    if (!isGoogleAuthConfigured()) {
+      setError(
+        "Add VITE_GOOGLE_CLIENT_ID to .env (Google OAuth desktop client). See GOOGLE_SETUP.md.",
+      );
+      return;
+    }
+
+    if (!isTauri()) {
+      setError(null);
+      try {
+        await startGoogleOAuthBrowser();
+      } catch (e) {
+        setError(getErrorMessage(e, "Google sign-in failed. Please try again."));
+      }
+      return;
+    }
+
+    loginGenerationRef.current += 1;
+    const generation = loginGenerationRef.current;
+
+    pollAbortRef.current?.abort();
+    googleAbortRef.current?.abort();
+    const controller = new AbortController();
+    googleAbortRef.current = controller;
+
+    setError(null);
+    setIsLoggingIn(true);
+    setLoginProvider("google");
+    setDeviceFlow(null);
+
+    try {
+      const nextSession = await completeGoogleLogin(controller.signal);
+      if (generation !== loginGenerationRef.current) return;
+      if (controller.signal.aborted) return;
+
+      setSession(nextSession);
+      setLoginProvider(null);
+      setError(null);
+      void saveAuthSession(nextSession);
+    } catch (e) {
+      if (generation !== loginGenerationRef.current) return;
+      if (controller.signal.aborted) return;
+      setError(getErrorMessage(e, "Google sign-in failed. Please try again."));
+    } finally {
+      if (googleAbortRef.current === controller) {
+        googleAbortRef.current = null;
+      }
+      if (generation === loginGenerationRef.current) {
+        setIsLoggingIn(false);
+        setLoginProvider(null);
+      }
     }
   }, []);
 
   useEffect(() => () => pollAbortRef.current?.abort(), []);
+  useEffect(() => () => googleAbortRef.current?.abort(), []);
 
   const value = useMemo(
     () => ({
       session,
       isHydrated,
-      isConfigured: isGitHubAuthConfigured(),
+      isGitHubConfigured: isGitHubAuthConfigured(),
+      isGoogleConfigured: isGoogleAuthConfigured(),
       isLoggingIn,
+      loginProvider,
       deviceFlow,
       pollAttempt,
       error,
       startGitHubLogin,
+      startGoogleLogin,
       cancelLogin,
       logout,
       clearError,
@@ -253,10 +335,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       isHydrated,
       isLoggingIn,
+      loginProvider,
       deviceFlow,
       pollAttempt,
       error,
       startGitHubLogin,
+      startGoogleLogin,
       cancelLogin,
       logout,
       clearError,

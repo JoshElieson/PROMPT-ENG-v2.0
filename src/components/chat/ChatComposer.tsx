@@ -21,6 +21,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { AttachmentChips } from "@/components/chat/AttachmentChips";
+import { ChatUtilityBar } from "@/components/chat/ChatUtilityBar";
 import {
   ComposerTextarea,
   type ComposerTextareaHandle,
@@ -28,11 +29,11 @@ import {
 import { MentionAutocomplete } from "@/components/chat/MentionAutocomplete";
 import { SlashCommandAutocomplete } from "@/components/chat/SlashCommandAutocomplete";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { useAppSelection } from "@/contexts/AppSelectionContext";
 import { useModelMode } from "@/contexts/ModelModeContext";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { useChats } from "@/contexts/ChatsContext";
+import { resolveQueuedMessageBehavior } from "@/lib/chat-behavior";
 import { useProjects } from "@/contexts/ProjectsContext";
 import {
   attachmentsFromDataTransfer,
@@ -61,6 +62,7 @@ import {
 import type { SlashCommand } from "@/data/slash-commands";
 import { getModelById, type AiModel } from "@/data/ai-models";
 import type { ChatAttachment } from "@/types/chat";
+import { resolveAgentPermissions } from "@/lib/agent-permissions";
 import { optimizePromptWithAi } from "@/lib/optimize-prompt";
 import { buildModelContributions } from "@/lib/round-table-weights";
 import {
@@ -69,9 +71,10 @@ import {
   isProjectDragActive,
   readProjectDragPayload,
 } from "@/lib/project-drag";
+import { useAiLoadingHighlight } from "@/hooks/use-ai-loading-highlight";
 import { cn } from "@/lib/utils";
 
-const OPTIMIZE_PROMPT_AI_TOOLTIP = "Optimize prompt using AI";
+const OPTIMIZE_PROMPT_AI_TOOLTIP = "Optimize prompt wording (keep meaning)";
 const UNDO_OPTIMIZE_PROMPT_TOOLTIP = "Undo optimization";
 
 interface ChatComposerProps {
@@ -80,6 +83,8 @@ interface ChatComposerProps {
   /** Thread within that chat (one workspace tab). */
   threadId: string;
   onSent?: () => void;
+  fullWidth?: boolean;
+  highlightIdsOverride?: string[];
 }
 
 export type ChatComposerHandle = {
@@ -100,10 +105,19 @@ function readSelection(
 }
 
 export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
-  function ChatComposer({ chatId, threadId, onSent }, ref) {
+  function ChatComposer(
+    {
+      chatId,
+      threadId,
+      onSent,
+      fullWidth = false,
+      highlightIdsOverride,
+    },
+    ref,
+  ) {
   const { sendMessage, activeChat, chats, responseLoading, getQueuedMessageCount } =
     useChats();
-  const { selectWorkspaceScreen, focusWorkspaceScreen } = useAppSelection();
+  const { selectWorkspaceScreen } = useAppSelection();
   const { setPermissions, setDirectoryPermissions } = useProjects();
   const {
     autoEnabled,
@@ -117,17 +131,38 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     [selectedIds, activeIds],
   );
 
-  const aiWorkspace = useMemo(() => {
-    const chat =
+  useEffect(() => {
+    if (activeIds.length === 0 && !autoEnabled) {
+      setAutoEnabled(true);
+    }
+  }, [chatId, threadId, activeIds.length, autoEnabled, setAutoEnabled]);
+
+  const composerChat = useMemo(
+    () =>
       activeChat?.id === chatId
         ? activeChat
-        : (chats.find((c) => c.id === chatId) ?? null);
-    const enabledPaths = Object.entries(chat?.permissions ?? {})
+        : (chats.find((c) => c.id === chatId) ?? null),
+    [activeChat, chats, chatId],
+  );
+
+  const composerThread = useMemo(
+    () => composerChat?.threads.find((t) => t.id === threadId) ?? null,
+    [composerChat, threadId],
+  );
+
+  const aiWorkspace = useMemo(() => {
+    const agentPermissions = resolveAgentPermissions(composerThread);
+    if (!agentPermissions.fileRead) return undefined;
+    if (composerChat?.fileAccessEnabled === false) return undefined;
+    const enabledPaths = Object.entries(composerChat?.permissions ?? {})
       .filter(([, p]) => p.enabled)
       .map(([path]) => path);
     if (enabledPaths.length === 0) return undefined;
-    return { enabledPaths };
-  }, [activeChat, chats, chatId]);
+    return {
+      enabledPaths,
+      allowWrite: agentPermissions.fileWrite,
+    };
+  }, [composerChat, composerThread]);
 
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -146,10 +181,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   const pickerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isComposerDragOver, setIsComposerDragOver] = useState(false);
   const [optimizingPrompt, setOptimizingPrompt] = useState(false);
+  const optimizeHighlight = useAiLoadingHighlight(optimizingPrompt);
   const [promptUndoSnapshot, setPromptUndoSnapshot] = useState<string | null>(
     null,
   );
-  const [advancedModeToggle, setAdvancedModeToggle] = useState(false);
   const optimizeAbortRef = useRef(false);
   const isProgrammaticInputRef = useRef(false);
 
@@ -289,10 +324,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   const isResponding =
     responseLoading?.chatId === chatId &&
     responseLoading.threadId === threadId;
+  const queuedMessageBehavior = resolveQueuedMessageBehavior(composerChat);
+  const blockSendWhileResponding =
+    isResponding && queuedMessageBehavior === "block-until-responds";
   const queuedCount = getQueuedMessageCount(chatId, threadId);
   const hasComposerContent =
     input.trim().length > 0 || attachments.length > 0;
-  const canSend = hasComposerContent;
+  const canSend = hasComposerContent && !blockSendWhileResponding;
   const syncSelection = useCallback((el: HTMLTextAreaElement | null) => {
     setSelection(readSelection(el, input.length));
   }, [input.length]);
@@ -675,10 +713,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     const trimmed = input.trim();
     if (!trimmed && attachments.length === 0) return;
 
-    const chatGoal =
-      activeChat?.id === chatId
-        ? activeChat.title
-        : chats.find((c) => c.id === chatId)?.title;
+    const chatGoal = composerChat?.title;
 
     const hasMentions = parseMentions(trimmed, selectedIds).length > 0;
     const isAutoMode = activeIds.length === 0;
@@ -691,12 +726,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       setLastAutoPickedIds([]);
     }
 
-    const targets = resolveTargetModelIds(trimmed, selectedIds, activeIds, {
+    let targets = resolveTargetModelIds(trimmed, selectedIds, activeIds, {
       autoEnabled: isAutoMode,
-      deeperEnabled: advancedModeToggle,
       goal: chatGoal,
       hasWorkspace: (aiWorkspace?.enabledPaths.length ?? 0) > 0,
     });
+
+    const multiModelEnabled = composerChat?.multiModelMode !== false;
+    if (!multiModelEnabled && targets.length > 1) {
+      targets = [targets[0]];
+    }
 
     if (isAutoMode) {
       setLastAutoPickedIds(targets);
@@ -712,12 +751,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     }
 
     if (targets.length === 0) {
-      if (selectedIds.length === 0) {
-        setError("Add at least one model to your Model Cart to send a message.");
-      } else if (isAutoMode) {
+      if (isAutoMode) {
         setError(
-          "No supported models in your Model Cart. Add GPT, Claude, Gemini, DeepSeek, or Grok.",
+          "No supported models are available. Configure GPT, Claude, Gemini, DeepSeek, or Grok.",
         );
+      } else if (selectedIds.length === 0) {
+        setError("Add at least one model to your Model Cart to send a message.");
       } else if (activeIds.length === 0) {
         setError("Turn on at least one agent in the Round Table to send a message.");
       } else {
@@ -738,7 +777,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       attachments: attachments.length > 0 ? attachments : undefined,
       targetModelIds: targets,
       modelContributions,
-      deepReasoning: advancedModeToggle,
       workspace: aiWorkspace,
       chatId,
       threadId,
@@ -895,32 +933,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       }
     }
 
-    if (
-      e.key === "ArrowUp" &&
-      !showSlashMenu &&
-      !showMentionMenu &&
-      !mentionPickerOpen
-    ) {
-      e.preventDefault();
-      e.currentTarget.blur();
-      selectWorkspaceScreen();
-      requestAnimationFrame(() => focusWorkspaceScreen());
-      return;
-    }
-
-    if (
-      e.key === "Escape" &&
-      !showSlashMenu &&
-      !showMentionMenu &&
-      !mentionPickerOpen
-    ) {
-      e.preventDefault();
-      e.currentTarget.blur();
-      selectWorkspaceScreen();
-      requestAnimationFrame(() => focusWorkspaceScreen());
-      return;
-    }
-
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (canSend) handleSend();
@@ -951,8 +963,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   };
 
   return (
-    <footer className="min-h-workspace-dock border-border-subtle bg-surface/75 shrink-0 border-t p-3 backdrop-blur-sm">
-      <section className="relative mx-auto max-w-2xl">
+    <footer className="shrink-0 px-3 pt-2 pb-3" data-ai-scope="chat">
+      <section
+        className={cn(
+          "relative mx-auto flex items-stretch gap-1.5 overflow-visible",
+          fullWidth ? "max-w-none" : "max-w-2xl",
+        )}
+      >
+        <ChatUtilityBar
+          chatId={chatId}
+          threadId={threadId}
+          highlightIds={highlightIdsOverride}
+        />
+        <section className="relative min-w-0 flex-1">
         {showSlashMenu && (
           <section className="absolute right-0 bottom-full left-0 z-20 mb-2 px-1">
             <SlashCommandAutocomplete
@@ -981,6 +1004,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
             "focus-within:border-[#6366f1]/35 focus-within:ring-1 focus-within:ring-[#6366f1]/28",
             isComposerDragOver &&
               "border-[#6366f1]/55 bg-[#6366f1]/8 ring-1 ring-[#6366f1]/35",
+            optimizeHighlight.visible && "ai-loading-rainbow",
+            optimizeHighlight.exiting && "ai-loading-rainbow--exiting",
           )}
           onDragEnter={handleComposerDragEnter}
           onDragLeave={handleComposerDragLeave}
@@ -1133,20 +1158,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               </section>
             </section>
             <div className="flex items-center gap-1.5">
-              <label
-                htmlFor="composer-adv-toggle"
-                className="text-muted-foreground text-[11px] font-medium"
-                title="Advanced mode toggle"
-              >
-                Adv
-              </label>
-              <Switch
-                id="composer-adv-toggle"
-                checked={advancedModeToggle}
-                onCheckedChange={setAdvancedModeToggle}
-                aria-label="Toggle advanced mode"
-                className="scale-[0.85]"
-              />
               <Button
                 type="button"
                 size="icon"
@@ -1154,20 +1165,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                 disabled={!canSend}
                 onClick={handleSend}
                 title={
-                  isResponding && hasComposerContent
-                    ? "Queue message for after the agent finishes"
-                    : "Send message"
+                  blockSendWhileResponding
+                    ? "Sending is disabled until the agent finishes the current reply"
+                    : isResponding && hasComposerContent
+                      ? "Queue message for after the agent finishes"
+                      : "Send message"
                 }
                 aria-label={
-                  isResponding && hasComposerContent
-                    ? "Queue message"
-                    : "Send message"
+                  blockSendWhileResponding
+                    ? "Sending disabled while agent responds"
+                    : isResponding && hasComposerContent
+                      ? "Queue message"
+                      : "Send message"
                 }
               >
                 <ArrowUp className="h-4 w-4" />
               </Button>
             </div>
           </section>
+        </section>
         </section>
       </section>
     </footer>

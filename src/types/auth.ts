@@ -1,4 +1,7 @@
-export interface GitHubUser {
+export type AuthProvider = "github" | "google";
+
+/** Signed-in user profile (GitHub or Google). */
+export interface AuthUser {
   id: number;
   login: string;
   name: string | null;
@@ -6,9 +9,13 @@ export interface GitHubUser {
   email: string | null;
 }
 
+/** @deprecated Use AuthUser */
+export type GitHubUser = AuthUser;
+
 export interface AuthSession {
   accessToken: string;
-  user: GitHubUser;
+  user: AuthUser;
+  provider: AuthProvider;
   loginAt: number;
 }
 

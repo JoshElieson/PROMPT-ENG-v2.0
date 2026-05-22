@@ -4,6 +4,7 @@ import type { ModelContribution } from "@/types/chat";
 export const DEFAULT_ROUND_TABLE_WEIGHTS: Record<string, number> = {
   gpt4o: 45,
   claude: 30,
+  "gemini-2.5-flash": 25,
   gemini: 25,
   deepseek: 10,
 };

@@ -12,11 +12,15 @@ const MAX_LIST_ENTRIES: usize = 200;
 pub struct AiWorkspace {
     /// Absolute paths the user enabled in the project tree (folder or file).
     pub enabled_paths: Vec<String>,
+    /// When false, only read/list tools are exposed (default: true).
+    #[serde(default)]
+    pub allow_write: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePolicy {
     roots: Vec<std::path::PathBuf>,
+    allow_write: bool,
 }
 
 impl WorkspacePolicy {
@@ -31,7 +35,14 @@ impl WorkspacePolicy {
         if roots.is_empty() {
             return None;
         }
-        Some(Self { roots })
+        Some(Self {
+            roots,
+            allow_write: ws.allow_write.unwrap_or(true),
+        })
+    }
+
+    pub fn allows_write(&self) -> bool {
+        self.allow_write
     }
 
     /// True if `path` is an enabled root, lies under one, or is a parent of one

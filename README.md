@@ -130,7 +130,6 @@ Default window: **1280×800** (`src-tauri/tauri.conf.json`).
 - **Activity bar** — providers, settings, profile
 - **Left sidebar** — chats, projects, file tree with context checkboxes
 - **Center** — welcome, history, prompt input
-- **Right sidebar** — Round Table weights, streaming, metrics
 - **Projects** — pick a folder (+), lazy tree, per-node **AI access** checkboxes (`localStorage`); needs the Tauri app for folder picker
 - **AI chat (Tauri)** — OpenAI, Anthropic, and Gemini with optional **workspace tools** when AI access is enabled on project paths: `read_file`, `write_file`, `list_directory` (scoped to those paths; UTF-8 text only; read cap 512KB per file)
 

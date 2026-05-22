@@ -1,8 +1,7 @@
-import { Plus } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
+import { AiProviderDock } from "@/components/chat/AiProviderDock";
 import { LayoutMenu } from "@/components/layout/LayoutMenu";
 import { ModelLogo } from "@/components/models/ModelLogo";
-import { useLayout } from "@/contexts/LayoutContext";
 import { useModelMode } from "@/contexts/ModelModeContext";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { getModelById, type AiModel } from "@/data/ai-models";
@@ -20,7 +19,7 @@ function ModelChip({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-[11px]",
+        "inline-flex shrink-0 select-none items-center gap-1 whitespace-nowrap rounded-md border px-2 py-1 text-[11px]",
         highlighted
           ? "border-[#6366f1]/55 bg-[#6366f1]/14 text-foreground shadow-[inset_0_0_0_1px_rgba(99,102,241,0.24)]"
           : "border-border/75 bg-panel-elevated/62 text-foreground/85",
@@ -29,37 +28,6 @@ function ModelChip({
       <ModelLogo orgId={model.orgId} size="xs" />
       {model.name}
     </span>
-  );
-}
-
-function OverlayModelBadge({
-  model,
-  highlighted = false,
-  active = false,
-  onClick,
-}: {
-  model: AiModel;
-  highlighted?: boolean;
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-md border bg-panel/90 shadow-[0_6px_16px_rgba(2,6,23,0.28)] backdrop-blur-sm transition-colors",
-        active && "bg-[#6366f1]/16",
-        highlighted
-          ? "border-[#6366f1]/70 shadow-[0_0_0_1px_rgba(99,102,241,0.45),0_6px_16px_rgba(2,6,23,0.28)]"
-          : "border-border/75 hover:border-[#6366f1]/45",
-      )}
-      title={model.name}
-      aria-label={model.name}
-      aria-pressed={active}
-      onClick={onClick}
-    >
-      <ModelLogo orgId={model.orgId} size="sm" muted={!active} />
-    </button>
   );
 }
 
@@ -78,10 +46,8 @@ export function ActiveModelsBar({
   highlightIdsOverride?: string[];
 }) {
   const { autoEnabled, setAutoEnabled, lastAutoPickedIds } = useModelMode();
-  const { selectedIds, activeIds, toggleActive, activateOnlyModel } =
+  const { selectedIds, activeIds, toggleActive, activateOnlyModel, reorderSelectedIds } =
     useChatRoundTable();
-  const { setLeftSidebarViewVisible } = useLayout();
-
   const displayIds = useMemo(() => {
     if (overlay) {
       return selectedIds;
@@ -107,6 +73,16 @@ export function ActiveModelsBar({
         .filter((m): m is AiModel => m != null),
     [displayIds],
   );
+  const activeSet = useMemo(() => new Set(activeIds), [activeIds]);
+  const primaryModel = useMemo(() => {
+    const highlighted = models.find((m) => highlightedIds.has(m.id));
+    if (highlighted) return highlighted;
+    if (!autoEnabled) {
+      const active = models.find((m) => activeSet.has(m.id));
+      if (active) return active;
+    }
+    return models[0] ?? null;
+  }, [models, highlightedIds, autoEnabled, activeSet]);
 
   if (models.length === 0 && !trailing && !showLayoutMenu) {
     return null;
@@ -116,8 +92,7 @@ export function ActiveModelsBar({
   const hiddenCount = Math.max(0, models.length - MAX_VISIBLE_MODELS);
 
   if (overlay) {
-    if (models.length === 0) return null;
-    const activeSet = new Set(activeIds);
+    if (models.length === 0 || primaryModel == null) return null;
 
     const handleOverlayModelClick = (id: string) => {
       if (autoEnabled) {
@@ -139,36 +114,21 @@ export function ActiveModelsBar({
     };
 
     return (
-      <section className="pointer-events-none absolute bottom-[calc(var(--spacing-workspace-dock)+0.5rem)] left-0 z-10 p-2">
-        <div className="pointer-events-auto relative pt-7">
-          <button
-            type="button"
-            title="Open Model Cart"
-            aria-label="Open Model Cart"
-            onClick={() => setLeftSidebarViewVisible("agents", true)}
-            className="border-border/70 bg-panel-elevated/95 text-foreground/90 hover:border-border hover:bg-panel hover:text-foreground absolute top-0 left-1/2 inline-flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full border shadow-[0_6px_14px_rgba(2,6,23,0.3)] transition-colors"
-          >
-            <Plus className="h-3 w-3" />
-          </button>
-
-          <div className="flex flex-col-reverse gap-1.5">
-            {models.map((model) => (
-              <OverlayModelBadge
-                key={model.id}
-                model={model}
-                highlighted={highlightedIds.has(model.id)}
-                active={!autoEnabled && activeSet.has(model.id)}
-                onClick={() => handleOverlayModelClick(model.id)}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
+      <AiProviderDock
+        models={models}
+        primaryModel={primaryModel}
+        highlightedIds={highlightedIds}
+        autoEnabled={autoEnabled}
+        activeIds={activeIds}
+        onModelClick={handleOverlayModelClick}
+        onReorderModels={reorderSelectedIds}
+      />
     );
   }
 
   return (
     <section
+      data-ai-target="chat.model-selector"
       className={cn(
         "flex w-full items-center gap-2",
         "h-10 shrink-0 border-b border-border-subtle bg-panel/80 px-2 backdrop-blur-sm",

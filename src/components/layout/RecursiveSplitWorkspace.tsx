@@ -17,7 +17,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ForgeWordmark } from "@/components/brand/ForgeWordmark";
-import { ActiveModelsBar } from "@/components/chat/ActiveModelsBar";
 import { ChatComposer, type ChatComposerHandle } from "@/components/chat/ChatComposer";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { ResponseLoadingView } from "@/components/chat/ResponseLoadingView";
@@ -34,19 +33,20 @@ import {
 } from "@/lib/project-drag";
 import { useChats } from "@/contexts/ChatsContext";
 import { useLayout } from "@/contexts/LayoutContext";
+import { useProjects } from "@/contexts/ProjectsContext";
 import { useWorkspacePanes } from "@/contexts/WorkspacePanesContext";
 import { buildModelKeyboardShortcuts } from "@/data/keyboard-shortcuts";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
+import { resolveAutoScrollEnabled } from "@/lib/chat-behavior";
+import { extractForgeActivities } from "@/lib/forge-activity";
+import { gitRestorePaths } from "@/lib/git";
 import { threadDisplayTitle } from "@/lib/chat-utils";
 import { collectLeaves, findLeaf } from "@/lib/center-workspace-layout";
 import { isTauri } from "@/lib/tauri";
-import {
-  WORKSPACE_HEADER_SURFACE,
-  workspaceHeaderRowClass,
-} from "@/lib/workspace-header";
 import { cn } from "@/lib/utils";
-import type { ChatThread, ResponseLoadingState } from "@/types/chat";
+import type { ChatMessage, ChatThread, ResponseLoadingState } from "@/types/chat";
 import type { WorkspaceLeafNode } from "@/types/workspace-pane";
+import { SplitPaneGroup } from "@/components/workspace/SplitPaneGroup";
 
 type DropSide = "before" | "after";
 
@@ -200,7 +200,7 @@ function ChatThreadTab({
             <button
               type="button"
               className={cn(
-                "flex items-center gap-1 py-1 pl-2",
+                "flex min-w-0 items-center gap-1 py-1 pl-2",
                 paneCount > 1 ? "pr-0.5" : "pr-2",
               )}
               title={statusTitle}
@@ -210,7 +210,7 @@ function ChatThreadTab({
                 isLoading={isLoading}
                 hasUnread={hasUnread}
               />
-              {title}
+              <span>{title}</span>
             </button>
           )}
           {paneCount > 1 ? (
@@ -305,7 +305,7 @@ function reorderIdListByPlacement(
 
 function CompactWelcomePane() {
   return (
-    <section className="flex min-h-full flex-col items-center justify-center px-8 py-16">
+    <section className="flex flex-1 flex-col items-center justify-center px-8 py-16">
       <ForgeWordmark height={44} className="translate-y-px" />
     </section>
   );
@@ -365,6 +365,21 @@ function WelcomePane({
   );
 }
 
+function collectWrittenPathsFromAssistantMessages(messages: ChatMessage[]): string[] {
+  const seen = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    const { activities } = extractForgeActivities(message.content);
+    for (const activity of activities) {
+      if (activity.action !== "write") continue;
+      const path = activity.path.trim();
+      if (!path) continue;
+      seen.add(path);
+    }
+  }
+  return [...seen];
+}
+
 function ChatPaneBody({
   leaf,
   isActive,
@@ -372,21 +387,34 @@ function ChatPaneBody({
   leaf: WorkspaceLeafNode;
   isActive: boolean;
 }) {
-  const { activeChat, activeChatId, responseLoading, getStreamingActivities } =
-    useChats();
+  const {
+    activeChat,
+    activeChatId,
+    responseLoading,
+    getStreamingActivities,
+    forceKillThread,
+    truncateThreadAfterMessage,
+  } = useChats();
+  const { projects } = useProjects();
   const {
     isWorkspaceScreenSelected,
     selectWorkspaceScreen,
     registerFocusComposer,
     registerFocusWorkspaceScreen,
   } = useAppSelection();
-  const { paneCount, onLeafScrollChange } = useWorkspacePanes();
+  const { paneCount, onLeafScrollChange, setFocusedLeafId } = useWorkspacePanes();
   const { workspaceBottomPanelOpen } = useLayout();
 
   const messages = useMemo(() => {
     if (!activeChat) return [];
     const thread = activeChat.threads.find((t) => t.id === leaf.threadId);
     return thread?.messages ?? [];
+  }, [activeChat, leaf.threadId]);
+  const agentLabel = useMemo(() => {
+    if (!activeChat) return "Agent";
+    const threadIndex = activeChat.threads.findIndex((t) => t.id === leaf.threadId);
+    const thread = threadIndex >= 0 ? activeChat.threads[threadIndex] : undefined;
+    return thread ? threadDisplayTitle(thread, threadIndex) : "Agent";
   }, [activeChat, leaf.threadId]);
 
   const showWelcome = messages.length === 0;
@@ -414,6 +442,7 @@ function ChatPaneBody({
     }
     return loadingForPane.targetModelIds;
   }, [loadingForPane]);
+  const autoScrollEnabled = resolveAutoScrollEnabled(activeChat);
 
   const scrollElRef = useRef<HTMLDivElement>(null);
   const scrollWriteTimer = useRef(0);
@@ -442,8 +471,8 @@ function ChatPaneBody({
   }, []);
 
   useEffect(() => {
-    if (loadingForPane) scrollToEnd();
-  }, [loadingForPane, scrollToEnd]);
+    if (autoScrollEnabled && loadingForPane) scrollToEnd();
+  }, [autoScrollEnabled, loadingForPane, scrollToEnd]);
 
   const scheduleScrollPersist = useCallback(
     (top: number) => {
@@ -468,6 +497,8 @@ function ChatPaneBody({
 
   const paneRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<ChatComposerHandle>(null);
+  const [undoMessageId, setUndoMessageId] = useState<string | null>(null);
+  const [undoError, setUndoError] = useState<string | null>(null);
 
   const handleWorkspaceDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     if (!dataTransferAcceptsComposerDrop(e.dataTransfer)) return;
@@ -504,10 +535,11 @@ function ChatPaneBody({
       ) {
         return;
       }
+      setFocusedLeafId(leaf.id);
       selectWorkspaceScreen();
       e.currentTarget.focus();
     },
-    [selectWorkspaceScreen],
+    [leaf.id, selectWorkspaceScreen, setFocusedLeafId],
   );
 
   useEffect(() => {
@@ -552,34 +584,73 @@ function ChatPaneBody({
     return () => window.removeEventListener("keydown", onKeyDownCapture, true);
   }, [isActive, isWorkspaceScreenSelected]);
 
+  const handleUndoFromMessage = useCallback(
+    async (messageId: string) => {
+      if (!activeChatId || !activeChat) return;
+      const thread = activeChat.threads.find((item) => item.id === leaf.threadId);
+      if (!thread) return;
+      const cutoff = thread.messages.findIndex((item) => item.id === messageId);
+      if (cutoff < 0 || cutoff >= thread.messages.length - 1) return;
+
+      setUndoError(null);
+      setUndoMessageId(messageId);
+      try {
+        if (loadingForPane) {
+          forceKillThread(leaf.threadId);
+        }
+
+        const droppedMessages = thread.messages.slice(cutoff + 1);
+        const writtenPaths = collectWrittenPathsFromAssistantMessages(droppedMessages);
+        const projectRoot = projects.find(
+          (project) => project.id === activeChat.gitProjectId,
+        )?.rootPath;
+
+        if (projectRoot && writtenPaths.length > 0) {
+          const result = await gitRestorePaths(projectRoot, writtenPaths);
+          if (!result.success) {
+            setUndoError(result.output || "Undo restored files with errors.");
+          }
+        }
+
+        truncateThreadAfterMessage(activeChatId, leaf.threadId, messageId);
+      } catch (error) {
+        setUndoError(
+          error instanceof Error
+            ? error.message
+            : "Undo failed. Please retry.",
+        );
+      } finally {
+        setUndoMessageId(null);
+      }
+    },
+    [
+      activeChatId,
+      activeChat,
+      leaf.threadId,
+      loadingForPane,
+      forceKillThread,
+      projects,
+      truncateThreadAfterMessage,
+    ],
+  );
+
   return (
     <div
       ref={paneRef}
       role="region"
       aria-label="Chat pane"
       data-pane-leaf-id={leaf.id}
-      className={cn(
-        "absolute inset-0 flex min-h-0 min-w-0 flex-col bg-background outline-none",
-        !isActive && "pointer-events-none invisible",
-      )}
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-background outline-none"
       tabIndex={-1}
       onMouseDown={handlePaneMouseDown}
     >
-      <ActiveModelsBar
-        showLayoutMenu={false}
-        overlay
-        highlightIdsOverride={loadingHighlightIds}
-      />
-
+      <span className="pointer-events-none absolute top-2 left-3 z-10 text-[10px] font-medium text-muted-foreground/50">
+        {agentLabel}
+      </span>
       <div
         ref={scrollElRef}
         data-workspace-screen
-        className={cn(
-          "relative min-h-0 flex-1 overflow-y-auto outline-none",
-          isWorkspaceScreenSelected &&
-            isActive &&
-            "ring-1 ring-inset ring-[#6366f1]/28",
-        )}
+        className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] outline-none"
         tabIndex={-1}
         onMouseDown={(e) => {
           if (
@@ -596,36 +667,58 @@ function ChatPaneBody({
         onDrop={handleWorkspaceDrop}
         onScroll={(e) => scheduleScrollPersist(e.currentTarget.scrollTop)}
       >
-        {showFullWelcome && (
-          <WelcomePane keyboardShortcuts={keyboardShortcuts} />
-        )}
+        <div className="flex min-w-0 flex-col">
+          {showFullWelcome && (
+            <WelcomePane keyboardShortcuts={keyboardShortcuts} />
+          )}
 
-        {showCompactWelcome && <CompactWelcomePane />}
+          {showCompactWelcome && <CompactWelcomePane />}
 
-        {messages.length > 0 && (
-          <section className="mx-auto max-w-2xl space-y-4 px-6 py-4">
-            {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
+          {messages.length > 0 && (
+            <section className="mx-auto w-full max-w-2xl space-y-4 px-6 pt-4 pb-2">
+              {messages.map((message, index) => (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  showStopAction={
+                    message.role === "user" &&
+                    loadingForPane != null &&
+                    messages.slice(index + 1).every((item) => item.role !== "assistant")
+                  }
+                  showUndoAction={
+                    message.role === "user" &&
+                    index < messages.length - 1
+                  }
+                  onStop={() => forceKillThread(leaf.threadId)}
+                  onUndo={() => void handleUndoFromMessage(message.id)}
+                  disableActions={undoMessageId === message.id}
+                />
+              ))}
 
-            {loadingForPane && (
-              <ResponseLoadingView
-                loading={loadingForPane}
-                activities={loadingActivities}
-              />
-            )}
+              {undoError ? (
+                <p className="text-[11px] text-amber-300/95">{undoError}</p>
+              ) : null}
 
-            <div aria-hidden className="h-px" />
-          </section>
-        )}
+              {loadingForPane && (
+                <ResponseLoadingView
+                  loading={loadingForPane}
+                  activities={loadingActivities}
+                />
+              )}
+            </section>
+          )}
+        </div>
       </div>
 
-      <ChatComposer
-        ref={composerRef}
-        chatId={activeChatId!}
-        threadId={leaf.threadId}
-        onSent={scrollToEnd}
-      />
+      <div className="shrink-0">
+        <ChatComposer
+          ref={composerRef}
+          chatId={activeChatId!}
+          threadId={leaf.threadId}
+          onSent={autoScrollEnabled ? scrollToEnd : undefined}
+          highlightIdsOverride={loadingHighlightIds}
+        />
+      </div>
     </div>
   );
 }
@@ -658,21 +751,18 @@ function ChatThreadTabs() {
     setFocusedLeafId,
     expandLayout,
     closeLeaf,
+    dragLeafId,
+    setDragLeafId,
   } = useWorkspacePanes();
   const { activeChat, activeChatId, responseLoading, forceKillThread } =
     useChats();
   const {
-    isWorkspaceAgentTabsSelected,
     selectWorkspaceScreen,
-    selectWorkspaceAgentTabs,
-    focusWorkspaceScreen,
     registerFocusWorkspaceAgentTabs,
-    selectTopChat,
   } = useAppSelection();
 
   const leaves = useMemo(() => collectLeaves(layout.root), [layout.root]);
   const [orderedLeafIds, setOrderedLeafIds] = useState<string[]>([]);
-  const [draggingLeafId, setDraggingLeafId] = useState<string | null>(null);
   const [dropHint, setDropHint] = useState<{
     targetLeafId: string;
     side: DropSide;
@@ -831,80 +921,6 @@ function ChatThreadTabs() {
     return registerFocusWorkspaceAgentTabs(focusActiveTab);
   }, [registerFocusWorkspaceAgentTabs, focusActiveTab]);
 
-  useEffect(() => {
-    if (!isWorkspaceAgentTabsSelected) return;
-
-    const onKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.defaultPrevented) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.isComposing) return;
-
-      const target = e.target;
-      if (target instanceof HTMLElement) {
-        if (
-          target.closest(
-            "input, textarea, select, [contenteditable='true'], [data-workspace-bottom-panel], .xterm",
-          )
-        ) {
-          return;
-        }
-      }
-
-      const currentIndex = orderedLeaves.findIndex((leaf) => leaf.id === focusedLeafId);
-      const start = currentIndex >= 0 ? currentIndex : 0;
-
-      if (e.key === "ArrowRight") {
-        if (start >= orderedLeaves.length - 1) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const nextLeaf = orderedLeaves[start + 1];
-        if (!nextLeaf) return;
-        clearUnread(nextLeaf.threadId);
-        setFocusedLeafId(nextLeaf.id);
-        selectWorkspaceAgentTabs();
-        requestAnimationFrame(() => focusActiveTab());
-        return;
-      }
-
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        e.stopPropagation();
-        if (start <= 0) {
-          selectTopChat();
-          return;
-        }
-        const prevLeaf = orderedLeaves[start - 1];
-        if (!prevLeaf) return;
-        clearUnread(prevLeaf.threadId);
-        setFocusedLeafId(prevLeaf.id);
-        selectWorkspaceAgentTabs();
-        requestAnimationFrame(() => focusActiveTab());
-        return;
-      }
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        e.stopPropagation();
-        selectWorkspaceScreen();
-        requestAnimationFrame(() => focusWorkspaceScreen());
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [
-    isWorkspaceAgentTabsSelected,
-    orderedLeaves,
-    focusedLeafId,
-    clearUnread,
-    setFocusedLeafId,
-    selectWorkspaceAgentTabs,
-    selectTopChat,
-    selectWorkspaceScreen,
-    focusWorkspaceScreen,
-    focusActiveTab,
-  ]);
-
   const reorderAgentTabs = useCallback(
     (sourceLeafId: string, targetLeafId: string, side: DropSide) => {
       setOrderedLeafIds((prev) =>
@@ -917,8 +933,8 @@ function ChatThreadTabs() {
   const handleAgentTabDragStart = useCallback((leafId: string, e: DragEvent<HTMLDivElement>) => {
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", leafId);
-    setDraggingLeafId(leafId);
-  }, []);
+    setDragLeafId(leafId);
+  }, [setDragLeafId]);
 
   const handleAgentTabDrop = useCallback(
     (targetLeafId: string, e: DragEvent<HTMLDivElement>) => {
@@ -930,23 +946,17 @@ function ChatThreadTabs() {
           ? dropHint.side
           : dropSideFromPointer(e);
       reorderAgentTabs(sourceLeafId, targetLeafId, side);
-      setDraggingLeafId(null);
+      setDragLeafId(null);
       setDropHint(null);
     },
-    [dropHint, reorderAgentTabs],
+    [dropHint, reorderAgentTabs, setDragLeafId],
   );
 
   return (
-    <header
-      className={workspaceHeaderRowClass(
-        false,
-        cn(WORKSPACE_HEADER_SURFACE, "shrink-0 gap-1 border-b border-border-subtle bg-panel/88 pl-1.5 pr-2"),
-      )}
+    <div
+      ref={tabsRef}
+      className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
     >
-      <div
-        ref={tabsRef}
-        className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
-      >
         {orderedLeaves.map((leaf, index) => {
           const isActive = leaf.id === focusedLeafId;
           const thread = threadById.get(leaf.threadId);
@@ -976,7 +986,7 @@ function ChatThreadTabs() {
               onDragOver={(e) => {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
-                if (!draggingLeafId || draggingLeafId === leaf.id) {
+                if (!dragLeafId || dragLeafId === leaf.id) {
                   setDropHint(null);
                   return;
                 }
@@ -994,10 +1004,10 @@ function ChatThreadTabs() {
                 );
               }}
               onDragEnd={() => {
-                setDraggingLeafId(null);
+                setDragLeafId(null);
                 setDropHint(null);
               }}
-              isDragging={draggingLeafId === leaf.id}
+              isDragging={dragLeafId === leaf.id}
               dropIndicatorSide={
                 dropHint?.targetLeafId === leaf.id ? dropHint.side : null
               }
@@ -1020,28 +1030,51 @@ function ChatThreadTabs() {
         >
           <Plus className="h-3.5 w-3.5" />
         </Button>
-      </div>
-    </header>
+    </div>
   );
 }
 
+export function WorkspaceAgentTabs() {
+  return <ChatThreadTabs />;
+}
+
 export function RecursiveSplitWorkspace() {
-  const { layout, focusedLeafId } = useWorkspacePanes();
+  const {
+    layout,
+    focusedLeafId,
+    splitOrientation,
+    visibleLeafIds,
+    setVisibleLeafIds,
+    dragLeafId,
+    setDragLeafId,
+    setFocusedLeafId,
+  } = useWorkspacePanes();
 
   const leaves = useMemo(() => collectLeaves(layout.root), [layout.root]);
+  const leafById = useMemo(() => {
+    return new Map(leaves.map((leaf) => [leaf.id, leaf]));
+  }, [leaves]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <ChatThreadTabs />
-
-      <div className="relative min-h-0 flex-1">
-        {leaves.map((leaf) => (
-          <LeafPane
-            key={leaf.id}
-            leaf={leaf}
-            isActive={leaf.id === focusedLeafId}
-          />
-        ))}
+      <div className="min-h-0 flex-1">
+        <SplitPaneGroup
+          visiblePaneIds={visibleLeafIds}
+          draggingPaneId={dragLeafId}
+          orientation={splitOrientation}
+          onDropComplete={(nextVisibleLeafIds) => {
+            setVisibleLeafIds(nextVisibleLeafIds);
+            if (dragLeafId && nextVisibleLeafIds.includes(dragLeafId)) {
+              setFocusedLeafId(dragLeafId);
+            }
+            setDragLeafId(null);
+          }}
+          renderPane={(leafId) => {
+            const leaf = leafById.get(leafId);
+            if (!leaf) return null;
+            return <LeafPane key={leaf.id} leaf={leaf} isActive={leaf.id === focusedLeafId} />;
+          }}
+        />
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
+import { GoogleIcon } from "@/components/icons/GoogleIcon";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -10,13 +11,28 @@ interface GitHubAuthStatusProps {
   className?: string;
 }
 
+function providerLabel(provider: "github" | "google"): string {
+  return provider === "google" ? "Google" : "GitHub";
+}
+
 export function GitHubAuthStatus({
   variant = "statusbar",
   className,
 }: GitHubAuthStatusProps) {
-  const { session, isLoggingIn, deviceFlow, isHydrated, isConfigured } = useAuth();
+  const {
+    session,
+    isLoggingIn,
+    deviceFlow,
+    isHydrated,
+    isGitHubConfigured,
+    isGoogleConfigured,
+    loginProvider,
+  } = useAuth();
 
   const isMenu = variant === "menu";
+  const activeProvider = session?.provider ?? loginProvider ?? "github";
+  const ProviderIcon = activeProvider === "google" ? GoogleIcon : GitHubIcon;
+  const anyConfigured = isGitHubConfigured || isGoogleConfigured;
 
   if (!isHydrated) {
     return (
@@ -28,12 +44,17 @@ export function GitHubAuthStatus({
         )}
       >
         <GitHubIcon className="h-3.5 w-3.5 shrink-0 opacity-60" />
-        <span className={isMenu ? "text-xs" : "text-[11px]"}>GitHub: Loading…</span>
+        <span className={isMenu ? "text-xs" : "text-[11px]"}>Account: Loading…</span>
       </span>
     );
   }
 
   if (isLoggingIn || deviceFlow) {
+    const finishingLabel =
+      loginProvider === "google"
+        ? "Finishing Google sign-in…"
+        : "Finishing GitHub sign-in…";
+
     return (
       <span
         className={cn(
@@ -43,17 +64,16 @@ export function GitHubAuthStatus({
         )}
       >
         <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
-        <GitHubIcon className="h-3.5 w-3.5 shrink-0" />
+        <ProviderIcon className="h-3.5 w-3.5 shrink-0" />
         <span className={cn("min-w-0", isMenu ? "text-xs font-medium" : "text-[11px]")}>
-          {isMenu
-            ? "Finishing GitHub sign-in…"
-            : "GitHub: Finishing sign-in…"}
+          {isMenu ? finishingLabel : `Account: ${finishingLabel}`}
         </span>
       </span>
     );
   }
 
   if (session) {
+    const signedInProvider = providerLabel(session.provider);
     return (
       <span
         className={cn(
@@ -62,7 +82,7 @@ export function GitHubAuthStatus({
             "w-full rounded border border-success/30 bg-success/5 px-2.5 py-2",
           className,
         )}
-        title={`Signed in to GitHub as ${session.user.login}`}
+        title={`Signed in with ${signedInProvider} as ${session.user.login}`}
       >
         <span className="relative flex h-2 w-2 shrink-0">
           <span className="bg-success absolute inline-flex h-full w-full animate-ping rounded-full opacity-40" />
@@ -77,6 +97,8 @@ export function GitHubAuthStatus({
               isMenu ? "h-5 w-5" : "h-3.5 w-3.5",
             )}
           />
+        ) : session.provider === "google" ? (
+          <GoogleIcon className="h-3.5 w-3.5 shrink-0" />
         ) : (
           <GitHubIcon className="h-3.5 w-3.5 shrink-0" />
         )}
@@ -84,12 +106,18 @@ export function GitHubAuthStatus({
           {isMenu ? (
             <>
               <span className="text-success font-medium">Signed in</span>
-              <span className="text-muted"> · @{session.user.login}</span>
+              <span className="text-muted">
+                {" "}
+                · {signedInProvider} · @{session.user.login}
+              </span>
             </>
           ) : (
             <>
               <span className="text-success">Signed in</span>
-              <span className="text-muted-foreground"> · @{session.user.login}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {signedInProvider} · @{session.user.login}
+              </span>
             </>
           )}
         </span>
@@ -105,21 +133,18 @@ export function GitHubAuthStatus({
         className,
       )}
       title={
-        isConfigured
-          ? "Not signed in to GitHub"
-          : "GitHub sign-in is not configured"
+        anyConfigured
+          ? "Not signed in"
+          : "Sign-in is not configured"
       }
     >
       <span className="bg-muted/80 h-2 w-2 shrink-0 rounded-full" />
       <GitHubIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
       <span className={isMenu ? "text-xs" : "text-[11px]"}>
         {isMenu ? (
-          <>
-            <span className="text-muted-foreground font-medium">Not signed in</span>
-            <span className="text-muted"> · GitHub</span>
-          </>
+          <span className="text-muted-foreground font-medium">Not signed in</span>
         ) : (
-          <>GitHub: Not signed in</>
+          <>Account: Not signed in</>
         )}
       </span>
     </span>

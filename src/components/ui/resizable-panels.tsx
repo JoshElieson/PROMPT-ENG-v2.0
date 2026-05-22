@@ -20,6 +20,8 @@ import { cn } from "@/lib/utils";
 /** Narrowest width while dragging; release here snaps closed (VS Code–style). */
 const COLLAPSE_THRESHOLD = 120;
 
+export type PanelGutterSnap = "none" | "max" | "collapse";
+
 function resolveSidebarDragWidth(
   next: number,
   minWidth: number,
@@ -37,7 +39,18 @@ function resolveSidebarDragWidth(
 export interface ResizablePanelConfig {
   id: string;
   content: ReactNode;
+  /** Minimum size in pixels along the split axis. */
   minSize?: number;
+  /** Maximum size in pixels along the split axis. */
+  maxSize?: number;
+  /** Minimum share of the container (0–1), combined with `minSize`. */
+  minRatio?: number;
+  /** Maximum share of the container (0–1), combined with `maxSize`. */
+  maxRatio?: number;
+  /** Release after snap-highlight at `collapseThreshold` closes the panel. */
+  collapsible?: boolean;
+  /** Snap width before collapse; defaults to {@link COLLAPSE_THRESHOLD}. */
+  collapseThreshold?: number;
 }
 
 interface ResizablePanelsProps {
@@ -51,12 +64,137 @@ interface ResizablePanelsProps {
   onSizesChange?: (sizes: number[]) => void;
   /** When false, gutters are not draggable; `sizes` still drive layout when provided. */
   resizable?: boolean;
+  /** Called on pointer-up when a collapsible trailing panel was dragged to the snap point. */
+  onTrailingPanelCollapse?: () => void;
 }
 
 function normalizeSizes(sizes: number[]): number[] {
   const sum = sizes.reduce((a, b) => a + b, 0);
   if (sum <= 0) return sizes.map(() => 1 / sizes.length);
   return sizes.map((s) => s / sum);
+}
+
+function panelMinRatio(panel: ResizablePanelConfig, containerSize: number): number {
+  const fromPx = (panel.minSize ?? 48) / containerSize;
+  return Math.max(panel.minRatio ?? 0, fromPx);
+}
+
+function panelMaxRatio(panel: ResizablePanelConfig, containerSize: number): number {
+  const fromRatio = panel.maxRatio ?? 1;
+  const fromPx =
+    panel.maxSize != null ? panel.maxSize / containerSize : fromRatio;
+  return Math.min(fromRatio, fromPx);
+}
+
+function hasRatioConstraints(panels: ResizablePanelConfig[]): boolean {
+  return panels.some((p) => p.minRatio != null || p.maxRatio != null);
+}
+
+function secondaryMaxPx(
+  containerSize: number,
+  primaryPanel: ResizablePanelConfig,
+  secondaryPanel: ResizablePanelConfig,
+): number {
+  return Math.min(
+    containerSize * panelMaxRatio(secondaryPanel, containerSize),
+    Math.max(
+      0,
+      containerSize - containerSize * panelMinRatio(primaryPanel, containerSize),
+    ),
+  );
+}
+
+function resolveTwoPanelSecondaryDrag(
+  requestedSecondaryPx: number,
+  containerSize: number,
+  primaryPanel: ResizablePanelConfig,
+  secondaryPanel: ResizablePanelConfig,
+): { secondaryPx: number; snap: PanelGutterSnap } {
+  const maxSecondaryPx = secondaryMaxPx(containerSize, primaryPanel, secondaryPanel);
+  const minSecondaryPx = secondaryPanel.minSize ?? 48;
+  const effectiveMinSecondaryPx = Math.min(minSecondaryPx, maxSecondaryPx);
+  const collapseThreshold = secondaryPanel.collapseThreshold ?? COLLAPSE_THRESHOLD;
+
+  if (requestedSecondaryPx > maxSecondaryPx) {
+    return { secondaryPx: maxSecondaryPx, snap: "max" };
+  }
+
+  if (secondaryPanel.collapsible && requestedSecondaryPx < effectiveMinSecondaryPx) {
+    const secondaryPx = Math.max(collapseThreshold, requestedSecondaryPx);
+    return {
+      secondaryPx: Math.min(secondaryPx, maxSecondaryPx),
+      snap: secondaryPx <= collapseThreshold ? "collapse" : "none",
+    };
+  }
+
+  const secondaryPx = Math.min(
+    Math.max(requestedSecondaryPx, effectiveMinSecondaryPx),
+    maxSecondaryPx,
+  );
+  return { secondaryPx, snap: "none" };
+}
+
+function usesSecondaryDragSnap(panels: ResizablePanelConfig[]): boolean {
+  return (
+    panels.length === 2 &&
+    (hasRatioConstraints(panels) || panels[1]?.collapsible === true)
+  );
+}
+
+/** Keeps flex ratios valid; panel[0] is primary, panel[1] is secondary when length is 2. */
+export function enforcePanelConstraints(
+  sizes: number[],
+  panels: ResizablePanelConfig[],
+  containerSize?: number,
+): number[] {
+  if (sizes.length !== panels.length || panels.length === 0) {
+    return normalizeSizes(sizes);
+  }
+
+  if (panels.length === 2) {
+    const [primaryPanel, secondaryPanel] = panels;
+
+    if (!containerSize || containerSize <= 0) {
+      if (!hasRatioConstraints(panels)) {
+        return normalizeSizes(sizes);
+      }
+      let secondary = sizes[1];
+      secondary = Math.min(secondary, secondaryPanel.maxRatio ?? 1);
+      let primary = 1 - secondary;
+      primary = Math.max(primary, primaryPanel.minRatio ?? 0);
+      secondary = 1 - primary;
+      secondary = Math.min(secondary, secondaryPanel.maxRatio ?? 1);
+      return normalizeSizes([primary, secondary]);
+    }
+
+    const minSecondaryPx = secondaryPanel.minSize ?? 48;
+    const maxSecondaryPx = Math.min(
+      containerSize * panelMaxRatio(secondaryPanel, containerSize),
+      Math.max(
+        0,
+        containerSize - containerSize * panelMinRatio(primaryPanel, containerSize),
+      ),
+    );
+    const effectiveMinSecondaryPx = Math.min(minSecondaryPx, maxSecondaryPx);
+    let secondaryPx = sizes[1] * containerSize;
+    secondaryPx = Math.min(
+      Math.max(secondaryPx, effectiveMinSecondaryPx),
+      maxSecondaryPx,
+    );
+    const secondaryRatio = secondaryPx / containerSize;
+    return normalizeSizes([1 - secondaryRatio, secondaryRatio]);
+  }
+
+  if (!containerSize || containerSize <= 0) {
+    return normalizeSizes(sizes);
+  }
+
+  const next = [...sizes];
+  for (let i = 0; i < panels.length; i++) {
+    next[i] = Math.max(next[i], panelMinRatio(panels[i], containerSize));
+    next[i] = Math.min(next[i], panelMaxRatio(panels[i], containerSize));
+  }
+  return normalizeSizes(next);
 }
 
 export function ResizablePanels({
@@ -68,16 +206,21 @@ export function ResizablePanels({
   sizes: controlledSizes,
   onSizesChange,
   resizable = true,
+  onTrailingPanelCollapse,
 }: ResizablePanelsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { layoutResetNonce } = useLayout();
+  const [gutterSnap, setGutterSnap] = useState<PanelGutterSnap>("none");
   const isControlled =
     controlledSizes != null &&
     controlledSizes.length === panels.length &&
     (resizable ? onSizesChange != null : true);
 
   const [uncontrolledSizes, setUncontrolledSizes] = useState<number[]>(() =>
-    normalizeSizes(loadLayoutSizes(storageKey ?? "", defaultSizes)),
+    enforcePanelConstraints(
+      normalizeSizes(loadLayoutSizes(storageKey ?? "", defaultSizes)),
+      panels,
+    ),
   );
 
   const sizes = isControlled
@@ -85,21 +228,26 @@ export function ResizablePanels({
     : uncontrolledSizes;
 
   const applySizes = useCallback(
-    (next: number[]) => {
-      const normalized = normalizeSizes(next);
+    (next: number[], containerSize?: number) => {
+      const normalized = enforcePanelConstraints(
+        normalizeSizes(next),
+        panels,
+        containerSize,
+      );
       if (isControlled) {
         onSizesChange?.(normalized);
       } else {
         setUncontrolledSizes(normalized);
       }
     },
-    [isControlled, onSizesChange],
+    [isControlled, onSizesChange, panels],
   );
   const dragRef = useRef<{
     index: number;
     startPos: number;
     startSizes: number[];
     containerSize: number;
+    releaseSnap: PanelGutterSnap;
   } | null>(null);
 
   const isVertical = direction === "vertical";
@@ -111,8 +259,30 @@ export function ResizablePanels({
 
   useEffect(() => {
     if (isControlled || layoutResetNonce === 0) return;
-    queueMicrotask(() => setUncontrolledSizes(normalizeSizes(defaultSizes)));
-  }, [layoutResetNonce, defaultSizes, isControlled]);
+    queueMicrotask(() =>
+      setUncontrolledSizes(enforcePanelConstraints(normalizeSizes(defaultSizes), panels)),
+    );
+  }, [layoutResetNonce, defaultSizes, isControlled, panels]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const clampToConstraints = () => {
+      const rect = container.getBoundingClientRect();
+      const axisSize = isVertical ? rect.height : rect.width;
+      if (axisSize <= 0) return;
+      const enforced = enforcePanelConstraints(sizes, panels, axisSize);
+      if (enforced.some((value, index) => Math.abs(value - sizes[index]) > 0.001)) {
+        applySizes(enforced, axisSize);
+      }
+    };
+
+    clampToConstraints();
+    const observer = new ResizeObserver(clampToConstraints);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [sizes, panels, isVertical, applySizes]);
 
   const onPointerDown = useCallback(
     (index: number, event: ReactPointerEvent<HTMLDivElement>) => {
@@ -126,7 +296,9 @@ export function ResizablePanels({
         startPos: isVertical ? event.clientY : event.clientX,
         startSizes: [...sizes],
         containerSize: isVertical ? rect.height : rect.width,
+        releaseSnap: "none",
       };
+      setGutterSnap("none");
       event.currentTarget.setPointerCapture(event.pointerId);
     },
     [isVertical, sizes],
@@ -145,28 +317,51 @@ export function ResizablePanels({
       next[drag.index] += deltaRatio;
       next[drag.index + 1] -= deltaRatio;
 
-      const minRatio = (panel: ResizablePanelConfig) =>
-        (panel.minSize ?? 48) / drag.containerSize;
+      if (
+        drag.index === 0 &&
+        panels.length === 2 &&
+        usesSecondaryDragSnap(panels)
+      ) {
+        const requestedSecondaryPx = next[1] * drag.containerSize;
+        const { secondaryPx, snap } = resolveTwoPanelSecondaryDrag(
+          requestedSecondaryPx,
+          drag.containerSize,
+          panels[0],
+          panels[1],
+        );
+        const secondaryRatio = secondaryPx / drag.containerSize;
+        applySizes([1 - secondaryRatio, secondaryRatio], drag.containerSize);
+        drag.releaseSnap = snap;
+        setGutterSnap(snap);
+        return;
+      }
 
-      next[drag.index] = Math.max(next[drag.index], minRatio(panels[drag.index]));
-      next[drag.index + 1] = Math.max(
-        next[drag.index + 1],
-        minRatio(panels[drag.index + 1]),
-      );
-
-      applySizes(next);
+      applySizes(next, drag.containerSize);
+      drag.releaseSnap = "none";
+      setGutterSnap("none");
     },
     [isVertical, panels, applySizes],
   );
 
-  const onPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    dragRef.current = null;
-    try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      /* already released */
-    }
-  }, []);
+  const onPointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = dragRef.current;
+      const releaseSnap = drag?.releaseSnap ?? "none";
+      dragRef.current = null;
+      setGutterSnap("none");
+
+      if (releaseSnap === "collapse" && panels[1]?.collapsible) {
+        onTrailingPanelCollapse?.();
+      }
+
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        /* already released */
+      }
+    },
+    [onTrailingPanelCollapse, panels],
+  );
 
   return (
     <div
@@ -183,6 +378,9 @@ export function ResizablePanels({
             className={cn(
               "flex min-h-0 min-w-0 flex-col overflow-hidden",
               isVertical ? "w-full" : "h-full",
+              index === panels.length - 1 &&
+                gutterSnap !== "none" &&
+                (isVertical ? "border-t border-accent" : "border-l border-accent"),
             )}
             style={{ flex: `${sizes[index]} 1 0%` }}
           >
@@ -199,16 +397,26 @@ export function ResizablePanels({
                 onPointerUp={onPointerUp}
                 onPointerCancel={onPointerUp}
                 className={cn(
-                  "group z-10 shrink-0 touch-none select-none",
+                  "relative z-10 shrink-0 touch-none select-none",
                   isVertical
-                    ? "flex h-1.5 w-full cursor-row-resize items-center justify-center"
-                    : "flex h-full w-1.5 cursor-col-resize items-center justify-center",
+                    ? "h-[5px] w-full cursor-row-resize"
+                    : "h-full w-[5px] cursor-col-resize",
                 )}
               >
                 <span
+                  aria-hidden
                   className={cn(
-                    "bg-border transition-colors group-hover:bg-muted-foreground/40 group-active:bg-foreground",
-                    isVertical ? "h-0.5 w-8" : "h-8 w-0.5",
+                    "pointer-events-none absolute transition-colors duration-150",
+                    isVertical
+                      ? "top-1/2 right-0 left-0 h-px -translate-y-1/2"
+                      : "top-0 bottom-0 left-1/2 -translate-x-1/2",
+                    gutterSnap !== "none"
+                      ? isVertical
+                        ? "h-0.5 bg-accent"
+                        : "w-0.5 bg-accent"
+                      : isVertical
+                        ? "h-px bg-border-subtle"
+                        : "w-px bg-border-subtle opacity-0 hover:bg-muted-foreground/40 hover:opacity-100 active:bg-muted-foreground/60",
                   )}
                 />
               </div>
@@ -228,7 +436,6 @@ export function ResizablePanels({
 }
 
 interface ResizableSidebarProps {
-  side: "left" | "right";
   defaultWidth: number;
   minWidth?: number;
   maxWidth?: number;
@@ -238,7 +445,6 @@ interface ResizableSidebarProps {
 }
 
 export function ResizableSidebar({
-  side,
   defaultWidth,
   minWidth = 180,
   maxWidth = 480,
@@ -249,10 +455,7 @@ export function ResizableSidebar({
   const {
     layoutResetNonce,
     registerLeftSidebarExpand,
-    registerRightSidebarExpand,
     registerLeftSidebarToggle,
-    registerRightSidebarToggle,
-    notifyRightSidebarCollapsed,
     notifyLeftSidebarCollapsed,
   } = useLayout();
   const collapsedKey = `${storageKey}:collapsed`;
@@ -276,12 +479,8 @@ export function ResizableSidebar({
   }, [collapsed, collapsedKey]);
 
   useEffect(() => {
-    if (side === "right") {
-      notifyRightSidebarCollapsed(collapsed);
-    } else {
-      notifyLeftSidebarCollapsed(collapsed);
-    }
-  }, [collapsed, side, notifyRightSidebarCollapsed, notifyLeftSidebarCollapsed]);
+    notifyLeftSidebarCollapsed(collapsed);
+  }, [collapsed, notifyLeftSidebarCollapsed]);
 
   useEffect(() => {
     if (layoutResetNonce === 0) return;
@@ -306,24 +505,17 @@ export function ResizableSidebar({
         return true;
       });
     };
-    const registerExpand =
-      side === "left" ? registerLeftSidebarExpand : registerRightSidebarExpand;
-    const registerToggle =
-      side === "left" ? registerLeftSidebarToggle : registerRightSidebarToggle;
-    const unregisterExpand = registerExpand(expand);
-    const unregisterToggle = registerToggle(toggle);
+    const unregisterExpand = registerLeftSidebarExpand(expand);
+    const unregisterToggle = registerLeftSidebarToggle(toggle);
     return () => {
       unregisterExpand();
       unregisterToggle();
     };
   }, [
-    side,
     defaultWidth,
     minWidth,
     registerLeftSidebarExpand,
-    registerRightSidebarExpand,
     registerLeftSidebarToggle,
-    registerRightSidebarToggle,
   ]);
 
   const clampExpanded = useCallback(
@@ -346,8 +538,7 @@ export function ResizableSidebar({
     if (!drag) return;
 
     const delta = event.clientX - drag.startX;
-    const next =
-      side === "left" ? drag.startWidth + delta : drag.startWidth - delta;
+    const next = drag.startWidth + delta;
 
     if (drag.fromCollapsed) {
       setSnapHighlight(false);
@@ -373,8 +564,7 @@ export function ResizableSidebar({
 
     if (drag) {
       const delta = event.clientX - drag.startX;
-      const next =
-        side === "left" ? drag.startWidth + delta : drag.startWidth - delta;
+      const next = drag.startWidth + delta;
 
       if (drag.fromCollapsed) {
         if (next >= COLLAPSE_THRESHOLD) {
@@ -410,7 +600,7 @@ export function ResizableSidebar({
       className={cn(
         "relative flex shrink-0 flex-col bg-panel",
         collapsed && "bg-transparent",
-        snapHighlight && (side === "left" ? "border-r border-accent" : "border-l border-accent"),
+        snapHighlight && "border-r border-accent",
         className,
       )}
       style={{ width: collapsed ? 0 : width }}
@@ -435,15 +625,8 @@ export function ResizableSidebar({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         className={cn(
-          "absolute top-0 z-20 flex h-full cursor-col-resize items-center justify-center touch-none select-none",
-          collapsed ? "w-1.5" : "w-1.5",
-          side === "left"
-            ? collapsed
-              ? "right-0"
-              : "-right-0.5"
-            : collapsed
-              ? "left-0"
-              : "-left-0.5",
+          "absolute top-0 z-20 flex h-full w-1.5 cursor-col-resize items-center justify-center touch-none select-none",
+          collapsed ? "right-0" : "-right-0.5",
         )}
       >
         <span

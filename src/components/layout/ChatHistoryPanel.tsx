@@ -18,7 +18,7 @@ import { getOutermostEnabledContextRoots } from "@/lib/project-ai-paths";
 import type { Chat } from "@/types/chat";
 
 import {
-  chatHasMessages,
+  chatShouldPersist,
   sortWorkspaces,
   truncateChatTitle,
 } from "@/lib/chat-utils";
@@ -52,6 +52,10 @@ function ChatListItem({
   const [draftTitle, setDraftTitle] = useState(chat.title);
   const inputRef = useRef<HTMLInputElement>(null);
   const skipCommitOnBlurRef = useRef(false);
+  const isNewProjectPlaceholder =
+    isRenaming &&
+    chat.title.trim() === "New Project" &&
+    draftTitle.trim() === "New Project";
   const contextLine =
     contextRoots.length > 0
       ? contextRoots.map((r) => r.label).join(" · ")
@@ -93,7 +97,12 @@ function ChatListItem({
           type="text"
           value={draftTitle}
           aria-label="Workspace name"
-          className="border-border bg-background text-foreground min-w-0 flex-1 rounded border px-1.5 py-0.5 text-sm ring-1 ring-transparent outline-none focus:border-[#6366f1]/35 focus:ring-[#6366f1]/25"
+          className={cn(
+            "border-border bg-background min-w-0 flex-1 rounded border px-1.5 py-0.5 text-sm ring-1 ring-transparent outline-none focus:border-[#6366f1]/35 focus:ring-[#6366f1]/25",
+            isNewProjectPlaceholder
+              ? "text-muted-foreground/60"
+              : "text-foreground",
+          )}
           onChange={(e) => setDraftTitle(e.target.value)}
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
@@ -204,15 +213,28 @@ interface ChatHistoryPanelProps {
 
 export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
 
-  const { chats, activeChatId, createChat, deleteChat } = useChats();
+  const {
+    chats,
+    activeChat,
+    activeChatId,
+    deleteChat,
+    startNewProject,
+    renamingChatId,
+    setRenamingChatId,
+  } = useChats();
 
   const { zone, chatListFocusId, selectChat } = useAppSelection();
 
   const listRef = useRef<HTMLDivElement>(null);
-  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
 
-  const savedChats = chats.filter(chatHasMessages);
-  const sortedChats = sortWorkspaces(savedChats);
+  const listChats = activeChat && !chats.some((chat) => chat.id === activeChat.id)
+    ? [activeChat, ...chats]
+    : chats;
+  const visibleChats = sortWorkspaces(
+    listChats.filter(
+      (chat) => chatShouldPersist(chat) || chat.id === activeChatId,
+    ),
+  );
 
 
 
@@ -228,9 +250,7 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
 
     el?.scrollIntoView({ block: "nearest", behavior: "auto" });
 
-  }, [zone, chatListFocusId, sortedChats.length]);
-
-
+  }, [zone, chatListFocusId, visibleChats.length]);
 
   const renderChat = (chat: Chat) => (
 
@@ -281,13 +301,7 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
 
           className="text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground h-6 gap-1 rounded-md px-2 text-xs"
 
-          onClick={() => {
-
-            const id = createChat();
-
-            selectChat(id);
-
-          }}
+          onClick={() => startNewProject()}
 
         >
 
@@ -303,7 +317,7 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
 
       <ScrollArea className="h-full min-w-0" data-chat-list-panel>
 
-        {savedChats.length === 0 ? (
+        {visibleChats.length === 0 ? (
 
           <p className="text-muted px-3 py-6 text-center text-xs">
 
@@ -321,7 +335,7 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
 
           >
 
-            {sortedChats.map(renderChat)}
+            {visibleChats.map(renderChat)}
 
           </div>
 

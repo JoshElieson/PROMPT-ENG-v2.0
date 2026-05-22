@@ -29,8 +29,12 @@ export interface RoundTableModel extends AiModel {
   weight: number;
 }
 
-/** Models included in the Round Table on first launch. */
-export const DEFAULT_ROUND_TABLE_IDS = ["gpt4o", "claude", "gemini"] as const;
+/** Models in the Model Cart / dock on first launch (new users & new panes). */
+export const DEFAULT_ROUND_TABLE_IDS = [
+  "gpt4o",
+  "claude",
+  "gemini-2.5-flash",
+] as const;
 
 export const popularAiModels: AiModel[] = [
   {

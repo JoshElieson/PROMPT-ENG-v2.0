@@ -1,39 +1,11 @@
 import { load, type Store } from "@tauri-apps/plugin-store";
-import type { AuthSession, GitHubUser } from "@/types/auth";
+import type { AuthSession } from "@/types/auth";
+import { normalizeStoredSession } from "@/lib/auth-session";
 import { isTauri } from "@/lib/tauri";
 
 const LOCAL_KEY = "prompt:auth:v1";
 const STORE_FILE = "auth.v1.json";
 const STORE_KEY = "session";
-
-type StoredUser = GitHubUser & { avatarUrl?: string };
-type StoredSession = {
-  accessToken?: string;
-  access_token?: string;
-  loginAt?: number;
-  user?: StoredUser;
-};
-
-function normalizeSession(raw: unknown): AuthSession | null {
-  if (!raw || typeof raw !== "object") return null;
-
-  const data = raw as StoredSession;
-  const accessToken = data.accessToken ?? data.access_token;
-  const user = data.user;
-  if (!accessToken || !user?.login) return null;
-
-  return {
-    accessToken,
-    loginAt: typeof data.loginAt === "number" ? data.loginAt : Date.now(),
-    user: {
-      id: user.id,
-      login: user.login,
-      name: user.name ?? null,
-      avatar_url: user.avatar_url ?? user.avatarUrl ?? "",
-      email: user.email ?? null,
-    },
-  };
-}
 
 let storePromise: Promise<Store> | null = null;
 
@@ -46,7 +18,7 @@ function readLocalSession(): AuthSession | null {
   try {
     const raw = localStorage.getItem(LOCAL_KEY);
     if (!raw) return null;
-    return normalizeSession(JSON.parse(raw));
+    return normalizeStoredSession(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -68,7 +40,7 @@ export async function loadAuthSession(): Promise<AuthSession | null> {
   if (isTauri()) {
     try {
       const store = await getStore();
-      const fromStore = normalizeSession(await store.get(STORE_KEY));
+      const fromStore = normalizeStoredSession(await store.get(STORE_KEY));
       if (fromStore) {
         writeLocalSession(fromStore);
         return fromStore;
@@ -93,7 +65,7 @@ export async function loadAuthSession(): Promise<AuthSession | null> {
 }
 
 export async function saveAuthSession(session: AuthSession): Promise<void> {
-  const normalized = normalizeSession(session);
+  const normalized = normalizeStoredSession(session);
   if (!normalized) {
     throw new Error("Could not save sign-in session.");
   }

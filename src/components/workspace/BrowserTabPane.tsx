@@ -24,8 +24,8 @@ import { cn } from "@/lib/utils";
 
 interface BrowserTabPaneProps {
   tabId: string;
-  isActive: boolean;
-  /** Hide native webview while panel chrome (e.g. tab dropdown) is open — child webviews paint above the main UI. */
+  isFocused: boolean;
+  /** Hide native webview while panel chrome (menus, split drag) is active — child webviews paint above the main UI. */
   suppressNativeOverlay?: boolean;
   onRequestFocus: (tabId: string) => void;
 }
@@ -102,11 +102,11 @@ async function waitForHostBounds(host: HTMLElement, maxAttempts = 40) {
 
 export function BrowserTabPane({
   tabId,
-  isActive,
+  isFocused,
   suppressNativeOverlay = false,
   onRequestFocus,
 }: BrowserTabPaneProps) {
-  const showNativeWebview = isActive && !suppressNativeOverlay;
+  const showNativeWebview = !suppressNativeOverlay;
   const useNative = canUseEmbeddedBrowser();
   const { selectBottomPanel } = useAppSelection();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -328,10 +328,10 @@ export function BrowserTabPane({
 
   return (
     <div
+      data-focused={isFocused || undefined}
       className={cn(
         "absolute inset-0 flex flex-col",
         !useNative && "bg-[#1a1a1a]",
-        !isActive && "pointer-events-none invisible",
       )}
     >
       <div className="border-border-subtle bg-panel flex h-8 shrink-0 items-center gap-1 border-b px-1.5">

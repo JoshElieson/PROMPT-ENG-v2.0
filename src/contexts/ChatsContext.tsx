@@ -17,11 +17,27 @@ import {
   type AiToolActivityEvent,
   type ChatTurn,
 } from "@/lib/ai-chat";
+import { resolveQueuedMessageBehavior } from "@/lib/chat-behavior";
 import {
   chatHasMessages,
+  chatShouldPersist,
+  DEFAULT_AGENT_SYSTEM_PROMPT,
   defaultThreadTitle,
-  titleFromMessage,
+  threadDisplayTitle,
 } from "@/lib/chat-utils";
+import type { QueuedMessageBehavior } from "@/types/chat-behavior";
+import {
+  buildAgentPermissionsSystemNote,
+  isPaneActionAllowed,
+  resolveAgentPermissions,
+  serializeAgentPermissions,
+} from "@/lib/agent-permissions";
+import {
+  canAutoTitleWorkspace,
+  fallbackWorkspaceTitle,
+  generateWorkspaceTitleWithAi,
+  workspaceUserMessageCount,
+} from "@/lib/workspace-title";
 import { useApiUsage } from "@/contexts/ApiUsageContext";
 import { isTauri } from "@/lib/tauri";
 import { evenContributions } from "@/lib/round-table-weights";
@@ -48,6 +64,17 @@ import { useLayout } from "@/contexts/LayoutContext";
 import { useUserXp } from "@/contexts/UserXpContext";
 import { extractAssistantPaneActions } from "@/lib/assistant-pane-actions";
 import {
+  AI_UI_COMMAND_SYSTEM_GUIDANCE,
+  extractAssistantUiCommands,
+} from "@/lib/assistant-ui-commands";
+import { extractAssistantProjectTools } from "@/lib/assistant-project-tools";
+import {
+  applyProjectToolsPatches,
+  dedupeProjectTools,
+  formatProjectToolsPrompt,
+  PROJECT_TOOLS_UPDATE_GUIDANCE,
+} from "@/lib/project-tools";
+import {
   addAgentMemory,
   createProjectMemory,
   ensureAgentContext,
@@ -55,6 +82,7 @@ import {
   getRelevantContextForAgent,
   updateAgentSummary,
 } from "@/lib/project-memory";
+import { notifyAgentFinishedWhenBackgrounded } from "@/lib/agent-finish-notification";
 import type { NodePermissions } from "@/types/project";
 import type {
   AiWorkspacePayload,
@@ -65,7 +93,9 @@ import type {
   SendMessagePayload,
 } from "@/types/chat";
 import type { ProjectMemory } from "@/types/agent-memory";
+import type { AgentPermissions } from "@/types/agent-permissions";
 import type { WorkspacePaneLayout } from "@/types/workspace-pane";
+import { useAiCommandBus } from "@/contexts/AiCommandBusContext";
 
 interface ChatsContextValue {
   chats: Chat[];
@@ -79,15 +109,51 @@ interface ChatsContextValue {
   /** Removes the pane for this leaf (4→3→2→1) and drops its thread. */
   closeActiveWorkspaceLeaf: (leafId: string) => boolean;
   responseLoading: ResponseLoadingState | null;
-  createChat: () => string;
+  createChat: (options?: {
+    title?: string;
+    titleLocked?: boolean;
+    persistImmediately?: boolean;
+  }) => string;
+  /** Same entry point as File → New Project and the projects sidebar "+ New" button. */
+  startNewProject: () => string;
+  renamingChatId: string | null;
+  setRenamingChatId: (id: string | null) => void;
   selectChat: (id: string) => void;
   renameChat: (id: string, title: string) => void;
   renameThread: (threadId: string, title: string) => void;
+  /** Per-agent settings (name, system prompt) scoped to one thread. */
+  patchAgentSettings: (
+    chatId: string,
+    threadId: string,
+    patch: {
+      title?: string;
+      systemPrompt?: string;
+      agentPermissions?: AgentPermissions;
+    },
+  ) => void;
+  /** Project-wide settings shared by all agents in the chat. */
+  patchWorkspaceSettings: (
+    chatId: string,
+    patch: {
+      title?: string;
+      projectDescription?: string;
+      projectTools?: string[];
+      fileAccessEnabled?: boolean;
+      multiModelMode?: boolean;
+      autoScrollEnabled?: boolean;
+      queuedMessageBehavior?: QueuedMessageBehavior;
+    },
+  ) => void;
   /** Stops the in-flight AI response for this thread without closing the tab. */
   forceKillThread: (threadId: string) => void;
   togglePinChat: (id: string) => void;
   deleteChat: (id: string) => void;
   sendMessage: (payload: SendMessagePayload) => void;
+  truncateThreadAfterMessage: (
+    chatId: string,
+    threadId: string,
+    messageId: string,
+  ) => void;
   /** Messages waiting to send after the current response on this thread. */
   getQueuedMessageCount: (chatId: string, threadId: string) => number;
   getStreamingActivities: (
@@ -108,9 +174,6 @@ interface ChatsContextValue {
 }
 
 const ChatsContext = createContext<ChatsContextValue | null>(null);
-const DEEP_REASONING_SYSTEM_PROMPT =
-  "Deep reasoning mode is enabled. Think carefully and take the time needed to produce a high-quality response. " +
-  "Prioritize correctness, depth, and clear structure over speed. Explain key assumptions, verify important steps, and avoid shallow answers.";
 
 function resolveActiveId(chats: Chat[], storedId: string | null): string | null {
   if (storedId && chats.some((c) => c.id === storedId)) return storedId;
@@ -118,12 +181,14 @@ function resolveActiveId(chats: Chat[], storedId: string | null): string | null 
   return chats[0].id;
 }
 
-function buildEmptyChat(): Chat {
+function buildEmptyChat(options?: { title?: string; titleLocked?: boolean }): Chat {
   const now = Date.now();
   const tid = crypto.randomUUID();
+  const title = options?.title?.trim() || "New Chat";
   return {
     id: crypto.randomUUID(),
-    title: "New Chat",
+    title,
+    titleLocked: options?.titleLocked,
     threads: [{ id: tid, messages: [], createdAt: now, updatedAt: now }],
     nextAgentNumber: 2,
     createdAt: now,
@@ -138,8 +203,14 @@ function partitionLoadedChats(
   loaded: Chat[],
   storedActiveId: string | null,
 ): { chats: Chat[]; draftChat: Chat | null; activeChatId: string | null } {
-  const chats = loaded.filter(chatHasMessages);
-  const empty = loaded.filter((c) => !chatHasMessages(c));
+  const normalized = loaded.map((chat) => {
+    if (chat.hadMessages || chatHasMessages(chat)) {
+      return { ...chat, hadMessages: true };
+    }
+    return chat;
+  });
+  const chats = normalized.filter(chatShouldPersist);
+  const empty = normalized.filter((c) => !chatShouldPersist(c));
   const draftFromActive = storedActiveId
     ? (empty.find((c) => c.id === storedActiveId) ?? null)
     : null;
@@ -223,7 +294,6 @@ type CommittedSend = {
   history: ChatTurn[];
   targetModelIds: string[];
   contributions: { modelId: string; percentage: number }[];
-  deepReasoning: boolean;
   workspace?: AiWorkspacePayload;
 };
 
@@ -240,7 +310,8 @@ function appendUserMessageToThread(
     const cid = crypto.randomUUID();
     const chat: Chat = {
       id: cid,
-      title: titleFromMessage(trimmed || "Attachments"),
+      title: fallbackWorkspaceTitle(trimmed || "Attachments"),
+      hadMessages: true,
       threads: [
         {
           id: tid,
@@ -274,14 +345,15 @@ function appendUserMessageToThread(
           updatedAt: now,
         };
       });
-      const wasEmpty =
-        chat.threads.find((th) => th.id === tid)?.messages.length === 0;
+      const isFirstWorkspaceMessage = workspaceUserMessageCount(chat) === 0;
       return {
         ...chat,
+        hadMessages: true,
         threads,
-        title: wasEmpty
-          ? titleFromMessage(trimmed || "Attachments")
-          : chat.title,
+        title:
+          isFirstWorkspaceMessage && canAutoTitleWorkspace(chat)
+            ? fallbackWorkspaceTitle(trimmed || "Attachments")
+            : chat.title,
         updatedAt: now,
       };
     }),
@@ -318,10 +390,9 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
   const {
     requestBottomPanelTab,
     setWorkspaceBottomPanelOpen,
-    setRightPanelVisible,
-    setRightSidebarCollapsed,
     setLeftSidebarViewVisible,
   } = useLayout();
+  const { enqueueCommands } = useAiCommandBus();
   const boot = useMemo(() => {
     const loaded = loadChats();
     return partitionLoadedChats(loaded, loadActiveChatId());
@@ -334,6 +405,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
   );
   const [responseLoading, setResponseLoading] =
     useState<ResponseLoadingState | null>(null);
+  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
   const responseRunRef = useRef(0);
   const inFlightThreadsRef = useRef(new Set<string>());
   const queuedSendsRef = useRef(new Map<string, SendMessagePayload[]>());
@@ -490,7 +562,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    saveChats(chats.filter(chatHasMessages));
+    saveChats(chats.filter(chatShouldPersist));
   }, [chats]);
 
   useEffect(() => {
@@ -691,19 +763,35 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     [activeChatId, draftChat, clearMessageQueue, clearStreamingActivities],
   );
 
-  const createChat = useCallback((): string => {
-    const chat = buildEmptyChat();
-    setDraftChat(chat);
+  const createChat = useCallback((options?: {
+    title?: string;
+    titleLocked?: boolean;
+    persistImmediately?: boolean;
+  }): string => {
+    const chat = buildEmptyChat(options);
+    if (options?.persistImmediately) {
+      setChats((prev) => [chat, ...prev]);
+      setDraftChat(null);
+    } else {
+      setDraftChat(chat);
+    }
     setActiveChatId(chat.id);
     return chat.id;
   }, []);
 
+  const startNewProject = useCallback(() => {
+    const id = createChat({ title: "New Project" });
+    setRenamingChatId(id);
+    return id;
+  }, [createChat]);
+
   const selectChat = useCallback((id: string) => {
-    if (draftChat && id !== draftChat.id) {
-      setDraftChat(null);
-    }
+    setDraftChat((prev) => {
+      if (!prev) return prev;
+      return id === prev.id ? prev : null;
+    });
     setActiveChatId(id);
-  }, [draftChat]);
+  }, []);
 
   const patchChatById = useCallback(
     (chatId: string, updater: (chat: Chat) => Chat) => {
@@ -725,8 +813,26 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       patchChatById(id, (chat) => ({
         ...chat,
         title: trimmed,
+        titleLocked: true,
         updatedAt: Date.now(),
       }));
+    },
+    [patchChatById],
+  );
+
+  const refineWorkspaceTitle = useCallback(
+    async (chatId: string, userMessage: string) => {
+      if (!isTauri()) return;
+      try {
+        const title = await generateWorkspaceTitleWithAi(userMessage);
+        patchChatById(chatId, (chat) => {
+          if (!canAutoTitleWorkspace(chat)) return chat;
+          if (workspaceUserMessageCount(chat) !== 1) return chat;
+          return { ...chat, title, updatedAt: Date.now() };
+        });
+      } catch {
+        // Keep the fallback title from the first message.
+      }
     },
     [patchChatById],
   );
@@ -749,27 +855,120 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     [activeChatId, patchChatById],
   );
 
-  const forceKillThread = useCallback(
-    (threadId: string) => {
-      if (!activeChatId) return;
-      setResponseLoading((rl) => {
-        if (
-          rl &&
-          rl.chatId === activeChatId &&
-          rl.threadId === threadId
-        ) {
-          responseRunRef.current += 1;
-          clearMessageQueue(activeChatId, threadId);
-          const key = threadResponseKey(activeChatId, threadId);
-          activeStreamIdByThreadRef.current.delete(key);
-          clearStreamingActivities(activeChatId, threadId);
-          inFlightThreadsRef.current.delete(key);
-          return null;
+  const patchAgentSettings = useCallback(
+    (
+      chatId: string,
+      threadId: string,
+      patch: {
+        title?: string;
+        systemPrompt?: string;
+        agentPermissions?: AgentPermissions;
+      },
+    ) => {
+      patchChatById(chatId, (chat) => {
+        const threadIndex = chat.threads.findIndex((t) => t.id === threadId);
+        if (threadIndex < 0) return chat;
+        const now = Date.now();
+        return {
+          ...chat,
+          threads: chat.threads.map((t) => {
+            if (t.id !== threadId) return t;
+            const next: ChatThread = { ...t, updatedAt: now };
+            if (patch.title !== undefined) {
+              const trimmed = patch.title.trim();
+              next.title = trimmed || undefined;
+            }
+            if (patch.systemPrompt !== undefined) {
+              const trimmed = patch.systemPrompt.trim();
+              next.systemPrompt = trimmed || undefined;
+            }
+            if (patch.agentPermissions !== undefined) {
+              next.agentPermissions = serializeAgentPermissions(
+                patch.agentPermissions,
+              );
+            }
+            return next;
+          }),
+          updatedAt: now,
+        };
+      });
+    },
+    [patchChatById],
+  );
+
+  const patchWorkspaceSettings = useCallback(
+    (
+      chatId: string,
+      patch: {
+        title?: string;
+        projectDescription?: string;
+        projectTools?: string[];
+        fileAccessEnabled?: boolean;
+        multiModelMode?: boolean;
+        autoScrollEnabled?: boolean;
+        queuedMessageBehavior?: QueuedMessageBehavior;
+      },
+    ) => {
+      patchChatById(chatId, (chat) => {
+        const now = Date.now();
+        const next: Chat = { ...chat, updatedAt: now };
+        if (patch.title !== undefined) {
+          const trimmed = patch.title.trim();
+          if (trimmed) {
+            next.title = trimmed;
+            next.titleLocked = true;
+          }
         }
+        if (patch.projectDescription !== undefined) {
+          const trimmed = patch.projectDescription.trim();
+          next.projectDescription = trimmed || undefined;
+        }
+        if (patch.projectTools !== undefined) {
+          const normalized = dedupeProjectTools(patch.projectTools);
+          next.projectTools = normalized.length > 0 ? normalized : undefined;
+        }
+        if (patch.fileAccessEnabled !== undefined) {
+          next.fileAccessEnabled = patch.fileAccessEnabled;
+        }
+        if (patch.multiModelMode !== undefined) {
+          next.multiModelMode = patch.multiModelMode;
+        }
+        if (patch.autoScrollEnabled !== undefined) {
+          next.autoScrollEnabled = patch.autoScrollEnabled;
+        }
+        if (patch.queuedMessageBehavior !== undefined) {
+          next.queuedMessageBehavior = patch.queuedMessageBehavior;
+        }
+        return next;
+      });
+    },
+    [patchChatById],
+  );
+
+  const interruptThreadResponse = useCallback(
+    (chatId: string, threadId: string) => {
+      const key = threadResponseKey(chatId, threadId);
+      if (!inFlightThreadsRef.current.has(key)) return;
+
+      responseRunRef.current += 1;
+      clearMessageQueue(chatId, threadId);
+      activeStreamIdByThreadRef.current.delete(key);
+      clearStreamingActivities(chatId, threadId);
+      inFlightThreadsRef.current.delete(key);
+      setResponseLoading((rl) => {
+        if (rl?.chatId === chatId && rl.threadId === threadId) return null;
         return rl;
       });
     },
-    [activeChatId, clearMessageQueue, clearStreamingActivities],
+    [clearMessageQueue, clearStreamingActivities],
+  );
+
+  const forceKillThread = useCallback(
+    (threadId: string) => {
+      if (!activeChatId) return;
+      interruptThreadResponse(activeChatId, threadId);
+    },
+    [activeChatId, interruptThreadResponse],
   );
 
   const togglePinChat = useCallback(
@@ -785,7 +984,18 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
   const deleteChat = useCallback(
     (id: string) => {
-      setChats((prev) => prev.filter((c) => c.id !== id));
+      const nextDraft =
+        draftChatRef.current?.id === id ? null : draftChatRef.current;
+      const nextChats = chatsRef.current.filter((c) => c.id !== id);
+
+      setDraftChat(nextDraft);
+      setChats(nextChats);
+      setRenamingChatId((current) => (current === id ? null : current));
+      setActiveChatId((current) => {
+        if (current !== id) return current;
+        return nextDraft?.id ?? nextChats[0]?.id ?? null;
+      });
+
       if (projectMemoriesRef.current[id]) {
         delete projectMemoriesRef.current[id];
         persistProjectMemories();
@@ -838,7 +1048,6 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       history: ChatTurn[],
       targetModelIds: string[],
       contributions: { modelId: string; percentage: number }[],
-      deepReasoning: boolean,
       workspace: AiWorkspacePayload | undefined,
       retrievedMemoryPrompt: string | null,
     ) => {
@@ -848,9 +1057,40 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
       const finish = (content: string) => {
         if (responseRunRef.current !== runId) return;
-        const { visibleContent, actions } = extractAssistantPaneActions(content);
+        const { visibleContent: afterTools, patches: toolPatches } =
+          extractAssistantProjectTools(content);
+        const { visibleContent: afterPaneActions, actions } =
+          extractAssistantPaneActions(afterTools);
+        const { visibleContent, commands } =
+          extractAssistantUiCommands(afterPaneActions);
+        let chatSnapshot = findChatSnapshot(
+          chatsRef.current,
+          draftChatRef.current,
+          chatId,
+        );
+        const thread = chatSnapshot?.threads.find((t) => t.id === threadId);
+        const agentPermissions = resolveAgentPermissions(thread);
+
+        if (
+          toolPatches.length > 0 &&
+          agentPermissions.inAppSettings &&
+          chatSnapshot
+        ) {
+          const nextTools = applyProjectToolsPatches(
+            chatSnapshot.projectTools ?? [],
+            toolPatches,
+          );
+          patchWorkspaceSettings(chatId, { projectTools: nextTools });
+          chatSnapshot = {
+            ...chatSnapshot,
+            projectTools: nextTools.length > 0 ? nextTools : undefined,
+          };
+        }
 
         for (const action of actions) {
+          if (!isPaneActionAllowed(action.target, agentPermissions)) {
+            continue;
+          }
           if (action.target === "terminal") {
             if (action.verb === "open") requestBottomPanelTab("terminal");
             else setWorkspaceBottomPanelOpen(false);
@@ -862,15 +1102,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             continue;
           }
           if (action.target === "models") {
-            setRightPanelVisible("roundTable", action.verb === "open");
-            continue;
-          }
-          if (action.target === "workflow") {
-            setRightPanelVisible("workflow", action.verb === "open");
-            continue;
-          }
-          if (action.target === "right-sidebar") {
-            setRightSidebarCollapsed(action.verb === "close");
+            setLeftSidebarViewVisible("agents", action.verb === "open");
             continue;
           }
           if (action.target === "explorer") {
@@ -880,6 +1112,10 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           if (action.target === "agent-cart") {
             setLeftSidebarViewVisible("agents", action.verb === "open");
           }
+        }
+
+        if (commands.length > 0) {
+          enqueueCommands(commands);
         }
 
         const finalContent = visibleContent || content;
@@ -913,7 +1149,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           chatsRef.current = next;
           return next;
         });
-        const chatSnapshot = findChatSnapshot(
+        chatSnapshot = findChatSnapshot(
           chatsRef.current,
           draftChatRef.current,
           chatId,
@@ -930,6 +1166,21 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             finalContent,
             relatedFiles,
           );
+        }
+        if (chatSnapshot) {
+          const threadIndex = chatSnapshot.threads.findIndex(
+            (thread) => thread.id === threadId,
+          );
+          const thread =
+            threadIndex >= 0 ? chatSnapshot.threads[threadIndex] : undefined;
+          const workspaceName = chatSnapshot.title?.trim() || "Workspace";
+          const agentName = thread
+            ? threadDisplayTitle(thread, threadIndex)
+            : defaultThreadTitle(0);
+          void notifyAgentFinishedWhenBackgrounded({
+            workspaceName,
+            agentName,
+          }).catch(() => {});
         }
         activeStreamIdByThreadRef.current.delete(threadKey);
         clearStreamingActivities(chatId, threadId);
@@ -972,8 +1223,30 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       );
 
       try {
+        const chatSnapshot = findChatSnapshot(
+          chatsRef.current,
+          draftChatRef.current,
+          chatId,
+        );
+        const thread = chatSnapshot?.threads.find((t) => t.id === threadId);
+        const agentPermissions = resolveAgentPermissions(thread);
+        const agentSystemPrompt =
+          thread?.systemPrompt?.trim() || DEFAULT_AGENT_SYSTEM_PROMPT;
+        const permissionsNote =
+          buildAgentPermissionsSystemNote(agentPermissions);
+        const projectDescription =
+          chatSnapshot?.projectDescription?.trim() ?? "";
+        const projectTools = dedupeProjectTools(chatSnapshot?.projectTools ?? []);
+        const projectToolsPrompt = formatProjectToolsPrompt(projectTools);
         const systemParts = [
-          deepReasoning ? DEEP_REASONING_SYSTEM_PROMPT : "",
+          agentSystemPrompt,
+          permissionsNote ?? "",
+          projectDescription
+            ? `Project description:\n${projectDescription}`
+            : "",
+          projectToolsPrompt ?? "",
+          agentPermissions.inAppSettings ? PROJECT_TOOLS_UPDATE_GUIDANCE : "",
+          AI_UI_COMMAND_SYSTEM_GUIDANCE,
           retrievedMemoryPrompt ?? "",
         ].filter(Boolean);
         const systemPrompt = systemParts.length > 0 ? systemParts.join("\n\n") : null;
@@ -1055,9 +1328,9 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       clearStreamingActivities,
       requestBottomPanelTab,
       setWorkspaceBottomPanelOpen,
-      setRightPanelVisible,
-      setRightSidebarCollapsed,
       setLeftSidebarViewVisible,
+      patchWorkspaceSettings,
+      enqueueCommands,
     ],
   );
 
@@ -1069,7 +1342,6 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         trimmed,
         history,
         targetModelIds,
-        deepReasoning,
       } = committed;
       const key = threadResponseKey(resolvedChatId, finalThreadId);
       inFlightThreadsRef.current.add(key);
@@ -1102,7 +1374,6 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         history,
         targetModelIds,
         committed.contributions,
-        deepReasoning,
         committed.workspace,
         retrievedMemoryPrompt,
       );
@@ -1147,7 +1418,6 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         history,
         targetModelIds,
         contributions,
-        deepReasoning: payload.deepReasoning === true,
         workspace: payload.workspace,
       });
     },
@@ -1171,6 +1441,28 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       const requestedChatId = payload.chatId ?? activeChatId ?? null;
       const requestedThreadId = payload.threadId ?? null;
       if (!requestedChatId || !requestedThreadId) return;
+
+      const chatBeforeSend = findChatSnapshot(
+        chatsRef.current,
+        draftChatRef.current,
+        requestedChatId,
+      );
+      if (chatBeforeSend) {
+        const threadBeforeSend = resolveThreadId(
+          chatBeforeSend,
+          requestedThreadId,
+        );
+        const inFlightBeforeSend = threadResponseKey(
+          requestedChatId,
+          threadBeforeSend,
+        );
+        if (
+          inFlightThreadsRef.current.has(inFlightBeforeSend) &&
+          resolveQueuedMessageBehavior(chatBeforeSend) === "block-until-responds"
+        ) {
+          return;
+        }
+      }
 
       const contributions =
         payload.modelContributions ?? evenContributions(targetModelIds);
@@ -1245,12 +1537,26 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           trimmed,
           relatedFiles,
         );
+
+        if (
+          workspaceUserMessageCount(chatAfterCommit) === 1 &&
+          canAutoTitleWorkspace(chatAfterCommit)
+        ) {
+          void refineWorkspaceTitle(resolvedChatId, trimmed || "Attachments");
+        }
       }
 
       const inFlightKey = threadResponseKey(resolvedChatId, finalThreadId);
       if (inFlightThreadsRef.current.has(inFlightKey)) {
-        enqueueMessage(inFlightKey, payload);
-        return;
+        const queueBehavior = resolveQueuedMessageBehavior(chatAfterCommit);
+        if (queueBehavior === "stop-and-send") {
+          interruptThreadResponse(resolvedChatId, finalThreadId);
+        } else if (queueBehavior === "wait") {
+          enqueueMessage(inFlightKey, payload);
+          return;
+        } else {
+          return;
+        }
       }
 
       startThreadAiRun({
@@ -1260,11 +1566,60 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         history,
         targetModelIds,
         contributions,
-        deepReasoning: payload.deepReasoning === true,
         workspace: payload.workspace,
       });
     },
-    [activeChatId, addMessageMemoryRecord, enqueueMessage, startThreadAiRun],
+    [
+      activeChatId,
+      addMessageMemoryRecord,
+      enqueueMessage,
+      interruptThreadResponse,
+      refineWorkspaceTitle,
+      startThreadAiRun,
+    ],
+  );
+
+  const truncateThreadAfterMessage = useCallback(
+    (chatId: string, threadId: string, messageId: string) => {
+      const chat = findChatSnapshot(
+        chatsRef.current,
+        draftChatRef.current,
+        chatId,
+      );
+      const thread = chat?.threads.find((item) => item.id === threadId);
+      if (!thread) return;
+      const cutoff = thread.messages.findIndex((item) => item.id === messageId);
+      if (cutoff < 0 || cutoff >= thread.messages.length - 1) return;
+
+      const now = Date.now();
+      patchChatById(chatId, (existing) => ({
+        ...existing,
+        threads: existing.threads.map((item) =>
+          item.id === threadId
+            ? {
+                ...item,
+                messages: item.messages.slice(0, cutoff + 1),
+                updatedAt: now,
+              }
+            : item,
+        ),
+        updatedAt: now,
+      }));
+
+      const key = threadResponseKey(chatId, threadId);
+      responseRunRef.current += 1;
+      clearMessageQueue(chatId, threadId);
+      activeStreamIdByThreadRef.current.delete(key);
+      clearStreamingActivities(chatId, threadId);
+      inFlightThreadsRef.current.delete(key);
+      setResponseLoading((loading) => {
+        if (loading?.chatId === chatId && loading.threadId === threadId) {
+          return null;
+        }
+        return loading;
+      });
+    },
+    [patchChatById, clearMessageQueue, clearStreamingActivities],
   );
 
   const activeChat = useMemo(() => {
@@ -1283,13 +1638,19 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       closeActiveWorkspaceLeaf,
       responseLoading,
       createChat,
+      startNewProject,
+      renamingChatId,
+      setRenamingChatId,
       selectChat,
       renameChat,
       renameThread,
+      patchAgentSettings,
+      patchWorkspaceSettings,
       forceKillThread,
       togglePinChat,
       deleteChat,
       sendMessage,
+      truncateThreadAfterMessage,
       getQueuedMessageCount,
       getStreamingActivities,
       updateChatPermissions,
@@ -1306,13 +1667,19 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       closeActiveWorkspaceLeaf,
       responseLoading,
       createChat,
+      startNewProject,
+      renamingChatId,
+      setRenamingChatId,
       selectChat,
       renameChat,
       renameThread,
+      patchAgentSettings,
+      patchWorkspaceSettings,
       forceKillThread,
       togglePinChat,
       deleteChat,
       sendMessage,
+      truncateThreadAfterMessage,
       getQueuedMessageCount,
       getStreamingActivities,
       updateChatPermissions,

@@ -27,8 +27,6 @@
   --radius-xl: 1rem;
   --radius-2xl: 1.25rem;
   --radius-3xl: 1.5rem;
-  /** Shared bottom dock height (chat composer + right sidebar stats). */
-  --spacing-workspace-dock: 8rem;
 }
 
 @layer base {
@@ -81,6 +79,22 @@
     background: rgb(148 163 184 / 0.45);
   }
 
+  /* Workspace grid cells: no nested card outlines on terminal/browser hosts */
+  [data-workspace-bottom-panel] .xterm,
+  [data-workspace-bottom-panel] .xterm:focus,
+  [data-workspace-bottom-panel] .xterm.focus {
+    outline: none;
+    box-shadow: none;
+  }
+
+  /* xterm.css + FitAddon partial-row gap: default #000 shows as a strip above the status bar */
+  [data-workspace-bottom-panel] .xterm,
+  [data-workspace-bottom-panel] .xterm .xterm-screen,
+  [data-workspace-bottom-panel] .xterm .xterm-viewport,
+  [data-workspace-bottom-panel] .xterm .xterm-scroll-area {
+    background-color: #1a1a1a !important;
+  }
+
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]):not(:disabled),
   a[href],
@@ -103,5 +117,132 @@
   [aria-disabled="true"],
   [data-disabled] {
     cursor: not-allowed;
+  }
+}
+
+@layer utilities {
+  @keyframes ai-dock-item-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.94);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .ai-dock-item-in {
+    animation: ai-dock-item-in 0.44s cubic-bezier(0.34, 1.22, 0.64, 1) both;
+  }
+
+  .ai-dock-shell {
+    transition:
+      max-height 0.5s cubic-bezier(0.34, 1.18, 0.64, 1),
+      box-shadow 0.32s ease,
+      border-color 0.28s ease,
+      background-color 0.28s ease;
+  }
+
+  @keyframes ai-command-pulse {
+    0% {
+      box-shadow:
+        0 0 0 0 rgb(99 102 241 / 0.45),
+        inset 0 0 0 1px rgb(99 102 241 / 0.4);
+    }
+    70% {
+      box-shadow:
+        0 0 0 8px rgb(99 102 241 / 0),
+        inset 0 0 0 1px rgb(99 102 241 / 0.65);
+    }
+    100% {
+      box-shadow:
+        0 0 0 0 rgb(99 102 241 / 0),
+        inset 0 0 0 1px rgb(99 102 241 / 0.4);
+    }
+  }
+
+  .ai-command-highlight {
+    border-radius: 0.6rem;
+    outline: 2px solid rgb(129 140 248 / 0.88);
+    outline-offset: 2px;
+    animation: ai-command-pulse 1.45s ease-in-out infinite;
+  }
+
+  .ai-command-highlight-label {
+    position: fixed;
+    z-index: 260;
+    pointer-events: none;
+    border-radius: 0.45rem;
+    border: 1px solid rgb(129 140 248 / 0.45);
+    background: rgb(15 23 42 / 0.93);
+    color: rgb(224 231 255);
+    padding: 0.2rem 0.45rem;
+    font-size: 11px;
+    box-shadow: 0 8px 18px rgb(2 6 23 / 0.5);
+  }
+
+  @property --ai-rainbow-angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+  }
+
+  @keyframes ai-rainbow-spin {
+    to {
+      --ai-rainbow-angle: 360deg;
+    }
+  }
+
+  .ai-loading-rainbow {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .ai-loading-rainbow::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    z-index: 0;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from var(--ai-rainbow-angle),
+      #f472b6,
+      #fb923c,
+      #facc15,
+      #4ade80,
+      #38bdf8,
+      #818cf8,
+      #c084fc,
+      #f472b6
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    animation: ai-rainbow-spin 2.8s linear infinite;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 1s ease;
+  }
+
+  .ai-loading-rainbow--exiting::before {
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ai-command-highlight {
+      animation: none;
+    }
+
+    .ai-loading-rainbow::before {
+      animation: none;
+      --ai-rainbow-angle: 45deg;
+    }
   }
 }

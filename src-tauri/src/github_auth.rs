@@ -54,7 +54,13 @@ pub struct GitHubUser {
 pub struct AuthSession {
     pub access_token: String,
     pub user: GitHubUser,
+    #[serde(default = "default_provider_github")]
+    pub provider: String,
     pub login_at: u64,
+}
+
+fn default_provider_github() -> String {
+    "github".to_string()
 }
 
 async fn post_form(
@@ -357,6 +363,7 @@ pub async fn github_complete_device_login(
     Ok(AuthSession {
         access_token,
         user,
+        provider: "github".to_string(),
         login_at: now_ms(),
     })
 }

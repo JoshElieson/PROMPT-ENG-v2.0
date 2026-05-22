@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, Search, ShoppingCart, X } from "lucide-react";
+import { ChevronRight, Circle, Search, ShoppingCart, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import {
@@ -16,6 +16,9 @@ import { cn } from "@/lib/utils";
 
 const allGroupedOrgs = getModelsGroupedByOrg();
 
+const flyoutItemSurface =
+  "rounded-md outline-none transition-colors duration-150 ease-out hover:bg-menu-hover hover:text-foreground focus-visible:bg-menu-hover focus-visible:text-foreground";
+
 function FlyoutModelItem({
   model,
   selected,
@@ -26,22 +29,29 @@ function FlyoutModelItem({
   onToggle: () => void;
 }) {
   return (
-    <label
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={selected}
+      onClick={onToggle}
       className={cn(
-        "flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors",
-        selected ? "bg-panel-elevated" : "hover:bg-panel-elevated/80",
+        "relative flex w-full cursor-pointer select-none items-center gap-2.5 py-2 pr-2.5 text-left text-xs text-foreground/90",
+        selected ? "pl-8 text-foreground" : "pl-2.5",
+        flyoutItemSurface,
       )}
     >
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={onToggle}
-        className="border-border bg-panel accent-foreground h-3.5 w-3.5 shrink-0"
-      />
+      {selected ? (
+        <span
+          className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center"
+          aria-hidden
+        >
+          <Circle className="h-2 w-2 fill-current" />
+        </span>
+      ) : null}
       <ModelLogo orgId={model.orgId} size="sm" />
       <span className="min-w-0 flex-1 truncate font-medium">{model.name}</span>
       <span className="text-muted shrink-0 text-[10px]">{model.role}</span>
-    </label>
+    </button>
   );
 }
 
@@ -75,7 +85,7 @@ function OrgFlyout({
 
   return createPortal(
     <section
-      className="border-border bg-panel fixed z-50 flex min-w-[220px] flex-col overflow-hidden rounded-lg border shadow-lg"
+      className="border-border bg-panel/95 fixed z-50 flex min-w-[220px] flex-col overflow-hidden rounded-lg border shadow-[0_8px_24px_rgba(2,6,23,0.34)] backdrop-blur-md"
       style={{
         top: openUpward ? undefined : anchor.top,
         bottom: openUpward ? window.innerHeight - anchor.top : undefined,
@@ -85,14 +95,15 @@ function OrgFlyout({
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
     >
-      <header className="border-border-subtle shrink-0 border-b px-3 py-2">
-        <p className="text-foreground text-xs font-semibold">{org.name}</p>
-        <p className="text-muted text-[10px]">
+      <header className="shrink-0 px-2.5 pt-2 pb-1.5">
+        <p className="text-xs font-medium text-foreground">{org.name}</p>
+        <p className="text-muted text-[10px] leading-snug">
           {selectedCount} of {models.length} in Round Table
         </p>
       </header>
+      <div className="mx-2 h-px shrink-0 bg-border" aria-hidden />
       <ScrollArea className="min-h-0 flex-1">
-        <ul className="py-1">
+        <ul className="p-1.5">
           {models.map((model) => (
             <li key={model.id}>
               <FlyoutModelItem

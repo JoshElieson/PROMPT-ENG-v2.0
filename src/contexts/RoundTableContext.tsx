@@ -16,6 +16,10 @@ import {
   DEFAULT_ROUND_TABLE_WEIGHTS,
   weightForModel,
 } from "@/lib/round-table-weights";
+import {
+  reorderIdListByPlacement,
+  type DropSide,
+} from "@/lib/list-reorder-drag";
 import { buildRoundTableModels } from "@/lib/round-table-models";
 
 const WEIGHTS_STORAGE_KEY = "prompt:round-table-weights:v1";
@@ -47,6 +51,11 @@ interface RoundTableContextValue {
   /** Enable exactly one selected model for chat (disables all other active models). */
   activateOnlyModel: (id: string) => void;
   setModelWeight: (id: string, weight: number) => void;
+  reorderSelectedIds: (
+    sourceId: string,
+    targetId: string,
+    side: DropSide,
+  ) => void;
 }
 
 const RoundTableContext = createContext<RoundTableContextValue | null>(null);
@@ -142,6 +151,20 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
     });
   }, [selectedIds]);
 
+  const reorderSelectedIds = useCallback(
+    (sourceId: string, targetId: string, side: DropSide) => {
+      setSelectedIds((prev) => {
+        const next = reorderIdListByPlacement(prev, sourceId, targetId, side);
+        setActiveIds((active) => {
+          const activeSet = new Set(active);
+          return next.filter((id) => activeSet.has(id));
+        });
+        return next;
+      });
+    },
+    [],
+  );
+
   const setModelWeight = useCallback((id: string, weight: number) => {
     const clamped = clampWeight(weight);
     setWeights((prev) => ({
@@ -183,6 +206,7 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
       toggleActive,
       activateOnlyModel,
       setModelWeight,
+      reorderSelectedIds,
     }),
     [
       selectedIds,
@@ -195,6 +219,7 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
       toggleActive,
       activateOnlyModel,
       setModelWeight,
+      reorderSelectedIds,
     ],
   );
 

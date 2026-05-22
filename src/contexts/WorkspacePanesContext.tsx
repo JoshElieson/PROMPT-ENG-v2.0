@@ -2,16 +2,21 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useState,
   type ReactNode,
 } from "react";
+import { useLayout } from "@/contexts/LayoutContext";
 import { useChats } from "@/contexts/ChatsContext";
 import {
   assignLeafModels,
   assignLeafScrollTop,
+  collectLeafIds,
   countPanes,
   ensureFocusedLeafExists,
 } from "@/lib/center-workspace-layout";
+import { normalizeVisiblePaneIds } from "@/lib/pane-group-layout";
 import type { PaneModelSession } from "@/types/workspace-pane";
 import { MAX_WORKSPACE_PANES } from "@/types/workspace-pane";
 
@@ -26,6 +31,11 @@ interface WorkspacePanesContextValue {
   closeLeaf: (leafId: string) => boolean;
   onLeafModelsChange: (leafId: string, models: PaneModelSession) => void;
   onLeafScrollChange: (leafId: string, scrollTop: number) => void;
+  splitOrientation: "horizontal" | "vertical";
+  visibleLeafIds: string[];
+  setVisibleLeafIds: (ids: string[]) => void;
+  dragLeafId: string | null;
+  setDragLeafId: (leafId: string | null) => void;
 }
 
 const WorkspacePanesContext = createContext<WorkspacePanesContextValue | null>(
@@ -33,6 +43,7 @@ const WorkspacePanesContext = createContext<WorkspacePanesContextValue | null>(
 );
 
 export function WorkspacePanesProvider({ children }: { children: ReactNode }) {
+  const { activeLayoutId } = useLayout();
   const {
     activeWorkspaceLayout,
     patchActiveWorkspaceLayout,
@@ -47,14 +58,31 @@ export function WorkspacePanesProvider({ children }: { children: ReactNode }) {
   }
 
   const layout = activeWorkspaceLayout;
+  const splitOrientation: "horizontal" | "vertical" =
+    activeLayoutId === "horizontal" ? "horizontal" : "vertical";
+  const availableLeafIds = useMemo(() => collectLeafIds(layout.root), [layout.root]);
+  const [visibleLeafIdsState, setVisibleLeafIdsState] = useState<string[]>([]);
+  const [dragLeafId, setDragLeafId] = useState<string | null>(null);
 
   const paneCount = useMemo(() => countPanes(layout.root), [layout.root]);
 
   const setFocusedLeafId = useCallback(
     (leafId: string) => {
       patchActiveWorkspaceLayout((prev) => ({ ...prev, focusedLeafId: leafId }));
+      setVisibleLeafIdsState((prev) => {
+        const normalized = normalizeVisiblePaneIds(
+          prev,
+          availableLeafIds,
+          leafId,
+          2,
+        );
+        if (normalized.includes(leafId)) return normalized;
+        const next = [...normalized];
+        next[next.length - 1] = leafId;
+        return next;
+      });
     },
-    [patchActiveWorkspaceLayout],
+    [availableLeafIds, patchActiveWorkspaceLayout],
   );
 
   const expandLayout = useCallback(
@@ -85,26 +113,60 @@ export function WorkspacePanesProvider({ children }: { children: ReactNode }) {
     [patchActiveWorkspaceLayout],
   );
 
+  const normalizedLayout = useMemo(
+    () => ensureFocusedLeafExists(layout),
+    [layout],
+  );
+
+  useEffect(() => {
+    setVisibleLeafIdsState((prev) =>
+      normalizeVisiblePaneIds(
+        prev,
+        availableLeafIds,
+        normalizedLayout.focusedLeafId,
+        2,
+      ),
+    );
+  }, [availableLeafIds, normalizedLayout.focusedLeafId]);
+
+  const setVisibleLeafIds = useCallback(
+    (ids: string[]) => {
+      setVisibleLeafIdsState(
+        normalizeVisiblePaneIds(ids, availableLeafIds, normalizedLayout.focusedLeafId, 2),
+      );
+    },
+    [availableLeafIds, normalizedLayout.focusedLeafId],
+  );
+
   const value = useMemo(
     () => ({
-      layout: ensureFocusedLeafExists(layout),
+      layout: normalizedLayout,
       paneCount,
       maxPanes: MAX_WORKSPACE_PANES,
-      focusedLeafId: layout.focusedLeafId,
+      focusedLeafId: normalizedLayout.focusedLeafId,
       setFocusedLeafId,
       expandLayout,
       closeLeaf,
       onLeafModelsChange,
       onLeafScrollChange,
+      splitOrientation,
+      visibleLeafIds: visibleLeafIdsState,
+      setVisibleLeafIds,
+      dragLeafId,
+      setDragLeafId,
     }),
     [
-      layout,
+      normalizedLayout,
       paneCount,
       setFocusedLeafId,
       expandLayout,
       closeLeaf,
       onLeafModelsChange,
       onLeafScrollChange,
+      splitOrientation,
+      visibleLeafIdsState,
+      setVisibleLeafIds,
+      dragLeafId,
     ],
   );
 

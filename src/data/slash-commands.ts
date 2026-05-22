@@ -10,12 +10,6 @@ export interface SlashCommand {
 /** Slash commands shown in composer autofill (handlers not wired yet). */
 export const slashCommands: SlashCommand[] = [
   {
-    id: "workflow",
-    insert: "/workflow(a, b, ...)",
-    label: "/workflow",
-    description: "Run a multi-step workflow",
-  },
-  {
     id: "a1",
     insert: "/a1",
     label: "/a1",
@@ -68,17 +62,5 @@ export const slashCommands: SlashCommand[] = [
     insert: "/redo",
     label: "/redo",
     description: "Redo",
-  },
-  {
-    id: "deepthink",
-    insert: "/deepthink",
-    label: "/deepthink",
-    description: "Deeper reasoning mode",
-  },
-  {
-    id: "shallow",
-    insert: "/shallow",
-    label: "/shallow",
-    description: "Faster, lighter reasoning",
   },
 ];

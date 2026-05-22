@@ -3,8 +3,6 @@ import { slashCommands } from "@/data/slash-commands";
 import {
   DEFAULT_LEFT_PANEL_SIZES,
   DEFAULT_LEFT_SIDEBAR_WIDTH,
-  DEFAULT_RIGHT_PANELS,
-  DEFAULT_RIGHT_SIDEBAR_WIDTH,
 } from "@/lib/layout-defaults";
 import type {
   FeatureReference,
@@ -38,12 +36,6 @@ const APP_SURFACES = [
     name: "Main Workspace",
     location: "Center",
     purpose: "Holds split chat panes, active agent threads, composer, and workspace bottom panel.",
-  },
-  {
-    id: "surface.right-sidebar",
-    name: "Right Sidebar",
-    location: "Right panel",
-    purpose: "Shows workflow and usage stats; right panels can be toggled from View menu.",
   },
   {
     id: "surface.status-bar",
@@ -132,7 +124,7 @@ const UI_QUERY_TRIGGERS = [
 
 const TOKEN_SYNONYMS: Record<string, string[]> = {
   split: ["split-view", "split", "workspace", "panes", "pane"],
-  sidebar: ["left-sidebar", "right-sidebar", "sidebar", "panels"],
+  sidebar: ["left-sidebar", "sidebar", "panels"],
   model: ["models", "round-table", "agent", "cart"],
   workspace: ["center", "screen", "split", "chat"],
   settings: ["preferences", "config", "configuration"],
@@ -221,11 +213,11 @@ function buildStaticFeatures(): FeatureReference[] {
       featureId: "layout.main",
       featureName: "Main Workspace Layout",
       description:
-        "FORGE has an activity rail, left sidebar, center workspace, right sidebar, and status bar.",
+        "FORGE has an activity rail, left sidebar, center workspace, and status bar.",
       uiLocation: "Main app shell",
-      actions: ["Switch activity sections", "Resize sidebars", "Use split workspace panes"],
+      actions: ["Switch activity sections", "Resize left sidebar", "Use split workspace panes"],
       shortcuts: ["Ctrl+B", "Ctrl+`"],
-      relatedFeatures: ["sidebar.left", "sidebar.right", "workspace.bottom-panel"],
+      relatedFeatures: ["sidebar.left", "workspace.bottom-panel"],
     },
     {
       featureId: "workspace.bottom-panel",
@@ -250,27 +242,17 @@ function buildStaticFeatures(): FeatureReference[] {
       uiLocation: "Left edge",
       actions: ["Switch between Projects, Agent Cart, and Git", "Resize/collapse sidebar"],
       shortcuts: ["Ctrl+Shift+E", "Ctrl+Shift+A", "Ctrl+B"],
-      relatedFeatures: ["activity-bar", "sidebar.right"],
-    },
-    {
-      featureId: "sidebar.right",
-      featureName: "Right Sidebar",
-      description:
-        "Shows Workflow panel and usage telemetry (tokens and cost). Round Table visibility is currently disabled in UI.",
-      uiLocation: "Right edge",
-      actions: ["Show/hide workflow panel", "View usage summary"],
-      shortcuts: [],
-      relatedFeatures: ["workflow", "models.round-table"],
+      relatedFeatures: ["activity-bar", "models.round-table"],
     },
     {
       featureId: "models.round-table",
       featureName: "Round Table Model Selection",
       description:
-        "Users choose active models, model weights, auto mode, and deeper mode for multi-model responses.",
-      uiLocation: "Model Cart and right-side model controls",
-      actions: ["Toggle model active state", "Adjust per-model weight", "Enable Auto/Deeper"],
+        "Users choose active models, model weights, and auto mode for multi-model responses.",
+      uiLocation: "Agent Cart (left sidebar)",
+      actions: ["Toggle model active state", "Adjust per-model weight", "Enable Auto"],
       shortcuts: ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4"],
-      relatedFeatures: ["agent-cart", "workflow"],
+      relatedFeatures: ["agent-cart"],
     },
     {
       featureId: "navigation.focus",
@@ -381,7 +363,7 @@ function buildSlashCommandDocument(now: number): DerivedDocument {
       "composer",
       ...slashCommands.map((command) => command.label.toLowerCase()),
     ],
-    relatedFeatures: ["models.round-table", "workflow"],
+    relatedFeatures: ["models.round-table"],
     lastUpdated: now,
   };
 }
@@ -392,15 +374,13 @@ function buildLayoutDocument(now: number): DerivedDocument {
     title: "Layout Defaults and Panels",
     category: "layout",
     content: [
-      "Default app layout includes activity bar, left sidebar, center workspace, right sidebar, and status bar.",
+      "Default app layout includes activity bar, left sidebar, center workspace, and status bar.",
       `Default left sidebar width: ${DEFAULT_LEFT_SIDEBAR_WIDTH}px`,
-      `Default right sidebar width: ${DEFAULT_RIGHT_SIDEBAR_WIDTH}px`,
       `Default explorer split ratio: ${DEFAULT_LEFT_PANEL_SIZES[0]} / ${DEFAULT_LEFT_PANEL_SIZES[1]}`,
-      `Default right panels visible: roundTable=${String(DEFAULT_RIGHT_PANELS.roundTable)}, workflow=${String(DEFAULT_RIGHT_PANELS.workflow)}`,
       "Bottom panel hosts terminal and browser tabs and can be toggled from menu or Ctrl+`.",
     ].join("\n"),
     tags: ["layout", "sidebar", "panel", "workspace", "terminal", "browser", "split"],
-    relatedFeatures: ["layout.main", "workspace.bottom-panel", "sidebar.left", "sidebar.right"],
+    relatedFeatures: ["layout.main", "workspace.bottom-panel", "sidebar.left"],
     lastUpdated: now,
   };
 }
@@ -418,7 +398,7 @@ function buildSurfaceDocument(now: number): DerivedDocument {
       "These surfaces are the primary route-like structure of FORGE's single-window workspace.",
     ].join("\n"),
     tags: ["layout", "surfaces", "components", "app shell", "navigation"],
-    relatedFeatures: ["layout.main", "sidebar.left", "sidebar.right"],
+    relatedFeatures: ["layout.main", "sidebar.left"],
     lastUpdated: now,
   };
 }

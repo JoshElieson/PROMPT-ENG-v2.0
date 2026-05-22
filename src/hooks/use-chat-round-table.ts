@@ -21,5 +21,6 @@ export function useChatRoundTable(): PaneRoundTableContextValue {
     toggleActive: global.toggleActive,
     activateOnlyModel: global.activateOnlyModel,
     setModelWeight: global.setModelWeight,
+    reorderSelectedIds: global.reorderSelectedIds,
   };
 }

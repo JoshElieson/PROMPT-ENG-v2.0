@@ -4,8 +4,6 @@ export type PaneActionTarget =
   | "terminal"
   | "websites"
   | "models"
-  | "workflow"
-  | "right-sidebar"
   | "explorer"
   | "agent-cart";
 
@@ -29,10 +27,6 @@ function normalizeTarget(raw: string): PaneActionTarget | null {
   }
   if (value === "models" || value === "round-table" || value === "roundtable") {
     return "models";
-  }
-  if (value === "workflow") return "workflow";
-  if (value === "right-sidebar" || value === "rightsidebar") {
-    return "right-sidebar";
   }
   if (value === "explorer" || value === "projects") return "explorer";
   if (value === "agent-cart" || value === "agents") return "agent-cart";

@@ -12,7 +12,7 @@ import { LAYOUT_PRESETS } from "@/lib/layout-defaults";
 import { cn } from "@/lib/utils";
 
 export function LayoutMenu() {
-  const { activeLayoutId, applyDefaultLayout } = useLayout();
+  const { activeLayoutId, applyLayoutPreset } = useLayout();
 
   return (
     <DropdownMenu>
@@ -49,7 +49,7 @@ export function LayoutMenu() {
                     event.preventDefault();
                     return;
                   }
-                  if (preset.id === "default") applyDefaultLayout();
+                  applyLayoutPreset(preset.id);
                 }}
               >
                 <LayoutThumbnail

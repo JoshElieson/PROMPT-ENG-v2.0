@@ -12,47 +12,43 @@ import type { SidebarView } from "@/components/layout/ActivityBar";
 import type { MenuActionId } from "@/data/menu-items";
 import {
   clearWindowLayoutStorage,
-  DEFAULT_RIGHT_PANELS,
   LEFT_SIDEBAR_COLLAPSED_KEY,
-  RIGHT_SIDEBAR_COLLAPSED_KEY,
+  WORKSPACE_LAYOUT_PRESET_KEY,
   type LayoutPresetId,
-  type RightPanelId,
-  type RightPanelVisibility,
 } from "@/lib/layout-defaults";
-import {
-  loadLayoutBool,
-  loadLayoutBoolMap,
-  saveLayoutBool,
-  saveLayoutBoolMap,
-} from "@/lib/layout-storage";
+import { loadLayoutBool, saveLayoutBool } from "@/lib/layout-storage";
 
-export type { RightPanelId, RightPanelVisibility };
-
-const RIGHT_PANELS_KEY = "prompt:right-panels-visibility";
 const WORKSPACE_BOTTOM_PANEL_KEY = "prompt:workspace-terminal-open";
 
 export type BottomPanelBootTab = "terminal" | "browser";
 
+export type BottomPanelKindsVisible = {
+  terminal: boolean;
+  browser: boolean;
+};
+
+type BottomPanelControl = {
+  isKindVisible: (kind: BottomPanelBootTab) => boolean;
+  focusKind: (kind: BottomPanelBootTab) => void;
+  hideKind: (kind: BottomPanelBootTab) => void;
+};
+
 type SidebarControlFn = () => void;
 
 interface LayoutContextValue {
+  settingsOpen: boolean;
+  openSettings: () => void;
+  closeSettings: () => void;
   sidebarView: SidebarView;
   setSidebarView: (view: SidebarView) => void;
   activeLayoutId: LayoutPresetId;
   layoutResetNonce: number;
   applyDefaultLayout: () => void;
-  rightPanels: RightPanelVisibility;
-  setRightPanelVisible: (id: RightPanelId, visible: boolean) => void;
-  isRightPanelVisible: (id: RightPanelId) => boolean;
-  registerRightSidebarExpand: (fn: SidebarControlFn) => () => void;
+  applyLayoutPreset: (presetId: LayoutPresetId) => void;
   registerLeftSidebarExpand: (fn: SidebarControlFn) => () => void;
-  registerRightSidebarToggle: (fn: SidebarControlFn) => () => void;
   registerLeftSidebarToggle: (fn: SidebarControlFn) => () => void;
-  notifyRightSidebarCollapsed: (collapsed: boolean) => void;
   notifyLeftSidebarCollapsed: (collapsed: boolean) => void;
-  rightSidebarCollapsed: boolean;
   leftSidebarCollapsed: boolean;
-  setRightSidebarCollapsed: (collapsed: boolean) => void;
   setLeftSidebarViewVisible: (view: "explorer" | "agents", visible: boolean) => void;
   dispatchMenuAction: (action: MenuActionId) => void;
   workspaceBottomPanelOpen: boolean;
@@ -60,62 +56,59 @@ interface LayoutContextValue {
   bottomPanelBoot: BottomPanelBootTab | null;
   requestBottomPanelTab: (kind: BottomPanelBootTab) => void;
   clearBottomPanelBoot: () => void;
+  bottomPanelKindsVisible: BottomPanelKindsVisible;
+  reportBottomPanelKindsVisible: (visible: BottomPanelKindsVisible) => void;
+  registerBottomPanelControl: (control: BottomPanelControl) => () => void;
+  toggleBottomPanelKind: (kind: BottomPanelBootTab) => void;
 }
 
 const LayoutContext = createContext<LayoutContextValue | null>(null);
 
-function menuActionToRightPanel(action: MenuActionId): RightPanelId | null {
-  if (action === "view.roundTablePanel") return "roundTable";
-  if (action === "view.workflowPanel") return "workflow";
-  return null;
-}
-
-function loadRightPanels(): RightPanelVisibility {
-  const stored = loadLayoutBoolMap(RIGHT_PANELS_KEY, DEFAULT_RIGHT_PANELS);
-  const sidebarCollapsed = loadLayoutBool(RIGHT_SIDEBAR_COLLAPSED_KEY, false);
-  if (sidebarCollapsed) {
-    return { roundTable: false, workflow: false };
+function loadLayoutPreset(): LayoutPresetId {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_LAYOUT_PRESET_KEY);
+    if (raw === null) return "default";
+    const parsed = JSON.parse(raw);
+    return parsed === "horizontal" ? "horizontal" : "default";
+  } catch {
+    return "default";
   }
-  return stored;
 }
-
-const HIDDEN_RIGHT_PANELS: RightPanelVisibility = {
-  roundTable: false,
-  workflow: false,
-};
 
 export function LayoutProvider({ children }: { children: ReactNode }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarView, setSidebarView] = useState<SidebarView>("explorer");
-  const [activeLayoutId, setActiveLayoutId] = useState<LayoutPresetId>("default");
+  const [activeLayoutId, setActiveLayoutId] = useState<LayoutPresetId>(loadLayoutPreset);
   const [layoutResetNonce, setLayoutResetNonce] = useState(0);
-  const [rightPanels, setRightPanels] = useState<RightPanelVisibility>(loadRightPanels);
   const [workspaceBottomPanelOpen, setWorkspaceBottomPanelOpen] = useState(() =>
     loadLayoutBool(WORKSPACE_BOTTOM_PANEL_KEY, false),
   );
   const [bottomPanelBoot, setBottomPanelBoot] =
     useState<BottomPanelBootTab | null>(null);
+  const [bottomPanelKindsVisible, setBottomPanelKindsVisible] =
+    useState<BottomPanelKindsVisible>({ terminal: false, browser: false });
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() =>
     loadLayoutBool(LEFT_SIDEBAR_COLLAPSED_KEY, false),
   );
-  const [rightSidebarCollapsed, setRightSidebarCollapsedState] = useState(() =>
-    loadLayoutBool(RIGHT_SIDEBAR_COLLAPSED_KEY, false),
-  );
 
-  const rightSidebarExpandRef = useRef<SidebarControlFn | null>(null);
   const leftSidebarExpandRef = useRef<SidebarControlFn | null>(null);
-  const rightSidebarToggleRef = useRef<SidebarControlFn | null>(null);
   const leftSidebarToggleRef = useRef<SidebarControlFn | null>(null);
-
-  useEffect(() => {
-    saveLayoutBoolMap(RIGHT_PANELS_KEY, rightPanels);
-  }, [rightPanels]);
+  const bottomPanelControlRef = useRef<BottomPanelControl | null>(null);
 
   useEffect(() => {
     saveLayoutBool(WORKSPACE_BOTTOM_PANEL_KEY, workspaceBottomPanelOpen);
   }, [workspaceBottomPanelOpen]);
 
-  const expandRightSidebar = useCallback(() => {
-    rightSidebarExpandRef.current?.();
+  useEffect(() => {
+    localStorage.setItem(WORKSPACE_LAYOUT_PRESET_KEY, JSON.stringify(activeLayoutId));
+  }, [activeLayoutId]);
+
+  const openSettings = useCallback(() => {
+    setSettingsOpen(true);
+  }, []);
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
   }, []);
 
   const expandLeftSidebar = useCallback(() => {
@@ -126,33 +119,11 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     leftSidebarToggleRef.current?.();
   }, []);
 
-  const toggleRightSidebar = useCallback(() => {
-    rightSidebarToggleRef.current?.();
-  }, []);
-
-  const registerRightSidebarExpand = useCallback((fn: SidebarControlFn) => {
-    rightSidebarExpandRef.current = fn;
-    return () => {
-      if (rightSidebarExpandRef.current === fn) {
-        rightSidebarExpandRef.current = null;
-      }
-    };
-  }, []);
-
   const registerLeftSidebarExpand = useCallback((fn: SidebarControlFn) => {
     leftSidebarExpandRef.current = fn;
     return () => {
       if (leftSidebarExpandRef.current === fn) {
         leftSidebarExpandRef.current = null;
-      }
-    };
-  }, []);
-
-  const registerRightSidebarToggle = useCallback((fn: SidebarControlFn) => {
-    rightSidebarToggleRef.current = fn;
-    return () => {
-      if (rightSidebarToggleRef.current === fn) {
-        rightSidebarToggleRef.current = null;
       }
     };
   }, []);
@@ -166,44 +137,9 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const setRightPanelVisible = useCallback(
-    (id: RightPanelId, visible: boolean) => {
-      setRightPanels((prev) => ({ ...prev, [id]: visible }));
-      if (visible) expandRightSidebar();
-    },
-    [expandRightSidebar],
-  );
-
-  const isRightPanelVisible = useCallback(
-    (id: RightPanelId) => rightPanels[id],
-    [rightPanels],
-  );
-
-  const notifyRightSidebarCollapsed = useCallback((collapsed: boolean) => {
-    setRightSidebarCollapsedState(collapsed);
-    if (collapsed) {
-      setRightPanels(HIDDEN_RIGHT_PANELS);
-    }
-  }, []);
-
   const notifyLeftSidebarCollapsed = useCallback((collapsed: boolean) => {
     setLeftSidebarCollapsed(collapsed);
   }, []);
-
-  const setRightSidebarCollapsed = useCallback(
-    (collapsed: boolean) => {
-      if (collapsed) {
-        if (!rightSidebarCollapsed) {
-          toggleRightSidebar();
-        }
-        return;
-      }
-      if (rightSidebarCollapsed) {
-        expandRightSidebar();
-      }
-    },
-    [expandRightSidebar, rightSidebarCollapsed, toggleRightSidebar],
-  );
 
   const setLeftSidebarViewVisible = useCallback(
     (view: "explorer" | "agents", visible: boolean) => {
@@ -228,6 +164,42 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     setBottomPanelBoot(null);
   }, []);
 
+  const reportBottomPanelKindsVisible = useCallback(
+    (visible: BottomPanelKindsVisible) => {
+      setBottomPanelKindsVisible(visible);
+    },
+    [],
+  );
+
+  const registerBottomPanelControl = useCallback((control: BottomPanelControl) => {
+    bottomPanelControlRef.current = control;
+    return () => {
+      if (bottomPanelControlRef.current === control) {
+        bottomPanelControlRef.current = null;
+      }
+    };
+  }, []);
+
+  const toggleBottomPanelKind = useCallback(
+    (kind: BottomPanelBootTab) => {
+      if (!workspaceBottomPanelOpen) {
+        requestBottomPanelTab(kind);
+        return;
+      }
+      const control = bottomPanelControlRef.current;
+      if (!control) {
+        requestBottomPanelTab(kind);
+        return;
+      }
+      if (control.isKindVisible(kind)) {
+        control.hideKind(kind);
+      } else {
+        control.focusKind(kind);
+      }
+    },
+    [workspaceBottomPanelOpen, requestBottomPanelTab],
+  );
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
@@ -244,28 +216,25 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [workspaceBottomPanelOpen, requestBottomPanelTab]);
 
-  const applyDefaultLayout = useCallback(() => {
+  const applyLayoutPreset = useCallback((presetId: LayoutPresetId) => {
     clearWindowLayoutStorage();
-    setRightPanels(DEFAULT_RIGHT_PANELS);
     setLeftSidebarCollapsed(false);
-    setActiveLayoutId("default");
+    setActiveLayoutId(presetId);
     setLayoutResetNonce((n) => n + 1);
   }, []);
 
+  const applyDefaultLayout = useCallback(() => {
+    applyLayoutPreset("default");
+  }, [applyLayoutPreset]);
+
   const dispatchMenuAction = useCallback(
     (action: MenuActionId) => {
-      const rightPanel = menuActionToRightPanel(action);
-      if (rightPanel) {
-        setRightPanelVisible(rightPanel, true);
-        return;
-      }
-
       switch (action) {
         case "view.workspaceTerminal":
-          requestBottomPanelTab("terminal");
+          toggleBottomPanelKind("terminal");
           break;
         case "view.workspaceBrowser":
-          requestBottomPanelTab("browser");
+          toggleBottomPanelKind("browser");
           break;
         case "view.explorer":
           setSidebarView("explorer");
@@ -278,41 +247,28 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
         case "view.toggleLeftSidebar":
           toggleLeftSidebar();
           break;
-        case "view.toggleRightSidebar":
-          toggleRightSidebar();
-          break;
         default:
           break;
       }
     },
-    [
-      expandLeftSidebar,
-      setRightPanelVisible,
-      toggleLeftSidebar,
-      toggleRightSidebar,
-      requestBottomPanelTab,
-    ],
+    [expandLeftSidebar, toggleLeftSidebar, toggleBottomPanelKind],
   );
 
   const value = useMemo(
     () => ({
+      settingsOpen,
+      openSettings,
+      closeSettings,
       sidebarView,
       setSidebarView,
       activeLayoutId,
       layoutResetNonce,
       applyDefaultLayout,
-      rightPanels,
-      setRightPanelVisible,
-      isRightPanelVisible,
-      registerRightSidebarExpand,
+      applyLayoutPreset,
       registerLeftSidebarExpand,
-      registerRightSidebarToggle,
       registerLeftSidebarToggle,
-      notifyRightSidebarCollapsed,
       notifyLeftSidebarCollapsed,
-      rightSidebarCollapsed,
       leftSidebarCollapsed,
-      setRightSidebarCollapsed,
       setLeftSidebarViewVisible,
       dispatchMenuAction,
       workspaceBottomPanelOpen,
@@ -320,30 +276,33 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
       bottomPanelBoot,
       requestBottomPanelTab,
       clearBottomPanelBoot,
+      bottomPanelKindsVisible,
+      reportBottomPanelKindsVisible,
+      registerBottomPanelControl,
+      toggleBottomPanelKind,
     }),
     [
+      settingsOpen,
+      openSettings,
+      closeSettings,
       sidebarView,
       activeLayoutId,
       layoutResetNonce,
       applyDefaultLayout,
-      rightPanels,
-      setRightPanelVisible,
-      isRightPanelVisible,
-      registerRightSidebarExpand,
+      applyLayoutPreset,
       registerLeftSidebarExpand,
-      registerRightSidebarToggle,
       registerLeftSidebarToggle,
-      notifyRightSidebarCollapsed,
       notifyLeftSidebarCollapsed,
-      rightSidebarCollapsed,
       leftSidebarCollapsed,
-      setRightSidebarCollapsed,
       setLeftSidebarViewVisible,
       dispatchMenuAction,
       workspaceBottomPanelOpen,
       bottomPanelBoot,
       requestBottomPanelTab,
       clearBottomPanelBoot,
+      bottomPanelKindsVisible,
+      registerBottomPanelControl,
+      toggleBottomPanelKind,
     ],
   );
 
@@ -364,14 +323,17 @@ export function useLayout() {
 
 export function menuActionChecked(
   action: MenuActionId,
-  rightPanels: RightPanelVisibility,
   workspaceBottomPanelOpen: boolean,
   sidebarView: SidebarView,
   leftSidebarCollapsed: boolean,
+  bottomPanelKindsVisible: BottomPanelKindsVisible,
 ): boolean | undefined {
-  const panel = menuActionToRightPanel(action);
-  if (panel) return rightPanels[panel];
-  if (action === "view.workspaceTerminal") return workspaceBottomPanelOpen;
+  if (action === "view.workspaceTerminal") {
+    return workspaceBottomPanelOpen && bottomPanelKindsVisible.terminal;
+  }
+  if (action === "view.workspaceBrowser") {
+    return workspaceBottomPanelOpen && bottomPanelKindsVisible.browser;
+  }
   if (action === "view.explorer") {
     return sidebarView === "explorer" && !leftSidebarCollapsed;
   }

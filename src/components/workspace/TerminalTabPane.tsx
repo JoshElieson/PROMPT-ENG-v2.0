@@ -17,11 +17,10 @@ import {
   TERMINAL_BOOTSTRAP_MS,
   WORKSPACE_XTERM_OPTIONS,
 } from "@/lib/workspace-xterm";
-import { cn } from "@/lib/utils";
 
 interface TerminalTabPaneProps {
   sessionId: string;
-  isActive: boolean;
+  isFocused: boolean;
   cwd?: string | null;
   /** When false, PTY spawn waits until the default cwd has been resolved. */
   cwdReady?: boolean;
@@ -31,7 +30,7 @@ interface TerminalTabPaneProps {
 
 export function TerminalTabPane({
   sessionId,
-  isActive,
+  isFocused,
   cwd,
   cwdReady = true,
   onRequestFocus,
@@ -43,7 +42,12 @@ export function TerminalTabPane({
   /** Frozen when the PTY is first spawned; never updated when parent `cwd` changes. */
   const spawnCwdRef = useRef<string | null | undefined>(undefined);
   const wasActiveRef = useRef(false);
+  const isFocusedRef = useRef(isFocused);
   const zoneRef = useRef(zone);
+
+  useEffect(() => {
+    isFocusedRef.current = isFocused;
+  }, [isFocused]);
 
   useEffect(() => {
     zoneRef.current = zone;
@@ -122,7 +126,7 @@ export function TerminalTabPane({
         Math.max(term.cols, MIN_TERMINAL_COLS),
         Math.max(term.rows, MIN_TERMINAL_ROWS),
       );
-      if (isActive && zoneRef.current === "bottom-panel") {
+      if (isFocusedRef.current && zoneRef.current === "bottom-panel") {
         termRef.current?.focus();
       }
     };
@@ -200,10 +204,10 @@ export function TerminalTabPane({
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [sessionId, selectBottomPanel, cwdReady, cwd, isActive]);
+  }, [sessionId, selectBottomPanel, cwdReady, cwd]);
 
   useEffect(() => {
-    if (!isActive || !termRef.current) return;
+    if (!isFocused || !termRef.current) return;
     const becameActive = !wasActiveRef.current;
     wasActiveRef.current = true;
 
@@ -220,20 +224,17 @@ export function TerminalTabPane({
         focusPaneRef.current();
       }
     });
-  }, [isActive, sessionId]);
+  }, [isFocused, sessionId]);
 
   useEffect(() => {
-    if (!isActive) {
+    if (!isFocused) {
       wasActiveRef.current = false;
     }
-  }, [isActive]);
+  }, [isFocused]);
 
   return (
     <div
-      className={cn(
-        "absolute inset-0 p-1",
-        !isActive && "pointer-events-none invisible",
-      )}
+      className="absolute inset-0"
       onMouseDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
         focusPane();
@@ -241,7 +242,7 @@ export function TerminalTabPane({
     >
       <div
         ref={hostRef}
-        className="h-full w-full [&_.xterm]:h-full [&_.xterm]:w-full"
+        className="h-full w-full overflow-hidden bg-[#1a1a1a] [&_.xterm]:h-full [&_.xterm]:w-full [&_.xterm]:!bg-[#1a1a1a] [&_.xterm-screen]:!bg-[#1a1a1a] [&_.xterm-viewport]:!bg-[#1a1a1a]"
       />
     </div>
   );

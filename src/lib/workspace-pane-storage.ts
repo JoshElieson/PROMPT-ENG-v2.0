@@ -15,15 +15,23 @@ export const WORKSPACE_LAYOUT_KEY = "prompt:center-workspace-panes:v2";
 
 export const LEGACY_WORKSPACE_LAYOUT_KEY = "prompt:center-workspace-panes:v1";
 
-function defaultModelSession(): PaneModelSession {
-  const weights: Record<string, number> = { ...DEFAULT_ROUND_TABLE_WEIGHTS };
-  for (const id of DEFAULT_ROUND_TABLE_IDS) {
-    if (weights[id] == null) weights[id] = 100;
-  }
+export function defaultModelSession(): PaneModelSession {
+  const ids = [...DEFAULT_ROUND_TABLE_IDS];
   return {
-    selectedIds: [...DEFAULT_ROUND_TABLE_IDS],
-    activeIds: [...DEFAULT_ROUND_TABLE_IDS],
-    weights,
+    selectedIds: ids,
+    activeIds: ids,
+    weights: { ...DEFAULT_ROUND_TABLE_WEIGHTS },
+  };
+}
+
+/** Legacy panes saved with an empty cart get the standard trio on load. */
+function normalizeModelSession(session: PaneModelSession): PaneModelSession {
+  if (session.selectedIds.length > 0) return session;
+  const ids = [...DEFAULT_ROUND_TABLE_IDS];
+  return {
+    selectedIds: ids,
+    activeIds: ids,
+    weights: session.weights,
   };
 }
 
@@ -66,7 +74,11 @@ function parseModelSession(raw: unknown): PaneModelSession | null {
   for (const [k, v] of Object.entries(weightsRaw)) {
     if (typeof v === "number" && Number.isFinite(v)) weights[k] = v;
   }
-  return { selectedIds: selected, activeIds: active, weights };
+  return normalizeModelSession({
+    selectedIds: selected,
+    activeIds: active,
+    weights,
+  });
 }
 
 function parseLeaf(raw: unknown): WorkspaceLeafNode | null {

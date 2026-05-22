@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AuthSession, DeviceFlowPending, GitHubUser } from "@/types/auth";
+import type { AuthSession, DeviceFlowPending, AuthUser } from "@/types/auth";
+import { normalizeAuthSession, normalizeAuthUser } from "@/lib/auth-session";
 import { isTauri } from "@/lib/tauri";
 
 const SCOPES = "read:user user:email";
@@ -254,55 +255,12 @@ export async function pollGitHubDeviceFlow(
   throw new Error("Sign-in timed out. Please try again.");
 }
 
-function normalizeGitHubUser(raw: unknown): GitHubUser {
-  if (!raw || typeof raw !== "object") {
-    throw new Error("Could not load your GitHub profile.");
-  }
-
-  const data = raw as GitHubUser & { avatarUrl?: string };
-  const login = data.login;
-  if (!login || typeof login !== "string") {
-    throw new Error("Could not load your GitHub profile.");
-  }
-
-  return {
-    id: typeof data.id === "number" ? data.id : 0,
-    login,
-    name: data.name ?? null,
-    avatar_url: data.avatar_url ?? data.avatarUrl ?? "",
-    email: data.email ?? null,
-  };
-}
-
-type RawAuthSession = AuthSession & {
-  access_token?: string;
-  login_at?: number;
-};
-
-export function normalizeAuthSession(raw: unknown): AuthSession {
-  if (!raw || typeof raw !== "object") {
-    throw new Error("GitHub did not return a valid sign-in session.");
-  }
-
-  const data = raw as RawAuthSession;
-  const accessToken = data.accessToken ?? data.access_token;
-  if (!accessToken || typeof accessToken !== "string") {
-    throw new Error("GitHub did not return an access token.");
-  }
-
-  return {
-    accessToken,
-    loginAt: data.loginAt ?? data.login_at ?? Date.now(),
-    user: normalizeGitHubUser(data.user),
-  };
-}
-
-export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser> {
+export async function fetchGitHubUser(accessToken: string): Promise<AuthUser> {
   if (isTauri()) {
-    const user = await invoke<GitHubUser & { avatarUrl?: string }>("github_fetch_user", {
+    const user = await invoke<AuthUser & { avatarUrl?: string }>("github_fetch_user", {
       accessToken,
     });
-    return normalizeGitHubUser(user);
+    return normalizeAuthUser(user);
   }
 
   const res = await fetch(`${API_BASE}${USER_API_PATH}`, {
@@ -318,8 +276,8 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser> 
     throw new Error("Could not load your GitHub profile.");
   }
 
-  const data = (await res.json()) as GitHubUser;
-  return normalizeGitHubUser(data);
+  const data = (await res.json()) as AuthUser;
+  return normalizeAuthUser(data);
 }
 
 export async function completeGitHubDeviceLogin(
@@ -338,5 +296,10 @@ export async function completeGitHubDeviceLogin(
 
   const accessToken = await pollGitHubDeviceFlow(pending, signal, onPollAttempt);
   const user = await fetchGitHubUser(accessToken);
-  return { accessToken, user, loginAt: Date.now() };
+  return normalizeAuthSession({
+    accessToken,
+    user,
+    provider: "github",
+    loginAt: Date.now(),
+  });
 }

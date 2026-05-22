@@ -21,6 +21,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -35,6 +37,7 @@ import {
   suggestCommitMessage,
 } from "@/lib/commit-message";
 import type { GitFileChange, GitFileStatus } from "@/types/git";
+import { useAiLoadingHighlight } from "@/hooks/use-ai-loading-highlight";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<GitFileStatus, string> = {
@@ -148,6 +151,7 @@ export function GitPanel({ active }: GitPanelProps) {
   const [showClone, setShowClone] = useState(false);
   const [cloneUrl, setCloneUrl] = useState("");
   const [isGeneratingCommitMessage, setIsGeneratingCommitMessage] = useState(false);
+  const commitHighlight = useAiLoadingHighlight(isGeneratingCommitMessage);
 
   const busy = isLoading || isOperating;
   const isRepo = status?.isRepo ?? false;
@@ -156,6 +160,10 @@ export function GitPanel({ active }: GitPanelProps) {
   const unstaged = allChanges.filter((c) => !c.staged);
   const hasStaged = staged.length > 0;
   const branchLabel = status?.branch ?? "main";
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.id === projectId),
+    [projects, projectId],
+  );
 
   const handleCommit = useCallback(
     async (stageAll: boolean) => {
@@ -263,20 +271,57 @@ export function GitPanel({ active }: GitPanelProps) {
           </div>
         ) : (
           <>
-            <div className="border-border-subtle border-b px-2 py-1.5">
-              <select
-                className="border-border-subtle bg-surface text-foreground focus:border-accent w-full rounded border px-2 py-1 text-xs outline-none"
-                value={projectId ?? ""}
-                onChange={(e) => setActiveProject(e.target.value || null)}
-                aria-label="Repository for this workspace"
-              >
-                <option value="">Select repository…</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+            <div className="border-border-subtle border-b px-2 py-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex h-8 w-full items-center justify-between gap-1.5 rounded-lg border border-border/60",
+                      "bg-panel-elevated/80 px-2.5 text-xs shadow-[0_4px_14px_rgba(2,6,23,0.18)]",
+                      "outline-none transition-colors hover:border-border-subtle",
+                      "focus-visible:border-[#6366f1]/60 focus-visible:ring-1 focus-visible:ring-[#6366f1]/25",
+                      "data-[state=open]:border-[#6366f1]/50 data-[state=open]:ring-1 data-[state=open]:ring-[#6366f1]/20",
+                      selectedProject ? "text-foreground" : "text-muted",
+                    )}
+                    aria-label="Repository for this workspace"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-left font-medium">
+                      {selectedProject?.name ?? "Select repository…"}
+                    </span>
+                    <ChevronDown
+                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground/80"
+                      aria-hidden
+                    />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  sideOffset={6}
+                  className="min-w-[var(--radix-dropdown-menu-trigger-width)] p-1.5"
+                >
+                  <DropdownMenuRadioGroup
+                    value={projectId ?? ""}
+                    onValueChange={(value) => setActiveProject(value || null)}
+                  >
+                    <DropdownMenuRadioItem
+                      value=""
+                      className="rounded-md py-2 text-xs text-muted"
+                    >
+                      Select repository…
+                    </DropdownMenuRadioItem>
+                    {projects.map((p) => (
+                      <DropdownMenuRadioItem
+                        key={p.id}
+                        value={p.id}
+                        className="rounded-md py-2 text-xs leading-snug"
+                      >
+                        {p.name}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             {!projectId && (
@@ -287,7 +332,14 @@ export function GitPanel({ active }: GitPanelProps) {
 
             {projectId && isRepo && (
               <div className="border-border-subtle shrink-0 border-b px-3 pt-2 pb-2">
-                <div className="relative">
+                <div
+                  className={cn(
+                    "border-border-subtle relative rounded-2xl border bg-[#1e1e1e] shadow-[0_10px_24px_rgba(2,6,23,0.3)] transition-[border-color,box-shadow] duration-150",
+                    "focus-within:border-[#6366f1]/35 focus-within:ring-1 focus-within:ring-[#6366f1]/28",
+                    commitHighlight.visible && "ai-loading-rainbow",
+                    commitHighlight.exiting && "ai-loading-rainbow--exiting",
+                  )}
+                >
                   <textarea
                     value={commitMessage}
                     onChange={(e) => setCommitMessage(e.target.value)}
@@ -295,13 +347,13 @@ export function GitPanel({ active }: GitPanelProps) {
                     placeholder={`Message (Ctrl+Enter to commit on "${branchLabel}")`}
                     disabled={busy}
                     rows={3}
-                    className="border-border-subtle text-foreground placeholder:text-muted focus:border-accent/60 w-full resize-none rounded border bg-[#1e1e1e] px-2 py-1.5 pr-8 text-[13px] leading-snug outline-none"
+                    className="text-foreground placeholder:text-muted relative z-[1] m-0 block w-full resize-none rounded-2xl border-0 bg-transparent px-2 py-1.5 pr-8 text-[13px] leading-snug outline-none focus:ring-0"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="text-muted-foreground hover:text-accent absolute top-1 right-1 h-6 w-6"
+                    className="text-muted-foreground hover:text-accent absolute top-1 right-1 z-[1] h-6 w-6"
                     title={GENERATE_COMMIT_AI_TOOLTIP}
                     disabled={busy || isGeneratingCommitMessage}
                     onClick={() => void handleGenerateCommitMessage()}

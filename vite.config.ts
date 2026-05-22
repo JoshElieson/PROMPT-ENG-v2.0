@@ -29,6 +29,16 @@ export default defineConfig(async () => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/github/, ""),
       },
+      "/api/google-oauth": {
+        target: "https://oauth2.googleapis.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/google-oauth/, ""),
+      },
+      "/api/google": {
+        target: "https://www.googleapis.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/google/, ""),
+      },
     },
     hmr: host
       ? {

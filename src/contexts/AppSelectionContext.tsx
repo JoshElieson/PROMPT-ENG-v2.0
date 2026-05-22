@@ -58,7 +58,7 @@ interface AppSelectionContextValue {
 const AppSelectionContext = createContext<AppSelectionContextValue | null>(null);
 
 export function AppSelectionProvider({ children }: { children: ReactNode }) {
-  const { chats, activeChatId, selectChat: activateChat } = useChats();
+  const { chats, activeChat, activeChatId, selectChat: activateChat } = useChats();
   const { projects } = useProjects();
   const [zone, setZone] = useState<AppSelectionZone | null>(null);
   const [chatListFocusId, setChatListFocusId] = useState<string | null>(null);
@@ -74,8 +74,12 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
   const focusProjectTreeRef = useRef<FocusFn | null>(null);
 
   const sortedChatIds = useCallback(() => {
-    return sortWorkspaces(chats).map((c) => c.id);
-  }, [chats]);
+    const allChats =
+      activeChat && !chats.some((chat) => chat.id === activeChat.id)
+        ? [activeChat, ...chats]
+        : chats;
+    return sortWorkspaces(allChats).map((c) => c.id);
+  }, [activeChat, chats]);
 
   const resolveChatId = useCallback(
     (chatId?: string | null) => {
@@ -270,17 +274,6 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
         moveChatListFocus(-1);
         return;
       }
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        selectWorkspaceScreen();
-        requestAnimationFrame(() => focusWorkspaceScreen());
-        return;
-      }
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        selectTopProject();
-        return;
-      }
     };
 
     window.addEventListener("keydown", onKeyDown, true);
@@ -289,72 +282,6 @@ export function AppSelectionProvider({ children }: { children: ReactNode }) {
     zone,
     chatListFocusId,
     moveChatListFocus,
-    selectWorkspaceScreen,
-    focusWorkspaceScreen,
-    selectTopProject,
-  ]);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.isComposing) return;
-
-      const target = e.target;
-      if (!(target instanceof Element)) return;
-      if (!target.closest("[data-workspace-split-host]")) return;
-      if (
-        target.closest("[data-workspace-bottom-panel], .xterm")
-      ) {
-        return;
-      }
-      if (target.closest("button, a, select")) return;
-
-      if (
-        zone === "workspace" &&
-        workspaceSelectionTarget === "screen" &&
-        e.key === "ArrowUp" &&
-        !target.closest("[data-composer-textarea]")
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-        selectWorkspaceAgentTabs();
-        requestAnimationFrame(() => focusWorkspaceAgentTabsRef.current?.());
-        return;
-      }
-
-      if (
-        zone === "workspace" &&
-        workspaceSelectionTarget === "screen" &&
-        e.key === "ArrowDown" &&
-        !target.closest("[data-composer-textarea]")
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-        focusComposer();
-        return;
-      }
-
-      if (e.key === "ArrowLeft") {
-        if (target.closest("[data-composer-textarea]")) return;
-
-        if (zone === "workspace" && workspaceSelectionTarget === "screen") {
-          e.preventDefault();
-          e.stopPropagation();
-          selectTopChat();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [
-    zone,
-    workspaceSelectionTarget,
-    selectTopChat,
-    selectTopProject,
-    focusComposer,
-    selectWorkspaceAgentTabs,
   ]);
 
   const value = useMemo<AppSelectionContextValue>(

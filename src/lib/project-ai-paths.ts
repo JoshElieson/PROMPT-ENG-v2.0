@@ -1,5 +1,5 @@
 import { basename } from "@/lib/fs";
-import type { NodePermissions } from "@/types/project";
+import { DEFAULT_PERMISSIONS, type NodePermissions } from "@/types/project";
 
 function normalizePath(path: string): string {
   return path.replace(/[/\\]+$/, "");
@@ -27,4 +27,28 @@ export function getOutermostEnabledContextRoots(
   );
 
   return outermost.map((path) => ({ path, label: basename(path) }));
+}
+
+function pathsUnderRoot(
+  permissions: Record<string, NodePermissions>,
+  rootPath: string,
+): string[] {
+  return Object.keys(permissions).filter(
+    (key) =>
+      key === rootPath ||
+      key.startsWith(`${rootPath}\\`) ||
+      key.startsWith(`${rootPath}/`),
+  );
+}
+
+/** Disable AI context for a root path and any tracked descendants. */
+export function disableContextRoot(
+  permissions: Record<string, NodePermissions>,
+  rootPath: string,
+): Record<string, NodePermissions> {
+  const next = { ...permissions };
+  for (const path of pathsUnderRoot(next, rootPath)) {
+    next[path] = { ...(next[path] ?? DEFAULT_PERMISSIONS), enabled: false };
+  }
+  return next;
 }

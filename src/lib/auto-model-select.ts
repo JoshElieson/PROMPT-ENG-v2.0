@@ -1,4 +1,4 @@
-import { isAiModelSupported } from "@/lib/ai-chat";
+import { isAiModelSupported, SUPPORTED_AI_MODEL_IDS } from "@/lib/ai-chat";
 
 export type TaskProfile =
   | "code"
@@ -9,13 +9,11 @@ export type TaskProfile =
   | "fast"
   | "general";
 
-export type ModelMode = "auto" | "deeper" | "manual";
+export type ModelMode = "auto" | "manual";
 
 type ModelProfile = {
   /** Base score in auto (balanced) mode. */
   auto: number;
-  /** Base score when deeper mode is on. */
-  deeper: number;
   strengths: TaskProfile[];
   orgId: string;
 };
@@ -24,79 +22,66 @@ type ModelProfile = {
 const MODEL_PROFILES: Record<string, ModelProfile> = {
   gpt4o: {
     auto: 92,
-    deeper: 78,
     strengths: ["general", "code"],
     orgId: "openai",
   },
   "gpt4-turbo": {
     auto: 80,
-    deeper: 72,
     strengths: ["general"],
     orgId: "openai",
   },
   o1: {
     auto: 35,
-    deeper: 98,
     strengths: ["reasoning"],
     orgId: "openai",
   },
   claude: {
     auto: 90,
-    deeper: 82,
     strengths: ["reasoning", "general"],
     orgId: "anthropic",
   },
   "claude-opus": {
     auto: 28,
-    deeper: 97,
     strengths: ["reasoning"],
     orgId: "anthropic",
   },
   gemini: {
     auto: 86,
-    deeper: 80,
     strengths: ["research", "general"],
     orgId: "google",
   },
   "gemini-flash": {
     auto: 94,
-    deeper: 55,
     strengths: ["fast", "general"],
     orgId: "google",
   },
   deepseek: {
     auto: 82,
-    deeper: 70,
     strengths: ["code"],
     orgId: "deepseek",
   },
   grok: {
     auto: 90,
-    deeper: 78,
     strengths: ["general", "edgy"],
     orgId: "xai",
   },
   "grok-fast": {
     auto: 94,
-    deeper: 52,
     strengths: ["fast", "general", "edgy"],
     orgId: "xai",
   },
   "grok-reasoning": {
     auto: 42,
-    deeper: 96,
     strengths: ["reasoning", "edgy"],
     orgId: "xai",
   },
   "grok-multi": {
     auto: 48,
-    deeper: 88,
     strengths: ["reasoning", "research", "edgy"],
     orgId: "xai",
   },
   "grok-code": {
     auto: 72,
-    deeper: 85,
     strengths: ["code"],
     orgId: "xai",
   },
@@ -105,7 +90,7 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
 const CODE_RE =
   /\b(code|coding|compile|debug|refactor|implement|function|class|typescript|javascript|python|rust|react|api|bug|fix|error|stack trace|git|npm|cargo|test suite|unit test)\b/i;
 const REASONING_RE =
-  /\b(analyz|analysis|compare|trade-?off|architect|design|why|how should|evaluate|pros and cons|proof|reason|think through|deepthink)\b/i;
+  /\b(analyz|analysis|compare|trade-?off|architect|design|why|how should|evaluate|pros and cons|proof|reason|think through)\b/i;
 const RESEARCH_RE =
   /\b(research|summarize|summary|explain|document|read|sources|literature|overview|survey)\b/i;
 const CREATIVE_RE =
@@ -133,14 +118,10 @@ function isGrokModel(modelId: string): boolean {
   return GROK_MODEL_IDS.has(modelId) || modelId.startsWith("grok");
 }
 
-const DEEPER_SLASH = /\/deepthink\b/i;
-const SHALLOW_SLASH = /\/shallow\b/i;
-
 function profileFor(modelId: string): ModelProfile {
   return (
     MODEL_PROFILES[modelId] ?? {
       auto: 50,
-      deeper: 50,
       strengths: ["general"],
       orgId: "unknown",
     }
@@ -153,9 +134,6 @@ export function detectTaskProfile(
 ): TaskProfile {
   const text = `${goal ?? ""}\n${content}`.trim();
   if (!text) return "general";
-
-  if (SHALLOW_SLASH.test(content)) return "fast";
-  if (DEEPER_SLASH.test(content)) return "reasoning";
 
   if (CODE_RE.test(text)) return "code";
   if (REASONING_RE.test(text)) return "reasoning";
@@ -179,23 +157,18 @@ function taskBoost(profile: ModelProfile, task: TaskProfile): number {
 function scoreModel(
   modelId: string,
   task: TaskProfile,
-  mode: "auto" | "deeper",
   hasWorkspace: boolean,
 ): number {
   const profile = profileFor(modelId);
-  let score = mode === "deeper" ? profile.deeper : profile.auto;
+  let score = profile.auto;
   score += taskBoost(profile, task);
 
   if (hasWorkspace && profile.strengths.includes("code")) {
     score += 8;
   }
 
-  if (mode === "auto" && task === "fast" && profile.strengths.includes("fast")) {
+  if (task === "fast" && profile.strengths.includes("fast")) {
     score += 12;
-  }
-
-  if (mode === "deeper" && profile.strengths.includes("reasoning")) {
-    score += 10;
   }
 
   if (task === "edgy" && profile.orgId === "xai") {
@@ -217,7 +190,6 @@ export type AutoSelectOptions = {
   goal?: string | null;
   /** Models the user has in the cart / round table pool. */
   candidateIds: string[];
-  deeperEnabled?: boolean;
   /** Workspace tools enabled — bias toward code-capable models. */
   hasWorkspace?: boolean;
 };
@@ -226,20 +198,17 @@ export type AutoSelectOptions = {
  * Pick the top 1–2 models for a message. Returns only supported, configured models.
  */
 export function selectAutoModels(options: AutoSelectOptions): string[] {
-  const {
-    message,
-    goal,
-    candidateIds,
-    deeperEnabled = false,
-    hasWorkspace = false,
-  } = options;
+  const { message, goal, candidateIds, hasWorkspace = false } = options;
 
-  const pool = [...new Set(candidateIds)].filter((id) => isAiModelSupported(id));
+  const poolSource =
+    candidateIds.length > 0
+      ? candidateIds
+      : Array.from(SUPPORTED_AI_MODEL_IDS);
+  const pool = [...new Set(poolSource)].filter((id) => isAiModelSupported(id));
   if (pool.length === 0) return [];
   if (pool.length === 1) return pool;
 
   const task = detectTaskProfile(message, goal);
-  const mode: "auto" | "deeper" = deeperEnabled ? "deeper" : "auto";
 
   const grokInPool = pool.filter(isGrokModel);
   const scoringPool =
@@ -248,7 +217,7 @@ export function selectAutoModels(options: AutoSelectOptions): string[] {
   const ranked = scoringPool
     .map((id) => ({
       id,
-      score: scoreModel(id, task, mode, hasWorkspace),
+      score: scoreModel(id, task, hasWorkspace),
       orgId: profileFor(id).orgId,
     }))
     .sort((a, b) => b.score - a.score);
@@ -258,7 +227,6 @@ export function selectAutoModels(options: AutoSelectOptions): string[] {
   }
 
   const wantPair =
-    mode === "deeper" ||
     task === "reasoning" ||
     task === "code" ||
     task === "research" ||

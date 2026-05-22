@@ -71,8 +71,8 @@ fn extract_error_detail(data: &serde_json::Value, raw: &str) -> String {
         .to_string()
 }
 
-fn tools_schema_openai() -> Vec<serde_json::Value> {
-    vec![
+fn tools_schema_openai(allow_write: bool) -> Vec<serde_json::Value> {
+    let mut tools = vec![
         json!({
             "type": "function",
             "function": {
@@ -90,21 +90,6 @@ fn tools_schema_openai() -> Vec<serde_json::Value> {
         json!({
             "type": "function",
             "function": {
-                "name": "write_file",
-                "description": "Create or overwrite a UTF-8 text file under the user's AI-enabled paths; parent dirs are created. Use to apply edits or add files the user asked for—read existing files first when merging or partial edits matter.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "path": { "type": "string", "description": "Absolute file path" },
-                        "content": { "type": "string", "description": "Full new file contents" }
-                    },
-                    "required": ["path", "content"]
-                }
-            }
-        }),
-        json!({
-            "type": "function",
-            "function": {
                 "name": "list_directory",
                 "description": "List files and subfolders under an AI-enabled directory (absolute path). Use to discover paths, layout, or where to read next when you are not sure which file to open.",
                 "parameters": {
@@ -116,35 +101,55 @@ fn tools_schema_openai() -> Vec<serde_json::Value> {
                 }
             }
         }),
-        json!({
-            "type": "function",
-            "function": {
-                "name": "remove_path",
-                "description": "Permanently delete a file or subfolder (recursive). Works on individually AI-enabled files. For an AI-enabled folder root, use clear_directory instead of deleting that folder path.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "path": { "type": "string", "description": "Absolute file or directory path" }
-                    },
-                    "required": ["path"]
+    ];
+    if allow_write {
+        tools.extend([
+            json!({
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "description": "Create or overwrite a UTF-8 text file under the user's AI-enabled paths; parent dirs are created. Use to apply edits or add files the user asked for—read existing files first when merging or partial edits matter.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Absolute file path" },
+                            "content": { "type": "string", "description": "Full new file contents" }
+                        },
+                        "required": ["path", "content"]
+                    }
                 }
-            }
-        }),
-        json!({
-            "type": "function",
-            "function": {
-                "name": "clear_directory",
-                "description": "Delete every file and subfolder inside a directory but keep the directory. Use to empty/clear a folder for a fresh start. Pass the folder's absolute path (parent folders are allowed when children are AI-enabled).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "path": { "type": "string", "description": "Absolute directory path" }
-                    },
-                    "required": ["path"]
+            }),
+            json!({
+                "type": "function",
+                "function": {
+                    "name": "remove_path",
+                    "description": "Permanently delete a file or subfolder (recursive). Works on individually AI-enabled files. For an AI-enabled folder root, use clear_directory instead of deleting that folder path.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Absolute file or directory path" }
+                        },
+                        "required": ["path"]
+                    }
                 }
-            }
-        }),
-    ]
+            }),
+            json!({
+                "type": "function",
+                "function": {
+                    "name": "clear_directory",
+                    "description": "Delete every file and subfolder inside a directory but keep the directory. Use to empty/clear a folder for a fresh start. Pass the folder's absolute path (parent folders are allowed when children are AI-enabled).",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Absolute directory path" }
+                        },
+                        "required": ["path"]
+                    }
+                }
+            }),
+        ]);
+    }
+    tools
 }
 
 const CODE_FORMATTING_GUIDANCE: &str = "\n\
@@ -177,7 +182,7 @@ Technical depth contract:\n\
 
 const UI_PANE_GUIDANCE: &str = "\n\
 UI pane controls:\n\
-- If the user explicitly asks you to open or close a UI pane, include one directive token on its own line using this exact format: [[FORGE_PANE action=\"open|close\" target=\"terminal|websites|models|workflow|right-sidebar|explorer|agent-cart\"]]\n\
+- If the user explicitly asks you to open or close a UI pane, include one directive token on its own line using this exact format: [[FORGE_PANE action=\"open|close\" target=\"terminal|websites|models|explorer|agent-cart\"]]\n\
 - You may include multiple directive lines if the user asked for multiple pane changes.\n\
 - Keep your normal conversational response in plain text around the directive lines.\n\
 - Do not output pane directives unless the user asked to change panes.\n";
@@ -197,8 +202,9 @@ fn chat_system_prompt(user: Option<&str>) -> String {
 }
 
 fn workspace_system_prompt(policy: &WorkspacePolicy) -> String {
-    format!(
-        "The user enabled the following locations for AI file access. You have tools read_file, write_file, list_directory, remove_path, and clear_directory to work on their real project on disk.\n\
+    if policy.allows_write() {
+        format!(
+            "The user enabled the following locations for AI file access. You have tools read_file, write_file, list_directory, remove_path, and clear_directory to work on their real project on disk.\n\
 \n\
 How to work:\n\
 - Whenever the request depends on this codebase (behavior, errors, structure, config, or \"what does X do\"), use list_directory and/or read_file early instead of guessing.\n\
@@ -214,8 +220,23 @@ Rules:\n\
 - write_file replaces the entire file contents; it does not delete files.\n\
 - remove_path cannot delete an AI-enabled folder root in one step—use clear_directory on that folder instead.\n\
 - Use absolute paths exactly as they appear on disk.{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}",
-        policy.roots_summary()
-    )
+            policy.roots_summary()
+        )
+    } else {
+        format!(
+            "The user enabled read-only file access for the following locations. You have tools read_file and list_directory only—do not modify or delete files.\n\
+\n\
+How to work:\n\
+- Whenever the request depends on this codebase (behavior, errors, structure, config, or \"what does X do\"), use list_directory and/or read_file early instead of guessing.\n\
+- If the user asks for edits, explain that file write access is disabled for this agent.\n\
+- If you are unsure which file matters, list_directory near the roots below, then read the most relevant paths.\n\
+\n\
+Rules:\n\
+- Only access paths under these AI-enabled locations (absolute paths):\n{}\n\
+- Use absolute paths exactly as they appear on disk.{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}",
+            policy.roots_summary()
+        )
+    }
 }
 
 fn synthesis_system_prompt(user: Option<&str>) -> String {
@@ -317,6 +338,18 @@ fn run_tool(
     let result = (|| -> Result<ToolExecution, String> {
         let v: serde_json::Value =
             serde_json::from_str(args).map_err(|e| format!("Invalid tool arguments JSON: {e}"))?;
+        let write_tools = [
+            "write_file",
+            "remove_path",
+            "delete_path",
+            "delete_file",
+            "remove_file",
+            "clear_directory",
+            "empty_directory",
+        ];
+        if !policy.allows_write() && write_tools.contains(&name) {
+            return Err(format!("{name}: file write access is disabled for this agent"));
+        }
         match name {
             "read_file" => {
                 let path = v["path"]
@@ -494,7 +527,7 @@ async fn openai_agent_loop(
     validate_base_url(Provider::OpenAi, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = tools_schema_openai();
+    let tools = tools_schema_openai(policy.allows_write());
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
@@ -664,7 +697,7 @@ async fn deepseek_agent_loop(
     validate_base_url(Provider::DeepSeek, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = tools_schema_openai();
+    let tools = tools_schema_openai(policy.allows_write());
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
@@ -850,7 +883,7 @@ async fn xai_agent_loop_once(
     validate_base_url(Provider::Xai, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = tools_schema_openai();
+    let tools = tools_schema_openai(policy.allows_write());
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
@@ -956,8 +989,8 @@ async fn xai_agent_loop(
     }
 }
 
-fn anthropic_tools() -> Vec<serde_json::Value> {
-    vec![
+fn anthropic_tools(allow_write: bool) -> Vec<serde_json::Value> {
+    let mut tools = vec![
         json!({
             "name": "read_file",
             "description": "Read a UTF-8 text file under AI-enabled paths. Prefer this over guessing when the answer depends on source, configs, docs, or logs.",
@@ -967,18 +1000,6 @@ fn anthropic_tools() -> Vec<serde_json::Value> {
                     "path": { "type": "string", "description": "Absolute file path" }
                 },
                 "required": ["path"]
-            }
-        }),
-        json!({
-            "name": "write_file",
-            "description": "Create or overwrite a UTF-8 text file under AI-enabled paths. Use to persist edits or new files; read existing files first when merges or partial edits matter.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string" },
-                    "content": { "type": "string" }
-                },
-                "required": ["path", "content"]
             }
         }),
         json!({
@@ -992,29 +1013,46 @@ fn anthropic_tools() -> Vec<serde_json::Value> {
                 "required": ["path"]
             }
         }),
-        json!({
-            "name": "remove_path",
-            "description": "Permanently delete a file or folder (recursive). Use when the user asks to delete; do not claim deletion without this tool.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string", "description": "Absolute file or directory path" }
-                },
-                "required": ["path"]
-            }
-        }),
-        json!({
-            "name": "clear_directory",
-            "description": "Delete all files and subfolders inside a directory but keep the directory. Use to empty or clear a folder.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string", "description": "Absolute directory path" }
-                },
-                "required": ["path"]
-            }
-        }),
-    ]
+    ];
+    if allow_write {
+        tools.extend([
+            json!({
+                "name": "write_file",
+                "description": "Create or overwrite a UTF-8 text file under AI-enabled paths. Use to persist edits or new files; read existing files first when merges or partial edits matter.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string" },
+                        "content": { "type": "string" }
+                    },
+                    "required": ["path", "content"]
+                }
+            }),
+            json!({
+                "name": "remove_path",
+                "description": "Permanently delete a file or folder (recursive). Use when the user asks to delete; do not claim deletion without this tool.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Absolute file or directory path" }
+                    },
+                    "required": ["path"]
+                }
+            }),
+            json!({
+                "name": "clear_directory",
+                "description": "Delete all files and subfolders inside a directory but keep the directory. Use to empty or clear a folder.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "Absolute directory path" }
+                    },
+                    "required": ["path"]
+                }
+            }),
+        ]);
+    }
+    tools
 }
 
 async fn complete_anthropic(
@@ -1110,7 +1148,7 @@ async fn anthropic_agent_loop(
     validate_base_url(Provider::Anthropic, &base)?;
     let url = format!("{}/v1/messages", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = anthropic_tools();
+    let tools = anthropic_tools(policy.allows_write());
 
     let mut api_messages: Vec<serde_json::Value> = Vec::new();
     let mut activities: Vec<ToolActivity> = Vec::new();
@@ -1215,21 +1253,34 @@ async fn anthropic_agent_loop(
     Err("Anthropic: stopped after too many tool rounds.".to_string())
 }
 
-fn gemini_tool_declarations() -> serde_json::Value {
-    json!([{
-        "function_declarations": [
-            {
-                "name": "read_file",
-                "description": "Read a UTF-8 text file under AI-enabled paths. Prefer over guessing when the task depends on real project contents.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "path": { "type": "string" }
-                    },
-                    "required": ["path"]
-                }
-            },
-            {
+fn gemini_tool_declarations(allow_write: bool) -> serde_json::Value {
+    let mut declarations = vec![
+        json!({
+            "name": "read_file",
+            "description": "Read a UTF-8 text file under AI-enabled paths. Prefer over guessing when the task depends on real project contents.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" }
+                },
+                "required": ["path"]
+            }
+        }),
+        json!({
+            "name": "list_directory",
+            "description": "List files and subfolders under an AI-enabled directory. Use to discover which files to read.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" }
+                },
+                "required": ["path"]
+            }
+        }),
+    ];
+    if allow_write {
+        declarations.extend([
+            json!({
                 "name": "write_file",
                 "description": "Create or overwrite a UTF-8 text file under AI-enabled paths. Use to save edits or new files; read first when needed for safe changes.",
                 "parameters": {
@@ -1240,19 +1291,8 @@ fn gemini_tool_declarations() -> serde_json::Value {
                     },
                     "required": ["path", "content"]
                 }
-            },
-            {
-                "name": "list_directory",
-                "description": "List files and subfolders under an AI-enabled directory. Use to discover which files to read.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "path": { "type": "string" }
-                    },
-                    "required": ["path"]
-                }
-            },
-            {
+            }),
+            json!({
                 "name": "remove_path",
                 "description": "Permanently delete a file or folder (recursive). Use when the user asks to delete files or folders.",
                 "parameters": {
@@ -1262,8 +1302,8 @@ fn gemini_tool_declarations() -> serde_json::Value {
                     },
                     "required": ["path"]
                 }
-            },
-            {
+            }),
+            json!({
                 "name": "clear_directory",
                 "description": "Delete all contents inside a directory but keep the directory. Use to empty or clear a folder.",
                 "parameters": {
@@ -1273,9 +1313,10 @@ fn gemini_tool_declarations() -> serde_json::Value {
                     },
                     "required": ["path"]
                 }
-            }
-        ]
-    }])
+            }),
+        ]);
+    }
+    json!([{ "function_declarations": declarations }])
 }
 
 async fn complete_gemini(
@@ -1388,7 +1429,7 @@ async fn gemini_agent_loop(
             "systemInstruction": {
                 "parts": [{ "text": workspace_system_prompt(policy) }],
             },
-            "tools": gemini_tool_declarations(),
+            "tools": gemini_tool_declarations(policy.allows_write()),
         });
 
         let res = client

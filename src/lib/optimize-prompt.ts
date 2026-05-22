@@ -3,18 +3,23 @@ import { aiChatComplete, type ChatTurn } from "@/lib/ai-chat";
 /** ChatGPT (OpenAI) model used for composer prompt optimization. */
 export const OPTIMIZE_PROMPT_MODEL_ID = "gpt4o";
 
-const OPTIMIZE_PROMPT_SYSTEM = `You are a prompt engineering assistant. The user will send a draft message they plan to use in a multi-model AI chat workspace.
+const OPTIMIZE_PROMPT_SYSTEM = `You are a prompt optimization assistant. The user will send a draft prompt they plan to use with AI.
 
-Your job:
-1. Infer the most likely purpose of the draft (e.g. coding task, research question, writing request, debugging).
-2. Rewrite the draft as a clear, effective prompt tailored to that purpose.
-3. Shorten the text wherever possible without removing information, constraints, examples, or intent.
+Goal:
+- Improve clarity, structure, and wording so another AI can understand and execute the user's goal more reliably.
+- Keep the meaning exactly the same.
 
-Rules:
-- Return ONLY the optimized prompt text—no preamble, labels, markdown fences, or explanation.
-- Preserve the user's language unless mixing languages is clearly wrong.
-- Keep @mentions and /commands if present.
-- Do not add capabilities the user did not ask for.`;
+Hard constraints:
+1. Do not change the user's intent, requested outcome, scope, constraints, or priority.
+2. Do not add new requirements, assumptions, capabilities, tools, deadlines, or context.
+3. Do not remove requirements, caveats, examples, or constraints that affect meaning.
+4. Keep @mentions, /commands, file paths, quoted text, and explicit names/IDs intact.
+5. Preserve the user's language unless fixing mixed-language text is necessary for clarity.
+6. If the draft is already clear, return a minimally changed version rather than rewriting heavily.
+
+Output rules:
+- Return ONLY the optimized prompt text.
+- No preamble, labels, markdown fences, or explanation.`;
 
 function normalizeOptimizedOutput(raw: string): string {
   let text = raw.trim();

@@ -16,7 +16,6 @@ export function LeftSidebar({ activeSection }: LeftSidebarProps) {
 
   return (
     <ResizableSidebar
-      side="left"
       defaultWidth={224}
       minWidth={200}
       maxWidth={420}

@@ -20,20 +20,21 @@ export function LayoutThumbnail({
   disabled: _disabled,
   className,
 }: LayoutThumbnailProps) {
-  if (presetId === "create") {
+  if (presetId === "horizontal") {
     return (
       <span
         className={cn(
-          "flex h-11 w-[4.25rem] items-center justify-center rounded border border-dashed border-border bg-surface/40",
+          "flex h-11 w-[4.25rem] gap-px rounded border border-border-subtle bg-background p-0.5",
           active && "border-accent/60 ring-1 ring-accent/30",
           hoverHighlight,
           className,
         )}
         aria-hidden
       >
-        <span className="text-muted group-data-[highlighted]:text-foreground text-lg leading-none font-light">
-          +
-        </span>
+        <span className={cn("w-1 shrink-0 bg-muted/70", box)} />
+        <span className={cn("w-[20%] shrink-0 bg-muted/38", box)} />
+        <span className={cn("min-w-0 flex-1 bg-muted/20", box)} />
+        <span className={cn("w-[34%] shrink-0 bg-muted/35", box)} />
       </span>
     );
   }

@@ -1,3 +1,5 @@
+import type { AgentPermissions } from "@/types/agent-permissions";
+import type { QueuedMessageBehavior } from "@/types/chat-behavior";
 import type { NodePermissions } from "@/types/project";
 import type { WorkspacePaneLayout } from "@/types/workspace-pane";
 
@@ -35,6 +37,10 @@ export interface ChatThread {
   id: string;
   /** Tab label; falls back to "Agent N" when unset. */
   title?: string;
+  /** Per-agent system prompt (unique to this thread). */
+  systemPrompt?: string;
+  /** Per-agent capability overrides (merged with defaults at runtime). */
+  agentPermissions?: Partial<AgentPermissions>;
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
@@ -43,6 +49,14 @@ export interface ChatThread {
 export interface Chat {
   id: string;
   title: string;
+  /** Sticky marker: true once this workspace has ever had conversation messages. */
+  hadMessages?: boolean;
+  /** Optional summary of what this project is for (shared by all agents). */
+  projectDescription?: string;
+  /** Stack, services, and languages agents should prefer (e.g. C++, Vercel, Supabase). */
+  projectTools?: string[];
+  /** When true, auto title generation will not change `title` until the user renames again. */
+  titleLocked?: boolean;
   /** When true, workspace stays at the top of the sidebar list. */
   pinned?: boolean;
   /** One or more parallel threads (workspace tabs) under this sidebar chat. */
@@ -53,15 +67,25 @@ export interface Chat {
   updatedAt: number;
   /** Per-chat file/folder access toggles from the projects tree */
   permissions?: Record<string, NodePermissions>;
+  /** When false, AI file tools are disabled for this workspace (default: enabled). */
+  fileAccessEnabled?: boolean;
+  /** When false, only one model responds per message (default: multi-model round table). */
+  multiModelMode?: boolean;
   /** Source-control project selected for this workspace (sidebar chat). */
   gitProjectId?: string | null;
   /** Thread tab layout for the center workspace (threads referenced by leaf `threadId`). */
   workspace?: WorkspacePaneLayout;
+  /** When false, the chat pane does not auto-scroll on new activity (default: on). */
+  autoScrollEnabled?: boolean;
+  /** How to handle sends while the agent is still responding (default: wait). */
+  queuedMessageBehavior?: QueuedMessageBehavior;
 }
 
 export interface AiWorkspacePayload {
   /** Absolute paths enabled for AI file tools (from project tree). */
   enabledPaths: string[];
+  /** When false, only read/list tools are exposed (default: true). */
+  allowWrite?: boolean;
 }
 
 export interface SendMessagePayload {
@@ -69,8 +93,6 @@ export interface SendMessagePayload {
   attachments?: ChatAttachment[];
   targetModelIds: string[];
   modelContributions?: ModelContribution[];
-  /** When true, ask models to spend more effort on depth and quality. */
-  deepReasoning?: boolean;
   /** When set and non-empty, models may use read_file / write_file / list_directory tools. */
   workspace?: AiWorkspacePayload;
   /** Sidebar chat id (workspace container). */

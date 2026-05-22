@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { Square, Undo2 } from "lucide-react";
 import type { ChatMessage } from "@/types/chat";
 import { getModelById } from "@/data/ai-models";
 import { AttachmentChips } from "@/components/chat/AttachmentChips";
 import { CodeSnippetBlock } from "@/components/chat/CodeSnippetBlock";
+import { Button } from "@/components/ui/button";
+import { extractForgeActivities, type ForgeActivity } from "@/lib/forge-activity";
 import { parseMessageContent } from "@/lib/parse-message-content";
 import {
   isPathWithinPrefix,
@@ -11,15 +14,6 @@ import {
 } from "@/lib/project-paths";
 import { cn } from "@/lib/utils";
 
-type ForgeActivityAction = "read" | "write";
-
-interface ForgeActivity {
-  action: ForgeActivityAction;
-  path: string;
-  added?: number;
-  removed?: number;
-}
-
 interface EditSummary {
   rootPath: string;
   added: number;
@@ -27,59 +21,10 @@ interface EditSummary {
 }
 
 interface ActivityDisplayRow {
-  action: ForgeActivityAction;
+  action: ForgeActivity["action"];
   path: string;
   added?: number;
   removed?: number;
-}
-
-const FORGE_ACTIVITY_RE = /^\s*\[\[FORGE_ACTIVITY\s+(\{.+\})\]\]\s*$/;
-
-function extractForgeActivities(content: string): {
-  body: string;
-  activities: ForgeActivity[];
-} {
-  const lines = content.replace(/\r\n/g, "\n").split("\n");
-  const activities: ForgeActivity[] = [];
-  const bodyLines: string[] = [];
-
-  for (const line of lines) {
-    const match = line.match(FORGE_ACTIVITY_RE);
-    if (!match) {
-      bodyLines.push(line);
-      continue;
-    }
-    try {
-      const parsed = JSON.parse(match[1]) as Partial<ForgeActivity>;
-      if (
-        (parsed.action === "read" || parsed.action === "write") &&
-        typeof parsed.path === "string" &&
-        parsed.path.trim().length > 0
-      ) {
-        activities.push({
-          action: parsed.action,
-          path: parsed.path,
-          added:
-            typeof parsed.added === "number" && Number.isFinite(parsed.added)
-              ? Math.max(0, Math.round(parsed.added))
-              : undefined,
-          removed:
-            typeof parsed.removed === "number" && Number.isFinite(parsed.removed)
-              ? Math.max(0, Math.round(parsed.removed))
-              : undefined,
-        });
-        continue;
-      }
-    } catch {
-      // Ignore malformed activity lines and show raw text.
-    }
-    bodyLines.push(line);
-  }
-
-  return {
-    body: bodyLines.join("\n").trim(),
-    activities,
-  };
 }
 
 function getUppermostRoots(paths: string[]): string[] {
@@ -183,7 +128,7 @@ function PlainTextWithMentions({
   const parts = content.split(/(@[a-z0-9][a-z0-9_-]*)/gi);
 
   return (
-    <p className="text-foreground/90 text-sm leading-relaxed whitespace-pre-wrap">
+    <p className="text-foreground/90 break-words text-sm leading-relaxed whitespace-pre-wrap">
       {parts.map((part, i) => {
         if (part.startsWith("@")) {
           const model = getModelById(part.slice(1));
@@ -390,7 +335,7 @@ function RichTextBlock({
     }
   }
 
-  return <div className="space-y-0.5">{blocks}</div>;
+  return <div className="space-y-0.5 break-words">{blocks}</div>;
 }
 
 function MessageContent({
@@ -521,27 +466,44 @@ function MessageContent({
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  fullWidth?: boolean;
+  showStopAction?: boolean;
+  showUndoAction?: boolean;
+  onStop?: () => void;
+  onUndo?: () => void;
+  disableActions?: boolean;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  fullWidth = false,
+  showStopAction = false,
+  showUndoAction = false,
+  onStop,
+  onUndo,
+  disableActions = false,
+}: MessageBubbleProps) {
   const isSent = message.role === "user";
+  const showActions = isSent && (showStopAction || showUndoAction);
 
   return (
     <article
       className={cn(
-        "flex w-full flex-col gap-0",
-        isSent ? "items-end" : "items-start",
+        "group flex w-full min-w-0 flex-col gap-0",
+        isSent ? "items-stretch" : "items-start",
       )}
     >
       <section
         className={cn(
-          "relative",
+          "min-w-0",
           isSent
-            ? "max-w-[85%] rounded-2xl border border-[#6366f1]/26 bg-[#2b3150]/55 px-4 py-3 shadow-[0_10px_20px_rgba(2,6,23,0.3)]"
-            : "w-full max-w-2xl",
+            ? "flex w-full items-start gap-2 rounded-2xl border border-[#6366f1]/26 bg-[#2b3150]/55 px-4 py-3 shadow-[0_10px_20px_rgba(2,6,23,0.3)]"
+            : fullWidth
+              ? "w-full"
+              : "w-full max-w-2xl",
         )}
       >
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1 break-words">
           {message.attachments && message.attachments.length > 0 && (
             <div className="-mx-1 mb-2">
               <AttachmentChips attachments={message.attachments} readonly />
@@ -554,6 +516,38 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             toolContextRoots={message.toolContextRoots}
           />
         </div>
+        {showActions ? (
+          <div className="pointer-events-none flex shrink-0 items-start gap-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
+            {showStopAction ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="text-muted-foreground hover:bg-panel-elevated hover:text-foreground h-6 w-6 rounded-md"
+                title="Stop response"
+                aria-label="Stop response"
+                disabled={disableActions}
+                onClick={onStop}
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+              </Button>
+            ) : null}
+            {showUndoAction ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="text-muted-foreground hover:bg-panel-elevated hover:text-foreground h-6 w-6 rounded-md"
+                title="Undo from this message"
+                aria-label="Undo from this message"
+                disabled={disableActions}
+                onClick={onUndo}
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </section>
     </article>
   );

@@ -10,6 +10,10 @@ import {
   DEFAULT_ROUND_TABLE_WEIGHTS,
   weightForModel,
 } from "@/lib/round-table-weights";
+import {
+  reorderIdListByPlacement,
+  type DropSide,
+} from "@/lib/list-reorder-drag";
 import { buildRoundTableModels } from "@/lib/round-table-models";
 import type { PaneModelSession } from "@/types/workspace-pane";
 
@@ -25,6 +29,11 @@ export interface PaneRoundTableContextValue {
   /** Enable exactly one selected model for chat (disables all other active models). */
   activateOnlyModel: (id: string) => void;
   setModelWeight: (id: string, weight: number) => void;
+  reorderSelectedIds: (
+    sourceId: string,
+    targetId: string,
+    side: DropSide,
+  ) => void;
 }
 
 export const PaneRoundTableContext =
@@ -142,6 +151,24 @@ export function PaneRoundTableProvider({
     [selectedIds, weights, patch],
   );
 
+  const reorderSelectedIds = useCallback(
+    (sourceId: string, targetId: string, side: DropSide) => {
+      const nextSelected = reorderIdListByPlacement(
+        selectedIds,
+        sourceId,
+        targetId,
+        side,
+      );
+      const activeSet = new Set(activeIds);
+      patch({
+        selectedIds: nextSelected,
+        activeIds: nextSelected.filter((id) => activeSet.has(id)),
+        weights: { ...weights },
+      });
+    },
+    [selectedIds, activeIds, weights, patch],
+  );
+
   const setModelWeight = useCallback(
     (id: string, weight: number) => {
       const clamped = clampWeight(weight);
@@ -186,6 +213,7 @@ export function PaneRoundTableProvider({
       toggleActive,
       activateOnlyModel,
       setModelWeight,
+      reorderSelectedIds,
     }),
     [
       selectedIds,
@@ -198,6 +226,7 @@ export function PaneRoundTableProvider({
       toggleActive,
       activateOnlyModel,
       setModelWeight,
+      reorderSelectedIds,
     ],
   );
 

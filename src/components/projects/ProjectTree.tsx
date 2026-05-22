@@ -129,8 +129,6 @@ export function ProjectTree({
     clearProjectFocusPath,
     selectProject,
     registerFocusProjectTree,
-    selectWorkspaceScreen,
-    focusComposer,
   } = useAppSelection();
   const { getPermissions, setPermissions, setDirectoryPermissions } =
     useProjects();
@@ -621,12 +619,6 @@ export function ProjectTree({
         if (last.isProjectRoot) selectProject(last.path);
         return;
       }
-      if (e.key === "ArrowRight") {
-        stopKey();
-        selectWorkspaceScreen();
-        requestAnimationFrame(() => focusComposer());
-        return;
-      }
       if (e.key === "ArrowLeft" && row.isDirectory && expandedPaths.has(row.path)) {
         if (editingProjects && projectRootPaths.has(row.path)) return;
         stopKey();
@@ -673,8 +665,6 @@ export function ProjectTree({
       projectRootPaths,
       renamingPath,
       selectProject,
-      selectWorkspaceScreen,
-      focusComposer,
     ],
   );
 
@@ -725,6 +715,7 @@ export function ProjectTree({
       tabIndex={0}
       aria-activedescendant={activeDescendant}
       aria-label="Project files"
+      data-ai-target="sidebar.projects.tree"
       className="space-y-0.5 pb-2 outline-none focus-visible:ring-0"
     >
       {visibleRows.map((row) => {

@@ -6,15 +6,19 @@ import type { ResponseLoadingState } from "@/types/chat";
 interface ResponseLoadingViewProps {
   loading: ResponseLoadingState;
   activities: AiToolActivityEvent[];
+  fullWidth?: boolean;
 }
 
 export function ResponseLoadingView({
   loading,
   activities,
+  fullWidth = false,
 }: ResponseLoadingViewProps) {
   return (
     <article className="flex w-full flex-col items-start gap-2">
-      <section className="w-full max-w-2xl space-y-3 py-1 pr-2">
+      <section
+        className={fullWidth ? "w-full space-y-3 py-1 pr-2" : "w-full max-w-2xl space-y-3 py-1 pr-2"}
+      >
         <RoundTableDiscussion
           modelIds={loading.targetModelIds}
           speakingModelIndex={loading.speakingModelIndex}

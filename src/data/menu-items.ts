@@ -1,12 +1,11 @@
 export type MenuActionId =
+  | "file.newAgent"
+  | "file.newProject"
   | "view.explorer"
   | "view.agentCart"
-  | "view.roundTablePanel"
-  | "view.workflowPanel"
   | "view.workspaceTerminal"
   | "view.workspaceBrowser"
-  | "view.toggleLeftSidebar"
-  | "view.toggleRightSidebar";
+  | "view.toggleLeftSidebar";
 
 export type MenuEntry =
   | { type: "separator" }
@@ -27,14 +26,13 @@ export type MenuEntry =
 
 /** Menu actions wired to real behavior in the app. */
 export const implementedMenuActions = new Set<MenuActionId>([
+  "file.newAgent",
+  "file.newProject",
   "view.explorer",
   "view.agentCart",
-  "view.roundTablePanel",
-  "view.workflowPanel",
   "view.workspaceTerminal",
   "view.workspaceBrowser",
   "view.toggleLeftSidebar",
-  "view.toggleRightSidebar",
 ]);
 
 export function isMenuEntryImplemented(entry: MenuEntry): boolean {
@@ -64,8 +62,13 @@ export const appMenuGroups: MenuGroup[] = [
   {
     label: "File",
     items: [
-      { type: "item", label: "New Chat", shortcut: "Ctrl+N" },
-      { type: "item", label: "New Project…" },
+      {
+        type: "item",
+        label: "New Agent",
+        shortcut: "Ctrl+N",
+        action: "file.newAgent",
+      },
+      { type: "item", label: "New Project…", action: "file.newProject" },
       { type: "separator" },
       { type: "item", label: "Open Project…", shortcut: "Ctrl+O" },
       {
@@ -156,12 +159,6 @@ export const appMenuGroups: MenuGroup[] = [
       },
       {
         type: "item",
-        label: "Workflows",
-        action: "view.workflowPanel",
-        checkable: true,
-      },
-      {
-        type: "item",
         label: "Terminal",
         shortcut: "Ctrl+`",
         action: "view.workspaceTerminal",
@@ -171,6 +168,7 @@ export const appMenuGroups: MenuGroup[] = [
         type: "item",
         label: "Browser",
         action: "view.workspaceBrowser",
+        checkable: true,
       },
       { type: "separator" },
       {
@@ -182,7 +180,6 @@ export const appMenuGroups: MenuGroup[] = [
           { type: "item", label: "High Contrast" },
           { type: "separator" },
           { type: "item", label: "Sidebar Left" },
-          { type: "item", label: "Sidebar Right" },
         ],
       },
       {
@@ -200,11 +197,6 @@ export const appMenuGroups: MenuGroup[] = [
         label: "Toggle Left Sidebar",
         shortcut: "Ctrl+B",
         action: "view.toggleLeftSidebar",
-      },
-      {
-        type: "item",
-        label: "Toggle Right Sidebar",
-        action: "view.toggleRightSidebar",
       },
       { type: "item", label: "Toggle Status Bar" },
       { type: "item", label: "Toggle Activity Bar" },

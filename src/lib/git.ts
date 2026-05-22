@@ -67,3 +67,11 @@ export async function gitCommit(
   requireTauri();
   return invoke<GitCommandResult>("git_commit", { path, message, stageAll });
 }
+
+export async function gitRestorePaths(
+  path: string,
+  paths: string[],
+): Promise<GitCommandResult> {
+  requireTauri();
+  return invoke<GitCommandResult>("git_restore_paths", { path, paths });
+}

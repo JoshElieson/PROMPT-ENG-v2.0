@@ -1,4 +1,6 @@
 import type { ProjectMemory } from "@/types/agent-memory";
+import { normalizeAgentPermissions } from "@/lib/agent-permissions";
+import { normalizeProjectTools } from "@/lib/project-tools";
 import type { Chat, ChatMessage, ChatThread } from "@/types/chat";
 import type { NodePermissions, Project } from "@/types/project";
 import { DEFAULT_PERMISSIONS } from "@/types/project";
@@ -84,7 +86,10 @@ function isChatThread(value: unknown): value is ChatThread {
     Array.isArray(value.messages) &&
     typeof value.createdAt === "number" &&
     typeof value.updatedAt === "number" &&
-    (value.title === undefined || typeof value.title === "string")
+    (value.title === undefined || typeof value.title === "string") &&
+    (value.systemPrompt === undefined || typeof value.systemPrompt === "string") &&
+    (value.agentPermissions === undefined ||
+      normalizeAgentPermissions(value.agentPermissions) != null)
   );
 }
 
@@ -166,9 +171,15 @@ export function loadChats(): Chat[] {
             rawWorkspace != null
               ? parseWorkspacePaneLayoutV2(rawWorkspace)
               : record.workspace;
-          return permissions
-            ? { ...record, permissions, workspace: workspace ?? undefined }
-            : { ...record, workspace: workspace ?? undefined };
+          const projectTools = normalizeProjectTools(
+            (record as unknown as Record<string, unknown>).projectTools,
+          );
+          const base = {
+            ...record,
+            projectTools,
+            workspace: workspace ?? undefined,
+          };
+          return permissions ? { ...base, permissions } : base;
         }
         if (isLegacyChat(item)) {
           return migrateLegacyChat(item, permCopy);

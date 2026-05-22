@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["unstable"] }
+tauri = { version = "2", features = ["unstable", "image-ico", "image-png"] }
 url = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
@@ -26,9 +26,18 @@ tauri-plugin-store = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "rt", "macros", "net", "io-util"] }
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.22"
 dotenvy = "0.15"
 portable-pty = "0.8"
 notify = "6.1"
 drag = "2.1.1"
+tauri-plugin-notification = "2.3.3"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows-sys = { version = "0.61", features = ["Win32_UI_Shell"] }
+windows = { version = "0.61", features = ["Data_Xml_Dom", "UI_Notifications", "Foundation"] }
 
