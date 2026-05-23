@@ -6,7 +6,7 @@ The app is designed for developers who want more control over AI-assisted coding
 
 # DOWNLOAD and INSTALLATION
 
-(Download the desktop app on our website)[https://pe-web-ebon.vercel.app/]
+[Download the desktop app on our website](https://pe-web-ebon.vercel.app/)
 
 ## Why I Built It
 
