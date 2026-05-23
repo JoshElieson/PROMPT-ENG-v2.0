@@ -4,6 +4,10 @@ FORGE is a desktop AI engineering IDE for working with multiple AI models, proje
 
 The app is designed for developers who want more control over AI-assisted coding: persistent project context, multi-model conversations, file-aware prompting, and a workspace built around engineering tasks rather than general chat.
 
+# DOWNLOAD and INSTALLATION
+
+(Download the desktop app on our website)[https://pe-web-ebon.vercel.app/]
+
 ## Why I Built It
 
 I wanted to explore what an AI-native development environment could look like beyond a normal chatbot. FORGE is my attempt to build a more structured AI engineering workspace: one that combines desktop performance, local file access, multi-model prompting, project organization, and agent-style collaboration.
