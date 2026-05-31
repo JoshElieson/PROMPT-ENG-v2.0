@@ -301,6 +301,7 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
       requestBottomPanelTab,
       clearBottomPanelBoot,
       bottomPanelKindsVisible,
+      reportBottomPanelKindsVisible,
       registerBottomPanelControl,
       toggleBottomPanelKind,
     ],

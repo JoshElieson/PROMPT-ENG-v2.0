@@ -1,0 +1,54 @@
+# Build Windows beta installers. Requires repository secrets:
+#   FORGE_BACKEND_URL, FORGE_BACKEND_TOKEN (for managed / zero-setup builds)
+#
+# Manual run: Actions → Build beta release → Run workflow
+name: Build beta release
+
+on:
+  workflow_dispatch:
+    inputs:
+      managed:
+        description: "Embed managed backend (zero-setup for users)"
+        type: boolean
+        default: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build managed release
+        if: inputs.managed
+        env:
+          FORGE_BACKEND_URL: ${{ secrets.FORGE_BACKEND_URL }}
+          FORGE_BACKEND_TOKEN: ${{ secrets.FORGE_BACKEND_TOKEN }}
+        run: npm run release:managed
+        shell: pwsh
+
+      - name: Build local-keys release
+        if: ${{ !inputs.managed }}
+        run: npm run release:beta
+        shell: pwsh
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-windows-1.0.0-1
+          path: |
+            release/1.0.0-1/*.exe
+            release/1.0.0-1/*.msi
+            release/1.0.0-1/SHA256SUMS.txt
+            release/1.0.0-1/BETA_INSTALL.txt
+            release/1.0.0-1/.env.example
+          if-no-files-found: error

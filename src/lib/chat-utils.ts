@@ -51,12 +51,13 @@ export function truncateChatTitle(text: string): string {
     : t;
 }
 
-/** @deprecated Prefer `fallbackWorkspaceTitle` from `@/lib/workspace-title`. */
-export function titleFromMessage(content: string): string {
-  const line = content.trim().split(/\r?\n/)[0] ?? "";
-  if (!line) return "New Chat";
-  return truncateChatTitle(line);
-}
+export const DEFAULT_WORKSPACE_TITLE = "New Chat";
+
+/** Stored workspace titles that are placeholders until the user names the project. */
+export const PLACEHOLDER_WORKSPACE_TITLES = new Set([
+  DEFAULT_WORKSPACE_TITLE,
+  "New Project",
+]);
 
 export function defaultThreadTitle(index: number): string {
   return `Agent ${index + 1}`;
@@ -65,4 +66,15 @@ export function defaultThreadTitle(index: number): string {
 export function threadDisplayTitle(thread: ChatThread, index: number): string {
   const custom = thread.title?.trim();
   return custom || defaultThreadTitle(index);
+}
+
+/** Sidebar/settings label for a workspace (never empty). */
+export function workspaceDisplayTitle(title: string | undefined): string {
+  const trimmed = title?.trim() ?? "";
+  return trimmed || DEFAULT_WORKSPACE_TITLE;
+}
+
+export function isPlaceholderWorkspaceTitle(title: string): boolean {
+  const trimmed = title.trim();
+  return !trimmed || PLACEHOLDER_WORKSPACE_TITLES.has(trimmed);
 }

@@ -175,21 +175,3 @@ export function recordResponseEstimates(
 
   return total;
 }
-
-export function formatTokenCount(tokens: number): string {
-  if (tokens < 1000) return String(Math.round(tokens));
-  if (tokens < 1_000_000) {
-    const k = tokens / 1000;
-    return k >= 100 ? `${Math.round(k)}k` : `${k.toFixed(1).replace(/\.0$/, "")}k`;
-  }
-  const m = tokens / 1_000_000;
-  return m >= 10 ? `${Math.round(m)}M` : `${m.toFixed(1).replace(/\.0$/, "")}M`;
-}
-
-export function formatCostUsd(costUsd: number): string {
-  if (costUsd < 0.0001) return "$0.00";
-  if (costUsd < 0.01) return `$${costUsd.toFixed(4)}`;
-  if (costUsd < 1) return `$${costUsd.toFixed(3)}`;
-  if (costUsd < 100) return `$${costUsd.toFixed(2)}`;
-  return `$${costUsd.toFixed(2)}`;
-}

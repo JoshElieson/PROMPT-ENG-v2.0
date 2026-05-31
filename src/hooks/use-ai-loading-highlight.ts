@@ -10,10 +10,15 @@ export function useAiLoadingHighlight(
   loading: boolean,
   fadeMs: number = DEFAULT_FADE_MS,
 ) {
-  const [visible, setVisible] = useState(false);
-  const [exiting, setExiting] = useState(false);
+  const [fadeActive, setFadeActive] = useState(false);
   const hadLoadingRef = useRef(false);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const visible = loading || fadeActive;
+
+  useEffect(() => {
+    if (loading) hadLoadingRef.current = true;
+  }, [loading]);
 
   useEffect(() => {
     if (fadeTimerRef.current) {
@@ -21,19 +26,13 @@ export function useAiLoadingHighlight(
       fadeTimerRef.current = null;
     }
 
-    if (loading) {
-      hadLoadingRef.current = true;
-      setVisible(true);
-      setExiting(false);
-      return;
-    }
+    if (loading) return;
 
     if (!hadLoadingRef.current) return;
 
-    setExiting(true);
+    setFadeActive(true);
     fadeTimerRef.current = setTimeout(() => {
-      setVisible(false);
-      setExiting(false);
+      setFadeActive(false);
       hadLoadingRef.current = false;
       fadeTimerRef.current = null;
     }, fadeMs);
@@ -46,5 +45,5 @@ export function useAiLoadingHighlight(
     };
   }, [loading, fadeMs]);
 
-  return { visible, exiting };
+  return { visible, exiting: fadeActive && !loading };
 }

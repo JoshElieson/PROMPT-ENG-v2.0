@@ -12,6 +12,16 @@ dist
 dist-ssr
 *.local
 .env
+backend/.env
+
+# Release binaries (upload via GitHub Releases, not git)
+release/**/*.exe
+release/**/*.msi
+release/**/*.dmg
+release/**/*.deb
+release/**/*.rpm
+release/**/*.AppImage
+release/**/*.zip
 
 # Editor directories and files
 .vscode/*

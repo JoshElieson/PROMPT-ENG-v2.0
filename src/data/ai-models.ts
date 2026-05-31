@@ -297,17 +297,3 @@ export function getModelById(id: string): AiModel | undefined {
 export function getTopModelForOrg(orgId: string): AiModel | undefined {
   return popularAiModels.find((m) => m.orgId === orgId);
 }
-
-export function buildRoundTableModels(selectedIds: string[]): RoundTableModel[] {
-  const selected = popularAiModels.filter((m) => selectedIds.includes(m.id));
-  if (selected.length === 0) return [];
-
-  const baseWeight = Math.floor(100 / selected.length);
-  let remainder = 100 - baseWeight * selected.length;
-
-  return selected.map((model) => {
-    const extra = remainder > 0 ? 1 : 0;
-    if (extra) remainder -= 1;
-    return { ...model, weight: baseWeight + extra };
-  });
-}

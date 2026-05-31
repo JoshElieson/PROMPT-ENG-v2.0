@@ -2,7 +2,6 @@ import { ChevronDown, Info, Settings2, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -37,8 +36,11 @@ import { dedupeProjectTools } from "@/lib/project-tools";
 import type { QueuedMessageBehavior } from "@/types/chat-behavior";
 import {
   DEFAULT_AGENT_SYSTEM_PROMPT,
+  DEFAULT_WORKSPACE_TITLE,
   defaultThreadTitle,
+  isPlaceholderWorkspaceTitle,
   threadDisplayTitle,
+  workspaceDisplayTitle,
 } from "@/lib/chat-utils";
 import {
   AGENT_PERMISSION_OPTIONS,
@@ -55,14 +57,6 @@ type ChatUtilityBarProps = {
   /** When false, only the chat settings control is shown (model dock lives on the chat pane overlay). */
   showModelDock?: boolean;
 };
-
-const DEFAULT_PROJECT_NAME = "New Chat";
-
-function projectNameDraft(title: string | undefined): string {
-  const trimmed = title?.trim() ?? "";
-  if (!trimmed || trimmed === DEFAULT_PROJECT_NAME) return "";
-  return trimmed;
-}
 
 function ChatSettingsOverlay({
   chatId,
@@ -92,8 +86,8 @@ function ChatSettingsOverlay({
     ? threadDisplayTitle(thread, threadIndex)
     : defaultThreadTitle(0);
 
-  const [agentName, setAgentName] = useState(
-    () => thread?.title?.trim() ?? "",
+  const [agentName, setAgentName] = useState(() =>
+    thread ? threadDisplayTitle(thread, threadIndex) : defaultThreadTitle(0),
   );
   const [systemPrompt, setSystemPrompt] = useState(
     () => thread?.systemPrompt?.trim() ?? "",
@@ -102,7 +96,7 @@ function ChatSettingsOverlay({
     () => resolveAgentPermissions(thread),
   );
   const [projectName, setProjectName] = useState(() =>
-    projectNameDraft(chat?.title),
+    workspaceDisplayTitle(chat?.title),
   );
   const [projectDescription, setProjectDescription] = useState(
     () => chat?.projectDescription?.trim() ?? "",
@@ -116,22 +110,16 @@ function ChatSettingsOverlay({
   const [queuedMessageBehavior, setQueuedMessageBehavior] =
     useState<QueuedMessageBehavior>(() => resolveQueuedMessageBehavior(chat));
 
-  useEffect(() => {
-    setAgentName(thread?.title?.trim() ?? "");
-    setSystemPrompt(thread?.systemPrompt?.trim() ?? "");
-    setAgentPermissions(resolveAgentPermissions(thread));
-    setProjectName(projectNameDraft(chat?.title));
-    setProjectDescription(chat?.projectDescription?.trim() ?? "");
-    setProjectTools(dedupeProjectTools(chat?.projectTools ?? []));
-    setAutoScrollEnabled(resolveAutoScrollEnabled(chat));
-    setQueuedMessageBehavior(resolveQueuedMessageBehavior(chat));
-  }, [chat, thread, threadIndex]);
-
   const persistAgentName = useCallback(
     (value: string) => {
-      patchAgentSettings(chatId, threadId, { title: value });
+      const trimmed = value.trim();
+      const isDefault = !trimmed || trimmed === defaultAgentName;
+      patchAgentSettings(chatId, threadId, {
+        title: isDefault ? "" : trimmed,
+      });
+      if (isDefault) setAgentName(defaultAgentName);
     },
-    [chatId, patchAgentSettings, threadId],
+    [chatId, defaultAgentName, patchAgentSettings, threadId],
   );
 
   const persistSystemPrompt = useCallback(
@@ -162,9 +150,13 @@ function ChatSettingsOverlay({
   const persistProjectName = useCallback(
     (value: string) => {
       const trimmed = value.trim();
-      if (trimmed) patchWorkspaceSettings(chatId, { title: trimmed });
+      if (!trimmed || isPlaceholderWorkspaceTitle(trimmed)) {
+        setProjectName(workspaceDisplayTitle(chat?.title));
+        return;
+      }
+      patchWorkspaceSettings(chatId, { title: trimmed });
     },
-    [chatId, patchWorkspaceSettings],
+    [chat?.title, chatId, patchWorkspaceSettings],
   );
 
   const persistProjectDescription = useCallback(
@@ -323,7 +315,7 @@ function ChatSettingsOverlay({
               <span className="text-muted-foreground text-[11px]">Project Name</span>
               <input
                 value={projectName}
-                placeholder={DEFAULT_PROJECT_NAME}
+                placeholder={DEFAULT_WORKSPACE_TITLE}
                 data-ai-target="chat.settings.project-name"
                 onChange={(e) => setProjectName(e.target.value)}
                 onBlur={() => persistProjectName(projectName)}
@@ -463,14 +455,14 @@ export function ChatUtilityBar({
   const [settingsPortal, setSettingsPortal] = useState<HTMLElement | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
-  useLayoutEffect(() => {
-    if (!settingsOpen) {
-      setSettingsPortal(null);
-      return;
-    }
-    setSettingsPortal(
-      barRef.current?.closest<HTMLElement>('[aria-label="Chat pane"]') ?? null,
-    );
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const frame = requestAnimationFrame(() => {
+      setSettingsPortal(
+        barRef.current?.closest<HTMLElement>('[aria-label="Chat pane"]') ?? null,
+      );
+    });
+    return () => cancelAnimationFrame(frame);
   }, [settingsOpen]);
 
   const highlightedSet = useMemo(() => new Set(highlightIds), [highlightIds]);
@@ -545,6 +537,7 @@ export function ChatUtilityBar({
       {settingsOpen && settingsPortal
         ? createPortal(
             <ChatSettingsOverlay
+              key={`${chatId}:${threadId}`}
               chatId={chatId}
               threadId={threadId}
               onClose={closeSettings}

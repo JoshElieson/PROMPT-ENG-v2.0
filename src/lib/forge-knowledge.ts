@@ -466,10 +466,6 @@ function buildKnowledgeBase(): ForgeKnowledgeBase {
 
 const FORGE_KNOWLEDGE_BASE = buildKnowledgeBase();
 
-export function getForgeKnowledgeBase(): ForgeKnowledgeBase {
-  return FORGE_KNOWLEDGE_BASE;
-}
-
 export function isForgeKnowledgeQuery(query: string): boolean {
   const normalized = query.toLowerCase();
   if (!normalized.trim()) return false;

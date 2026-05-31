@@ -75,6 +75,10 @@ The desktop app reads:
 
 When `FORGE_BACKEND_URL` is set, installed users do not need to create a local `.env` for AI keys.
 
+### Beta distribution (full guide)
+
+See **[BETA_RELEASE.md](./BETA_RELEASE.md)** for hosting the managed backend, building zero-setup installers, and publishing downloads.
+
 ### Beta website release (v1.0)
 
 Use this to generate upload-ready files in one command:
@@ -85,15 +89,19 @@ npm run release:beta
 
 This creates `release/1.0.0-1/` and copies installer artifacts plus `SHA256SUMS.txt` and `.env.example`.
 
-### Managed backend installer release (no user config)
+### Beta installer (zero setup for testers)
+
+Set your hosted backend URL and token once at **build** time — testers never edit `.env`:
 
 ```powershell
-$env:FORGE_BACKEND_URL="https://forge-api.yourdomain.com"
-$env:FORGE_BACKEND_TOKEN="same-token-as-backend"
-npm run release:managed
+$env:FORGE_BACKEND_URL="https://forge-api.onrender.com"
+$env:FORGE_BACKEND_TOKEN="same-as-BACKEND_CLIENT_TOKEN-on-Render"
+npm run release:beta
 ```
 
-This embeds managed-backend defaults into the desktop binary, so users can install and chat without entering API keys.
+This embeds the backend connection into the installer. Ship only the files from `release/1.0.0-1/`.
+
+For a build where each user brings their own API keys (not beta): `npm run release:local`
 
 ### Installed app config
 

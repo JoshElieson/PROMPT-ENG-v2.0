@@ -51,32 +51,3 @@ export function loadLayoutBool(key: string, defaultValue: boolean): boolean {
 export function saveLayoutBool(key: string, value: boolean): void {
   localStorage.setItem(key, JSON.stringify(value));
 }
-
-export function loadLayoutBoolMap<T extends Record<string, boolean>>(
-  key: string,
-  defaults: T,
-): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return defaults;
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object") return defaults;
-
-    const result = { ...defaults };
-    for (const k of Object.keys(defaults) as (keyof T)[]) {
-      if (typeof parsed[k as string] === "boolean") {
-        result[k] = parsed[k as string] as T[keyof T];
-      }
-    }
-    return result;
-  } catch {
-    return defaults;
-  }
-}
-
-export function saveLayoutBoolMap<T extends Record<string, boolean>>(
-  key: string,
-  value: T,
-): void {
-  localStorage.setItem(key, JSON.stringify(value));
-}

@@ -1,4 +1,6 @@
 fn main() {
+    println!("cargo:rerun-if-env-changed=FORGE_BACKEND_URL");
+    println!("cargo:rerun-if-env-changed=FORGE_BACKEND_TOKEN");
     println!("cargo:rerun-if-changed=tauri.conf.json");
     let icons_dir = std::path::Path::new("icons");
     if let Ok(entries) = std::fs::read_dir(icons_dir) {

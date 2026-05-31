@@ -1081,10 +1081,6 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             toolPatches,
           );
           patchWorkspaceSettings(chatId, { projectTools: nextTools });
-          chatSnapshot = {
-            ...chatSnapshot,
-            projectTools: nextTools.length > 0 ? nextTools : undefined,
-          };
         }
 
         for (const action of actions) {

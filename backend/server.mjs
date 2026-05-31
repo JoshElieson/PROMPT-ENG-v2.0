@@ -31,6 +31,25 @@ app.use((req, res, next) => {
   next();
 });
 
+function providerConfigured(envName) {
+  return Boolean((process.env[envName] || "").trim());
+}
+
+app.get("/healthz", (_req, res) => {
+  res.json({
+    ok: true,
+    service: "forge-managed-backend",
+    authRequired: Boolean(clientToken),
+    providers: {
+      openai: providerConfigured("OPENAI_API_KEY"),
+      anthropic: providerConfigured("ANTHROPIC_API_KEY"),
+      gemini: providerConfigured("GEMINI_API_KEY"),
+      deepseek: providerConfigured("DEEPSEEK_API_KEY"),
+      xai: providerConfigured("XAI_API_KEY"),
+    },
+  });
+});
+
 function requireDesktopToken(req, res, next) {
   if (!clientToken) {
     return next();
@@ -44,10 +63,6 @@ function requireDesktopToken(req, res, next) {
 }
 
 app.use(requireDesktopToken);
-
-app.get("/healthz", (_req, res) => {
-  res.json({ ok: true, service: "forge-managed-backend" });
-});
 
 function providerKeyOrThrow(envName) {
   const value = (process.env[envName] || "").trim();

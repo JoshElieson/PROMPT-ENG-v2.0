@@ -9,9 +9,6 @@ export interface AuthUser {
   email: string | null;
 }
 
-/** @deprecated Use AuthUser */
-export type GitHubUser = AuthUser;
-
 export interface AuthSession {
   accessToken: string;
   user: AuthUser;

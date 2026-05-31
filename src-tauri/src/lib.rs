@@ -36,7 +36,7 @@ use terminal::{
     terminal_kill, terminal_resize, terminal_spawn, terminal_write, TerminalState,
 };
 use agent_notifications::show_agent_finish_notification;
-use ai_config::load_dotenv;
+use ai_config::{ai_connection_status, load_dotenv};
 use github_auth::{
     github_complete_device_login, github_fetch_user, github_poll_device_token,
     github_start_device_flow, github_wait_for_device_token,
@@ -81,6 +81,7 @@ pub fn run() {
             google_complete_oauth,
             ai_chat_complete,
             ai_chat_synthesize,
+            ai_connection_status,
             start_file_drag,
             open_terminal_run_command,
             terminal_spawn,

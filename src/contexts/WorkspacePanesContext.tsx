@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -61,7 +60,7 @@ export function WorkspacePanesProvider({ children }: { children: ReactNode }) {
   const splitOrientation: "horizontal" | "vertical" =
     activeLayoutId === "horizontal" ? "horizontal" : "vertical";
   const availableLeafIds = useMemo(() => collectLeafIds(layout.root), [layout.root]);
-  const [visibleLeafIdsState, setVisibleLeafIdsState] = useState<string[]>([]);
+  const [visibleLeafIdsRaw, setVisibleLeafIdsRaw] = useState<string[]>([]);
   const [dragLeafId, setDragLeafId] = useState<string | null>(null);
 
   const paneCount = useMemo(() => countPanes(layout.root), [layout.root]);
@@ -69,7 +68,7 @@ export function WorkspacePanesProvider({ children }: { children: ReactNode }) {
   const setFocusedLeafId = useCallback(
     (leafId: string) => {
       patchActiveWorkspaceLayout((prev) => ({ ...prev, focusedLeafId: leafId }));
-      setVisibleLeafIdsState((prev) => {
+      setVisibleLeafIdsRaw((prev) => {
         const normalized = normalizeVisiblePaneIds(
           prev,
           availableLeafIds,
@@ -118,20 +117,20 @@ export function WorkspacePanesProvider({ children }: { children: ReactNode }) {
     [layout],
   );
 
-  useEffect(() => {
-    setVisibleLeafIdsState((prev) =>
+  const visibleLeafIdsState = useMemo(
+    () =>
       normalizeVisiblePaneIds(
-        prev,
+        visibleLeafIdsRaw,
         availableLeafIds,
         normalizedLayout.focusedLeafId,
         2,
       ),
-    );
-  }, [availableLeafIds, normalizedLayout.focusedLeafId]);
+    [visibleLeafIdsRaw, availableLeafIds, normalizedLayout.focusedLeafId],
+  );
 
   const setVisibleLeafIds = useCallback(
     (ids: string[]) => {
-      setVisibleLeafIdsState(
+      setVisibleLeafIdsRaw(
         normalizeVisiblePaneIds(ids, availableLeafIds, normalizedLayout.focusedLeafId, 2),
       );
     },

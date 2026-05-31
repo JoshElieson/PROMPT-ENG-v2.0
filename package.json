@@ -11,6 +11,8 @@
     "tauri:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/tauri-dev.ps1",
     "release:beta": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/release-beta.ps1",
     "release:managed": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/release-managed.ps1",
+    "release:local": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/release-beta.ps1 -AllowLocalKeys",
+    "backend:token": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/new-backend-token.ps1",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },

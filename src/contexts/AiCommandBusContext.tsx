@@ -153,7 +153,6 @@ export function AiCommandBusProvider({ children }: { children: ReactNode }) {
           (targetMeta?.label ? findElementByText(targetMeta.label) : null);
         if (!el) {
           if (import.meta.env.DEV) {
-            // eslint-disable-next-line no-console
             console.warn(`[forge-ui] Target not found: ${command.targetId}`);
           }
           return;

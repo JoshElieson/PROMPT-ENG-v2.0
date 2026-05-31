@@ -208,7 +208,11 @@ export function WorkspaceBottomPanelProvider({
   const [activeTabId, setActiveTabId] = useState(() => tabs[0]!.id);
   const splitOrientation: "horizontal" | "vertical" =
     activeLayoutId === "horizontal" ? "horizontal" : "vertical";
-  const [visibleTabIdsState, setVisibleTabIdsState] = useState<string[]>([]);
+  const [visibleTabIdsRaw, setVisibleTabIdsRaw] = useState<string[]>([]);
+  const visibleTabIdsState = useMemo(
+    () => normalizeBottomPanelVisibleIds(tabs, visibleTabIdsRaw, activeTabId),
+    [tabs, visibleTabIdsRaw, activeTabId],
+  );
   const [dragTabId, setDragTabId] = useState<string | null>(null);
   const [twoPaneSizes, setTwoPaneSizes] = useState<[number, number]>([0.5, 0.5]);
   const [threePanePrimarySizes, setThreePanePrimarySizes] = useState<[number, number]>([
@@ -231,12 +235,6 @@ export function WorkspaceBottomPanelProvider({
   useEffect(() => {
     visibleTabIdsRef.current = visibleTabIdsState;
   }, [visibleTabIdsState]);
-
-  useEffect(() => {
-    setVisibleTabIdsState((prev) =>
-      normalizeBottomPanelVisibleIds(tabs, prev, activeTabId),
-    );
-  }, [activeTabId, tabs]);
 
   useEffect(() => {
     return () => {
@@ -264,7 +262,7 @@ export function WorkspaceBottomPanelProvider({
             })();
       setTabs((prev) => {
         const next = [...prev, tab];
-        setVisibleTabIdsState((visiblePrev) =>
+        setVisibleTabIdsRaw((visiblePrev) =>
           splitVisibleWithTab(next, visiblePrev, tab.id, "second"),
         );
         return next;
@@ -281,7 +279,7 @@ export function WorkspaceBottomPanelProvider({
     const existing = tabsRef.current.find((t) => t.kind === kind);
     if (existing) {
       setActiveTabId(existing.id);
-      setVisibleTabIdsState((prev) =>
+      setVisibleTabIdsRaw((prev) =>
         normalizeBottomPanelVisibleIds(tabsRef.current, prev, existing.id),
       );
     } else {
@@ -299,7 +297,7 @@ export function WorkspaceBottomPanelProvider({
             })();
       setTabs((prev) => {
         const next = [...prev, tab];
-        setVisibleTabIdsState((visiblePrev) =>
+        setVisibleTabIdsRaw((visiblePrev) =>
           normalizeBottomPanelVisibleIds(next, visiblePrev, tab.id),
         );
         return next;
@@ -317,7 +315,7 @@ export function WorkspaceBottomPanelProvider({
   const selectTab = useCallback(
     (tabId: string) => {
       requestTabFocus(tabId);
-      setVisibleTabIdsState((prev) =>
+      setVisibleTabIdsRaw((prev) =>
         normalizeBottomPanelVisibleIds(tabsRef.current, prev, tabId),
       );
       selectBottomPanel();
@@ -349,7 +347,7 @@ export function WorkspaceBottomPanelProvider({
   );
 
   const setVisibleTabIds = useCallback((ids: string[], focusTabId?: string) => {
-    setVisibleTabIdsState((prev) =>
+    setVisibleTabIdsRaw((prev) =>
       normalizeBottomPanelVisibleIds(
         tabsRef.current,
         ids.length > 0 ? ids : prev,
@@ -397,7 +395,7 @@ export function WorkspaceBottomPanelProvider({
       if (otherVisibleIds.length > 0) {
         const nextFocus =
           otherVisibleIds.find((id) => id === activeTabId) ?? otherVisibleIds[0]!;
-        setVisibleTabIdsState(
+        setVisibleTabIdsRaw(
           normalizeBottomPanelVisibleIds(currentTabs, otherVisibleIds, nextFocus),
         );
         setActiveTabId(nextFocus);
@@ -415,8 +413,10 @@ export function WorkspaceBottomPanelProvider({
     [activeTabId, closeTab, onClose],
   );
 
-  focusKindRef.current = focusKind;
-  hideKindRef.current = hideKind;
+  useEffect(() => {
+    focusKindRef.current = focusKind;
+    hideKindRef.current = hideKind;
+  }, [focusKind, hideKind]);
 
   useEffect(() => {
     if (!workspaceBottomPanelOpen) {

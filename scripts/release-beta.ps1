@@ -1,3 +1,7 @@
+param(
+  [switch]$AllowLocalKeys
+)
+
 $ErrorActionPreference = "Stop"
 
 $version = "1.0.0-1"
@@ -5,6 +9,45 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $releaseDir = Join-Path $repoRoot ("release\" + $version)
 $bundleRoot = Join-Path $repoRoot "src-tauri\target\release\bundle"
 $envExample = Join-Path $repoRoot ".env.example"
+$betaInstallTemplate = Join-Path $PSScriptRoot "templates\BETA_INSTALL.txt"
+
+$managed = -not $AllowLocalKeys
+
+if ($managed) {
+  $backendUrl = $env:FORGE_BACKEND_URL
+  $backendToken = $env:FORGE_BACKEND_TOKEN
+  if ([string]::IsNullOrWhiteSpace($backendUrl)) {
+    throw @"
+Beta release requires FORGE_BACKEND_URL (your Render URL, e.g. https://forge-api.onrender.com).
+Set it and FORGE_BACKEND_TOKEN, then run: npm run release:beta
+Generate a token with: npm run backend:token
+"@
+  }
+  if ([string]::IsNullOrWhiteSpace($backendToken)) {
+    throw "Beta release requires FORGE_BACKEND_TOKEN (must match Render BACKEND_CLIENT_TOKEN)."
+  }
+  $env:FORGE_BACKEND_URL = $backendUrl.Trim()
+  $env:FORGE_BACKEND_TOKEN = $backendToken.Trim()
+  try {
+    $uri = [Uri]$env:FORGE_BACKEND_URL
+    if (-not $uri.Scheme.StartsWith("http")) {
+      throw "URL must start with https://"
+    }
+    if ($uri.Host -notmatch '\.') {
+      throw @"
+FORGE_BACKEND_URL must be the full public Render URL, e.g. https://forge-api.onrender.com
+You entered a host without a domain: $($uri.Host)
+Copy the URL from Render Dashboard -> your web service -> URL (ends with .onrender.com)
+"@
+    }
+  } catch {
+    if ($_.Exception.Message -match 'FORGE_BACKEND_URL must be') {
+      throw
+    }
+    throw "FORGE_BACKEND_URL is not a valid URL: $($env:FORGE_BACKEND_URL)"
+  }
+  Write-Host "Zero-setup beta build - embedding backend URL: $($env:FORGE_BACKEND_URL)"
+}
 
 Set-Location $repoRoot
 
@@ -46,7 +89,16 @@ $checksums = foreach ($file in $copiedFiles) {
 
 Set-Content -Path (Join-Path $releaseDir "SHA256SUMS.txt") -Value $checksums
 
-if (Test-Path $envExample) {
+if ($managed -and (Test-Path $betaInstallTemplate)) {
+  Copy-Item -Path $betaInstallTemplate -Destination (Join-Path $releaseDir "BETA_INSTALL.txt") -Force
+  $hostOnly = ([Uri]$env:FORGE_BACKEND_URL).Host
+  @(
+    "FORGE beta build - zero-setup for testers"
+    "Managed backend host: $hostOnly"
+    "Embedded at compile time: FORGE_BACKEND_URL, FORGE_BACKEND_TOKEN"
+    "Testers do not need .env or API keys."
+  ) | Set-Content -Path (Join-Path $releaseDir "BUILD_INFO.txt")
+} elseif (Test-Path $envExample) {
   Copy-Item -Path $envExample -Destination (Join-Path $releaseDir ".env.example") -Force
 }
 
@@ -57,6 +109,9 @@ Write-Host ""
 Write-Host "Files:"
 $copiedFiles | Sort-Object Name | ForEach-Object { Write-Host ("  - " + $_.Name) }
 Write-Host "  - SHA256SUMS.txt"
-if (Test-Path $envExample) {
-  Write-Host "  - .env.example"
+if ($managed) {
+  Write-Host "  - BETA_INSTALL.txt"
+  Write-Host "  - BUILD_INFO.txt"
+} elseif (Test-Path $envExample) {
+  Write-Host "  - .env.example (local-keys build - not for beta testers)"
 }

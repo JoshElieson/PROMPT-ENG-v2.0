@@ -39,15 +39,23 @@ Health check:
 curl http://localhost:8080/healthz
 ```
 
+Response includes `providers` (which API keys are configured on the server) and `authRequired` (whether `BACKEND_CLIENT_TOKEN` is set).
+
 ## Deploy
 
-Deploy this folder to Render/Fly/Railway/Cloud Run.
+| Platform | Files |
+|----------|-------|
+| Render | `render.yaml` (root dir: `backend`) |
+| Fly.io | `fly.toml` + `Dockerfile` |
+| Any container host | `Dockerfile` |
 
 - Start command: `npm run start`
 - Build command: `npm install`
 - Port: `8080` (or set `PORT`)
 
 Set environment variables from `.env.example` in your host dashboard.
+
+Full beta playbook: [../BETA_RELEASE.md](../BETA_RELEASE.md).
 
 ## Build a zero-setup installer
 

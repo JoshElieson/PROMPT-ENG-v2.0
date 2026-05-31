@@ -1,6 +1,6 @@
 use crate::ai_config::{
-    api_key, base_url, resolve_api_model, synthesis_provider_for_models, validate_base_url,
-    Provider,
+    api_key, base_url, has_managed_backend, resolve_api_model, synthesis_provider_for_models,
+    validate_base_url, Provider,
 };
 use crate::xai_models::{
     default_account_chat_model, invalidate_cache, is_model_not_found_error, resolve_runtime_model,
@@ -48,6 +48,34 @@ fn provider_error(provider: Provider, context: &str, detail: &str) -> String {
         Provider::Xai => "xAI",
     };
     format!("{name} {context}: {detail}")
+}
+
+fn provider_http_error(provider: Provider, url: &str, err: reqwest::Error) -> String {
+    if err.is_builder() {
+        let hint = if has_managed_backend() {
+            "Set FORGE_BACKEND_URL to your full Render URL (https://your-app.onrender.com) and FORGE_BACKEND_TOKEN to match BACKEND_CLIENT_TOKEN, then rebuild with npm run release:beta."
+        } else {
+            "Check API keys and base URLs in .env - remove quotes and line breaks."
+        };
+        return provider_error(
+            provider,
+            "request failed",
+            &format!("Invalid URL or auth header (builder error). {hint} URL: {url}"),
+        );
+    }
+    if err.is_connect() || err.is_request() {
+        let hint = if has_managed_backend() {
+            "Cannot reach the managed backend. Rebuild the installer with FORGE_BACKEND_URL set to the full URL from Render (https://NAME.onrender.com), not an internal ID."
+        } else {
+            "Network error reaching the provider API."
+        };
+        return provider_error(
+            provider,
+            "request failed",
+            &format!("{hint} ({err}) URL: {url}"),
+        );
+    }
+    provider_error(provider, "request failed", &err.to_string())
 }
 
 fn extract_error_detail(data: &serde_json::Value, raw: &str) -> String {
@@ -488,7 +516,7 @@ async fn complete_openai(
         .json(&body)
         .send()
         .await
-        .map_err(|e| provider_error(Provider::OpenAi, "request failed", &e.to_string()))?;
+        .map_err(|e| provider_http_error(Provider::OpenAi, &url, e))?;
 
     let status = res.status();
     let data: serde_json::Value = res
@@ -559,7 +587,7 @@ async fn openai_agent_loop(
             .json(&body)
             .send()
             .await
-            .map_err(|e| provider_error(Provider::OpenAi, "request failed", &e.to_string()))?;
+            .map_err(|e| provider_http_error(Provider::OpenAi, &url, e))?;
 
         let status = res.status();
         let data: serde_json::Value = res
@@ -658,7 +686,7 @@ async fn complete_deepseek(
         .json(&body)
         .send()
         .await
-        .map_err(|e| provider_error(Provider::DeepSeek, "request failed", &e.to_string()))?;
+        .map_err(|e| provider_http_error(Provider::DeepSeek, &url, e))?;
 
     let status = res.status();
     let data: serde_json::Value = res
@@ -729,7 +757,7 @@ async fn deepseek_agent_loop(
             .json(&body)
             .send()
             .await
-            .map_err(|e| provider_error(Provider::DeepSeek, "request failed", &e.to_string()))?;
+            .map_err(|e| provider_http_error(Provider::DeepSeek, &url, e))?;
 
         let status = res.status();
         let data: serde_json::Value = res
@@ -828,7 +856,7 @@ async fn complete_xai_once(
         .json(&body)
         .send()
         .await
-        .map_err(|e| provider_error(Provider::Xai, "request failed", &e.to_string()))?;
+        .map_err(|e| provider_http_error(Provider::Xai, &url, e))?;
 
     let status = res.status();
     let raw = res
@@ -915,7 +943,7 @@ async fn xai_agent_loop_once(
             .json(&body)
             .send()
             .await
-            .map_err(|e| provider_error(Provider::Xai, "request failed", &e.to_string()))?;
+            .map_err(|e| provider_http_error(Provider::Xai, &url, e))?;
 
         let status = res.status();
         let raw = res
@@ -1096,7 +1124,7 @@ async fn complete_anthropic(
         .json(&body)
         .send()
         .await
-        .map_err(|e| provider_error(Provider::Anthropic, "request failed", &e.to_string()))?;
+        .map_err(|e| provider_http_error(Provider::Anthropic, &url, e))?;
 
     let status = res.status();
     let data: serde_json::Value = res
@@ -1181,7 +1209,7 @@ async fn anthropic_agent_loop(
             .json(&body)
             .send()
             .await
-            .map_err(|e| provider_error(Provider::Anthropic, "request failed", &e.to_string()))?;
+            .map_err(|e| provider_http_error(Provider::Anthropic, &url, e))?;
 
         let status = res.status();
         let data: serde_json::Value = res
@@ -1364,7 +1392,7 @@ async fn complete_gemini(
         .json(&body)
         .send()
         .await
-        .map_err(|e| provider_error(Provider::Google, "request failed", &e.to_string()))?;
+        .map_err(|e| provider_http_error(Provider::Google, &url, e))?;
 
     let status = res.status();
     let data: serde_json::Value = res
@@ -1438,7 +1466,7 @@ async fn gemini_agent_loop(
             .json(&body)
             .send()
             .await
-            .map_err(|e| provider_error(Provider::Google, "request failed", &e.to_string()))?;
+            .map_err(|e| provider_http_error(Provider::Google, &url, e))?;
 
         let status = res.status();
         let data: serde_json::Value = res

@@ -107,7 +107,6 @@ function parseUiCommands(raw: string): UICommand[] {
       continue;
     }
     if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
       console.warn("[forge-ui] Ignored invalid UI command", entry);
     }
   }

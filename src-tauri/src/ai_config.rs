@@ -1,3 +1,4 @@
+use serde_json::json;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,34 +44,97 @@ fn env_candidates() -> Vec<PathBuf> {
     candidates
 }
 
-fn managed_backend_url_raw() -> Option<String> {
+fn sanitize_env_value(value: &str) -> String {
+    value
+        .trim()
+        .trim_matches(|c| c == '"' || c == '\'')
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect()
+}
+
+fn read_managed_backend_url_unnormalized() -> Option<String> {
+    // Prefer compile-time values (beta installers) so a stray .env cannot override.
+    let embedded = option_env!("FORGE_BACKEND_URL")
+        .map(sanitize_env_value)
+        .filter(|s| !s.is_empty());
+    if embedded.is_some() {
+        return embedded;
+    }
     std::env::var("FORGE_BACKEND_URL")
         .ok()
-        .map(|s| s.trim().to_string())
+        .map(|s| sanitize_env_value(&s))
         .filter(|s| !s.is_empty())
-        .or_else(|| {
-            option_env!("FORGE_BACKEND_URL")
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-        })
+}
+
+fn normalize_managed_backend_url(raw: &str) -> Result<String, String> {
+    let mut url = sanitize_env_value(raw);
+    if url.is_empty() {
+        return Err("FORGE_BACKEND_URL is empty.".to_string());
+    }
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        url = format!("https://{url}");
+    }
+    let parsed = url::Url::parse(&url)
+        .map_err(|e| format!("FORGE_BACKEND_URL is not a valid URL ({url}): {e}"))?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| format!("FORGE_BACKEND_URL is missing a host: {url}"))?;
+    validate_managed_backend_host(host)?;
+    Ok(url.trim_end_matches('/').to_string())
+}
+
+fn validate_managed_backend_host(host: &str) -> Result<(), String> {
+    if host == "localhost" || host.starts_with("127.") {
+        return Ok(());
+    }
+    if !host.contains('.') {
+        return Err(format!(
+            "FORGE_BACKEND_URL host \"{host}\" is not a public URL. \
+Use the full Render address from your dashboard, e.g. https://your-service-name.onrender.com \
+(not an internal service ID or slug by itself)."
+        ));
+    }
+    Ok(())
+}
+
+fn managed_backend_url_raw() -> Option<String> {
+    let raw = read_managed_backend_url_unnormalized()?;
+    normalize_managed_backend_url(&raw).ok()
 }
 
 fn managed_backend_token_raw() -> Option<String> {
+    let embedded = option_env!("FORGE_BACKEND_TOKEN")
+        .map(sanitize_env_value)
+        .filter(|s| !s.is_empty());
+    if embedded.is_some() {
+        return embedded;
+    }
     std::env::var("FORGE_BACKEND_TOKEN")
         .ok()
-        .map(|s| s.trim().to_string())
+        .map(|s| sanitize_env_value(&s))
         .filter(|s| !s.is_empty())
-        .or_else(|| {
-            option_env!("FORGE_BACKEND_TOKEN")
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-        })
 }
 
 pub fn has_managed_backend() -> bool {
-    managed_backend_url_raw().is_some()
+    read_managed_backend_url_unnormalized().is_some()
+}
+
+/// Validates managed-backend settings; call before chat when `has_managed_backend()` is true.
+pub fn validate_managed_backend_config() -> Result<(), String> {
+    if !has_managed_backend() {
+        return Ok(());
+    }
+    let raw = read_managed_backend_url_unnormalized()
+        .ok_or_else(|| "FORGE_BACKEND_URL is not set.".to_string())?;
+    let _ = normalize_managed_backend_url(&raw)?;
+    if managed_backend_token_raw().is_none() {
+        return Err(
+            "FORGE_BACKEND_TOKEN is not set. It must match BACKEND_CLIENT_TOKEN on your Render service."
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 fn managed_backend_url_for_provider(provider: Provider) -> Option<String> {
@@ -121,15 +185,16 @@ pub fn api_key(provider: Provider) -> Option<String> {
     };
     let explicit = key
         .ok()
-        .map(|s| s.trim().to_string())
+        .map(|s| sanitize_env_value(&s))
         .filter(|s| !s.is_empty());
     if explicit.is_some() {
         return explicit;
     }
     if has_managed_backend() {
-        return Some(
-            managed_backend_token_raw().unwrap_or_else(|| "forge-desktop-managed".to_string()),
-        );
+        return managed_backend_token_raw().or_else(|| {
+            // Legacy fallback when backend has no BACKEND_CLIENT_TOKEN set.
+            Some("forge-desktop-managed".to_string())
+        });
     }
     None
 }
@@ -156,6 +221,9 @@ Set a real key from https://console.anthropic.com or remove Claude from the Roun
 }
 
 pub fn base_url(provider: Provider, default: &str) -> String {
+    if let Some(url) = managed_backend_url_for_provider(provider) {
+        return url;
+    }
     let var = match provider {
         Provider::OpenAi => "OPENAI_BASE_URL",
         Provider::Anthropic => "ANTHROPIC_BASE_URL",
@@ -165,12 +233,12 @@ pub fn base_url(provider: Provider, default: &str) -> String {
     };
     if let Some(url) = std::env::var(var)
         .ok()
-        .map(|s| s.trim().to_string())
+        .map(|s| sanitize_env_value(&s))
         .filter(|s| !s.is_empty())
     {
         return url;
     }
-    managed_backend_url_for_provider(provider).unwrap_or_else(|| default.to_string())
+    default.to_string()
 }
 
 fn provider_name(provider: Provider) -> &'static str {
@@ -252,6 +320,7 @@ pub fn validate_base_url(provider: Provider, url: &str) -> Result<(), String> {
 }
 
 pub fn resolve_api_model(model_id: &str) -> Result<(Provider, String), String> {
+    validate_managed_backend_config()?;
     let model_id = model_id.trim();
     let provider = provider_for_model(model_id).ok_or_else(|| {
         format!(
@@ -409,4 +478,22 @@ pub fn synthesis_provider_for_models(model_ids: &[&str]) -> Option<(Provider, St
         }
     }
     default_synthesis_provider()
+}
+
+/// Desktop connectivity summary for beta troubleshooting.
+#[tauri::command]
+pub fn ai_connection_status() -> serde_json::Value {
+    let config_error = if has_managed_backend() {
+        validate_managed_backend_config()
+            .err()
+            .map(|e| e.to_string())
+    } else {
+        None
+    };
+    json!({
+        "managedBackend": has_managed_backend(),
+        "backendUrl": managed_backend_url_raw(),
+        "backendTokenConfigured": managed_backend_token_raw().is_some(),
+        "configError": config_error,
+    })
 }

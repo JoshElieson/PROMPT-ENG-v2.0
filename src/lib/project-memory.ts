@@ -421,18 +421,6 @@ export function getRelevantContextForAgent(
   };
 }
 
-export function markMemoryStale(
-  projectMemory: ProjectMemory,
-  recordId: string,
-  stale = true,
-): boolean {
-  const record = projectMemory.records.find((item) => item.id === recordId);
-  if (!record) return false;
-  record.stale = stale;
-  projectMemory.lastUpdatedAt = Date.now();
-  return true;
-}
-
 export function formatRetrievedContextForPrompt(
   retrieved: RetrievedAgentContext,
 ): string | null {

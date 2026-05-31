@@ -1,0 +1,30 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Create service from repo; set secret env vars in the Render dashboard.
+services:
+  - type: web
+    name: forge-managed-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PORT
+        value: "8080"
+      - key: ALLOWED_ORIGIN
+        value: "*"
+      # Set in Render dashboard (sync with FORGE_BACKEND_TOKEN in installer build):
+      - key: BACKEND_CLIENT_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: XAI_API_KEY
+        sync: false
