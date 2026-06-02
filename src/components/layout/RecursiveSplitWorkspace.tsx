@@ -392,6 +392,7 @@ function ChatPaneBody({
     activeChatId,
     responseLoading,
     getStreamingActivities,
+    getAgentActivityEvents,
     forceKillThread,
     truncateThreadAfterMessage,
   } = useChats();
@@ -431,6 +432,10 @@ function ChatPaneBody({
     if (!loadingForPane || !activeChatId) return [];
     return getStreamingActivities(activeChatId, leaf.threadId);
   }, [activeChatId, getStreamingActivities, leaf.threadId, loadingForPane]);
+  const agentActivityEvents = useMemo(() => {
+    if (!activeChatId) return [];
+    return getAgentActivityEvents(activeChatId, leaf.threadId);
+  }, [activeChatId, getAgentActivityEvents, leaf.threadId]);
   const loadingHighlightIds = useMemo(() => {
     if (!loadingForPane) return [];
     const speakingIdx = loadingForPane.speakingModelIndex;
@@ -470,9 +475,58 @@ function ChatPaneBody({
     });
   }, []);
 
+  const scrollToPreviousUserMessage = useCallback(() => {
+    const scrollEl = scrollElRef.current;
+    if (!scrollEl) return;
+
+    const userMessages = Array.from(
+      scrollEl.querySelectorAll<HTMLElement>('[data-chat-message-role="user"]'),
+    );
+    if (userMessages.length === 0) return;
+
+    const currentTop = scrollEl.scrollTop;
+    const target = [...userMessages]
+      .reverse()
+      .find((messageEl) => messageEl.offsetTop < currentTop - 8);
+    if (!target) return;
+
+    const nextTop = Math.max(0, target.offsetTop - 12);
+    scrollEl.scrollTo({ top: nextTop, behavior: "smooth" });
+    target.focus({ preventScroll: true });
+  }, []);
+
   useEffect(() => {
     if (autoScrollEnabled && loadingForPane) scrollToEnd();
   }, [autoScrollEnabled, loadingForPane, scrollToEnd]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    const onGoPreviousMessage = () => {
+      selectWorkspaceScreen();
+      scrollToPreviousUserMessage();
+    };
+    const onGoNextMessage = () => {
+      selectWorkspaceScreen();
+      scrollElRef.current?.scrollTo({
+        top: scrollElRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+      composerRef.current?.focus();
+      const inputEl = paneRef.current?.querySelector<HTMLTextAreaElement>(
+        "[data-composer-textarea]",
+      );
+      if (!inputEl) return;
+      const end = inputEl.value.length;
+      inputEl.setSelectionRange(end, end);
+    };
+
+    window.addEventListener("forge:go-previous-message", onGoPreviousMessage);
+    window.addEventListener("forge:go-next-message", onGoNextMessage);
+    return () => {
+      window.removeEventListener("forge:go-previous-message", onGoPreviousMessage);
+      window.removeEventListener("forge:go-next-message", onGoNextMessage);
+    };
+  }, [isActive, scrollToPreviousUserMessage, selectWorkspaceScreen]);
 
   const scheduleScrollPersist = useCallback(
     (top: number) => {
@@ -703,6 +757,7 @@ function ChatPaneBody({
                 <ResponseLoadingView
                   loading={loadingForPane}
                   activities={loadingActivities}
+                  activityEvents={agentActivityEvents}
                 />
               )}
             </section>

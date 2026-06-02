@@ -50,6 +50,8 @@ interface RoundTableContextValue {
   toggleActive: (id: string) => void;
   /** Enable exactly one selected model for chat (disables all other active models). */
   activateOnlyModel: (id: string) => void;
+  /** Add the model to the cart if needed, then make it the only active model. */
+  selectAndActivateOnlyModel: (id: string) => void;
   setModelWeight: (id: string, weight: number) => void;
   reorderSelectedIds: (
     sourceId: string,
@@ -151,6 +153,18 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
     });
   }, [selectedIds]);
 
+  const selectAndActivateOnlyModel = useCallback((id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setActiveIds([id]);
+    setWeights((w) => {
+      const restored = weightForModel(w, id);
+      return {
+        ...w,
+        [id]: restored > 0 ? restored : DEFAULT_ROUND_TABLE_WEIGHTS[id] ?? 100,
+      };
+    });
+  }, []);
+
   const reorderSelectedIds = useCallback(
     (sourceId: string, targetId: string, side: DropSide) => {
       setSelectedIds((prev) => {
@@ -205,6 +219,7 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
       deselectModels,
       toggleActive,
       activateOnlyModel,
+      selectAndActivateOnlyModel,
       setModelWeight,
       reorderSelectedIds,
     }),
@@ -218,6 +233,7 @@ export function RoundTableProvider({ children }: { children: ReactNode }) {
       deselectModels,
       toggleActive,
       activateOnlyModel,
+      selectAndActivateOnlyModel,
       setModelWeight,
       reorderSelectedIds,
     ],

@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { basename, listDescendantPaths, pickProjectDirectory } from "@/lib/fs";
+import { basename, pickProjectDirectory } from "@/lib/fs";
 import { findOwningProject, pathsEqual } from "@/lib/project-paths";
 import { loadProjects, saveProjects } from "@/lib/storage";
 import { useChats } from "@/contexts/ChatsContext";
@@ -106,15 +106,11 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
 
   const setDirectoryPermissions = useCallback(
     async (dirPath: string, patch: Partial<NodePermissions>) => {
-      const descendants = await listDescendantPaths(dirPath);
       patchActivePermissions((prev) => {
-        const next = { ...prev };
-        const apply = (path: string) => {
-          next[path] = { ...(prev[path] ?? DEFAULT_PERMISSIONS), ...patch };
+        return {
+          ...prev,
+          [dirPath]: { ...(prev[dirPath] ?? DEFAULT_PERMISSIONS), ...patch },
         };
-        apply(dirPath);
-        for (const path of descendants) apply(path);
-        return next;
       });
     },
     [patchActivePermissions],
@@ -166,15 +162,11 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
       dirPath: string,
       patch: Partial<NodePermissions>,
     ) => {
-      const descendants = await listDescendantPaths(dirPath);
       updateChatPermissions(chatId, (prev) => {
-        const next = { ...prev };
-        const apply = (path: string) => {
-          next[path] = { ...(prev[path] ?? DEFAULT_PERMISSIONS), ...patch };
+        return {
+          ...prev,
+          [dirPath]: { ...(prev[dirPath] ?? DEFAULT_PERMISSIONS), ...patch },
         };
-        apply(dirPath);
-        for (const path of descendants) apply(path);
-        return next;
       });
     },
     [updateChatPermissions],

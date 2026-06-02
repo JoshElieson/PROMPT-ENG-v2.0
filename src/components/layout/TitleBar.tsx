@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ForgeWordmark } from "@/components/brand/ForgeWordmark";
 import { MenuBar } from "@/components/layout/MenuBar";
 import { isTauri } from "@/lib/tauri";
+import { toggleWindowMaximize } from "@/lib/window-controls";
 import { startWindowDrag, tauriDragRegionProps } from "@/lib/window-drag";
 import { cn } from "@/lib/utils";
 
@@ -62,7 +63,7 @@ export function TitleBar() {
           <button
             type="button"
             title={isMaximized ? "Restore" : "Maximize"}
-            onClick={() => void appWindow.toggleMaximize()}
+            onClick={() => void toggleWindowMaximize()}
             className="text-muted-foreground hover:bg-panel-elevated/85 hover:text-foreground inline-flex w-11 items-center justify-center transition-colors"
           >
             <Square className="h-3 w-3" strokeWidth={2} />

@@ -130,8 +130,7 @@ export function ProjectTree({
     selectProject,
     registerFocusProjectTree,
   } = useAppSelection();
-  const { getPermissions, setPermissions, setDirectoryPermissions } =
-    useProjects();
+  const { getPermissions, setDirectoryPermissions } = useProjects();
   const treeRef = useRef<HTMLDivElement>(null);
   const childrenByPathRef = useRef<Record<string, FsEntry[] | undefined>>({});
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
@@ -381,17 +380,15 @@ export function ProjectTree({
 
   const toggleRowAccess = useCallback(
     async (row: VisibleRow) => {
+      if (!row.isProjectRoot) return;
       if (editingProjects && row.isProjectRoot) return;
       if (togglingAccessPath === row.path) return;
 
       const nextEnabled = !getPermissions(row.path).enabled;
       setTogglingAccessPath(row.path);
       try {
-        if (row.isDirectory) {
-          await setDirectoryPermissions(row.path, { enabled: nextEnabled });
-        } else {
-          setPermissions(row.path, { enabled: nextEnabled });
-        }
+        if (!row.isDirectory) return;
+        await setDirectoryPermissions(row.path, { enabled: nextEnabled });
       } finally {
         setTogglingAccessPath(null);
       }
@@ -400,7 +397,6 @@ export function ProjectTree({
       editingProjects,
       togglingAccessPath,
       getPermissions,
-      setPermissions,
       setDirectoryPermissions,
     ],
   );
@@ -639,6 +635,7 @@ export function ProjectTree({
         return;
       }
       if (e.key === " " || e.code === "Space") {
+        if (!row.isProjectRoot) return;
         if (editingProjects && row.isProjectRoot) return;
         stopKey();
         setFocusedPath(row.path);
@@ -810,7 +807,7 @@ function ProjectTreeRow({
   onFinishRename: () => void;
   onEntryRenamed: (oldPath: string, newPath: string) => void;
 }) {
-  const { getPermissions, setPermissions, setDirectoryPermissions, removeProject, setError } =
+  const { getPermissions, setDirectoryPermissions, removeProject, setError } =
     useProjects();
   const permissions = getPermissions(row.path);
   const [draftName, setDraftName] = useState(row.name);
@@ -871,11 +868,8 @@ function ProjectTreeRow({
 
   const handleAccessChange = async (enabled: boolean) => {
     if (isAccessToggling) return;
-    if (row.isDirectory) {
-      await setDirectoryPermissions(row.path, { enabled });
-      return;
-    }
-    setPermissions(row.path, { enabled });
+    if (!row.isDirectory) return;
+    await setDirectoryPermissions(row.path, { enabled });
   };
 
   const handleChevronClick = (e: MouseEvent) => {
@@ -1039,13 +1033,13 @@ function ProjectTreeRow({
           >
             <Minus className="size-3" strokeWidth={2.5} />
           </button>
-        ) : (
+        ) : row.isProjectRoot ? (
           <AccessCheckbox
             enabled={permissions.enabled}
             disabled={isAccessToggling}
             onChange={(enabled) => void handleAccessChange(enabled)}
           />
-        )}
+        ) : null}
       </div>
   );
 

@@ -17,8 +17,30 @@ export function loadProjects(): Project[] {
   try {
     const raw = localStorage.getItem(PROJECTS_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as Project[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (value): value is Partial<Project> =>
+          Boolean(value) && typeof value === "object",
+      )
+      .map((project) => {
+        const now = Date.now();
+        const addedAt =
+          typeof project.addedAt === "number" ? project.addedAt : now;
+        const normalized: Project = {
+          id:
+            typeof project.id === "string" && project.id.length > 0
+              ? project.id
+              : crypto.randomUUID(),
+          name: typeof project.name === "string" ? project.name : "Project",
+          rootPath:
+            typeof project.rootPath === "string" ? project.rootPath : "",
+          addedAt,
+        };
+        return normalized;
+      })
+      .filter((project) => project.rootPath.length > 0);
   } catch {
     return [];
   }

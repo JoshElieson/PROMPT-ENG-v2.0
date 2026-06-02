@@ -17,6 +17,7 @@ import {
   type LayoutPresetId,
 } from "@/lib/layout-defaults";
 import { loadLayoutBool, saveLayoutBool } from "@/lib/layout-storage";
+import { closeAppWindow, toggleWindowMaximize } from "@/lib/window-controls";
 
 const WORKSPACE_BOTTOM_PANEL_KEY = "prompt:workspace-terminal-open";
 
@@ -200,6 +201,22 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     [workspaceBottomPanelOpen, requestBottomPanelTab],
   );
 
+  const openBottomPanelKind = useCallback(
+    (kind: BottomPanelBootTab) => {
+      if (!workspaceBottomPanelOpen) {
+        requestBottomPanelTab(kind);
+        return;
+      }
+      const control = bottomPanelControlRef.current;
+      if (!control) {
+        requestBottomPanelTab(kind);
+        return;
+      }
+      control.focusKind(kind);
+    },
+    [workspaceBottomPanelOpen, requestBottomPanelTab],
+  );
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
@@ -230,6 +247,12 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   const dispatchMenuAction = useCallback(
     (action: MenuActionId) => {
       switch (action) {
+        case "file.newTerminal":
+          openBottomPanelKind("terminal");
+          break;
+        case "file.newBrowser":
+          openBottomPanelKind("browser");
+          break;
         case "view.workspaceTerminal":
           toggleBottomPanelKind("terminal");
           break;
@@ -247,11 +270,22 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
         case "view.toggleLeftSidebar":
           toggleLeftSidebar();
           break;
+        case "view.fullScreen":
+          void toggleWindowMaximize();
+          break;
+        case "file.exit":
+          void closeAppWindow();
+          break;
         default:
           break;
       }
     },
-    [expandLeftSidebar, toggleLeftSidebar, toggleBottomPanelKind],
+    [
+      expandLeftSidebar,
+      openBottomPanelKind,
+      toggleLeftSidebar,
+      toggleBottomPanelKind,
+    ],
   );
 
   const value = useMemo(

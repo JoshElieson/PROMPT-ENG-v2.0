@@ -76,7 +76,6 @@ export function ProjectFolderContextMenu({
 
   const {
     removeProject,
-    setPermissions,
     setDirectoryPermissions,
     setError,
   } = useProjects();
@@ -154,7 +153,7 @@ export function ProjectFolderContextMenu({
   const handleAddToChat = useCallback(async () => {
     try {
       if (isFile) {
-        setPermissions(entryPath, { enabled: true });
+        await setDirectoryPermissions(parentDir(entryPath), { enabled: true });
       } else {
         await setDirectoryPermissions(entryPath, { enabled: true });
       }
@@ -171,7 +170,6 @@ export function ProjectFolderContextMenu({
     entryPath,
     entryLabel,
     isFile,
-    setPermissions,
     setDirectoryPermissions,
     selectWorkspaceScreen,
     focusComposer,

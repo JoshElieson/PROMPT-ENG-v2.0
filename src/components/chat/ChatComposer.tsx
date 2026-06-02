@@ -77,6 +77,13 @@ import { cn } from "@/lib/utils";
 const OPTIMIZE_PROMPT_AI_TOOLTIP = "Optimize prompt wording (keep meaning)";
 const UNDO_OPTIMIZE_PROMPT_TOOLTIP = "Undo optimization";
 
+function parentDirectory(path: string): string {
+  const normalized = path.replace(/[/\\]+$/, "");
+  const index = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
+  if (index <= 0) return normalized;
+  return normalized.slice(0, index);
+}
+
 interface ChatComposerProps {
   /** Sidebar chat (workspace container). */
   chatId: string;
@@ -118,7 +125,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   const { sendMessage, activeChat, chats, responseLoading, getQueuedMessageCount } =
     useChats();
   const { selectWorkspaceScreen } = useAppSelection();
-  const { setPermissions, setDirectoryPermissions } = useProjects();
+  const { setDirectoryPermissions } = useProjects();
   const {
     autoEnabled,
     setAutoEnabled,
@@ -240,7 +247,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               enabled: true,
             });
           } else {
-            setPermissions(projectPayload.path, { enabled: true });
+            const parentPath = parentDirectory(projectPayload.path);
+            await setDirectoryPermissions(parentPath, { enabled: true });
           }
           addAttachments(pathsToChatAttachments([projectPayload.path]));
           selectWorkspaceScreen();
@@ -260,7 +268,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       focusComposer,
       selectWorkspaceScreen,
       setDirectoryPermissions,
-      setPermissions,
     ],
   );
 

@@ -2,8 +2,18 @@ import type { MouseEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauri } from "@/lib/tauri";
 
-const INTERACTIVE_SELECTOR =
-  'button, a, input, select, textarea, [role="menuitem"], [data-no-drag]';
+const INTERACTIVE_SELECTOR = [
+  "button",
+  "a",
+  "input",
+  "select",
+  "textarea",
+  '[role="menu"]',
+  '[role="menuitem"]',
+  '[role="menuitemcheckbox"]',
+  '[role="menuitemradio"]',
+  "[data-no-drag]",
+].join(", ");
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
   return (

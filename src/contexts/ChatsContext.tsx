@@ -25,6 +25,7 @@ import {
   defaultThreadTitle,
   threadDisplayTitle,
 } from "@/lib/chat-utils";
+import { recordGoToRecent } from "@/lib/go-to-recents";
 import type { QueuedMessageBehavior } from "@/types/chat-behavior";
 import {
   buildAgentPermissionsSystemNote,
@@ -55,6 +56,7 @@ import {
 } from "@/lib/storage";
 import {
   collapseWorkspaceByLeaf,
+  collectLeaves,
   ensureFocusedLeafExists,
   expandWorkspaceLayout,
   reconcileWorkspaceThreads,
@@ -95,6 +97,10 @@ import type {
 import type { ProjectMemory } from "@/types/agent-memory";
 import type { AgentPermissions } from "@/types/agent-permissions";
 import type { WorkspacePaneLayout } from "@/types/workspace-pane";
+import type {
+  AgentActivityEvent,
+  AgentActivityType,
+} from "@/types/agent-activity";
 import { useAiCommandBus } from "@/contexts/AiCommandBusContext";
 
 interface ChatsContextValue {
@@ -119,6 +125,8 @@ interface ChatsContextValue {
   renamingChatId: string | null;
   setRenamingChatId: (id: string | null) => void;
   selectChat: (id: string) => void;
+  /** Activate a workspace and focus a specific agent (thread) pane within it. */
+  selectAgent: (chatId: string, threadId: string) => void;
   renameChat: (id: string, title: string) => void;
   renameThread: (threadId: string, title: string) => void;
   /** Per-agent settings (name, system prompt) scoped to one thread. */
@@ -160,6 +168,10 @@ interface ChatsContextValue {
     chatId: string,
     threadId: string,
   ) => AiToolActivityEvent[];
+  getAgentActivityEvents: (
+    chatId: string,
+    threadId: string,
+  ) => AgentActivityEvent[];
   updateChatPermissions: (
     chatId: string,
     updater: (
@@ -171,6 +183,10 @@ interface ChatsContextValue {
     permissions: Record<string, NodePermissions>,
   ) => void;
   setChatGitProject: (chatId: string, projectId: string | null) => void;
+  canUndoActiveChat: boolean;
+  canRedoActiveChat: boolean;
+  undoActiveChat: () => boolean;
+  redoActiveChat: () => boolean;
 }
 
 const ChatsContext = createContext<ChatsContextValue | null>(null);
@@ -273,6 +289,10 @@ function buildThreadHistory(chat: Chat, threadId: string): ChatTurn[] {
     role: m.role,
     content: m.content,
   }));
+}
+
+function cloneChatSnapshot(chat: Chat): Chat {
+  return structuredClone(chat);
 }
 
 function resolveThreadRole(chat: Chat, threadId: string): string {
@@ -423,12 +443,76 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
   const [streamingActivitiesByKey, setStreamingActivitiesByKey] = useState<
     Record<string, AiToolActivityEvent[]>
   >({});
+  const [agentActivitiesByKey, setAgentActivitiesByKey] = useState<
+    Record<string, AgentActivityEvent[]>
+  >({});
   const activeStreamIdByThreadRef = useRef(new Map<string, string>());
+  const undoHistoryByChatRef = useRef(new Map<string, Chat[]>());
+  const redoHistoryByChatRef = useRef(new Map<string, Chat[]>());
+  const [activeHistoryState, setActiveHistoryState] = useState({
+    canUndo: false,
+    canRedo: false,
+  });
+  const MAX_CHAT_HISTORY = 50;
 
   useEffect(() => {
     chatsRef.current = chats;
     draftChatRef.current = draftChat;
   }, [chats, draftChat]);
+
+  const syncActiveHistoryState = useCallback(
+    (chatId: string | null) => {
+      if (!chatId) {
+        setActiveHistoryState({ canUndo: false, canRedo: false });
+        return;
+      }
+      const canUndo = (undoHistoryByChatRef.current.get(chatId)?.length ?? 0) > 0;
+      const canRedo = (redoHistoryByChatRef.current.get(chatId)?.length ?? 0) > 0;
+      setActiveHistoryState((prev) => {
+        if (prev.canUndo === canUndo && prev.canRedo === canRedo) return prev;
+        return { canUndo, canRedo };
+      });
+    },
+    [],
+  );
+
+  const getChatByIdSnapshot = useCallback((chatId: string): Chat | null => {
+    return findChatSnapshot(chatsRef.current, draftChatRef.current, chatId);
+  }, []);
+
+  const pushUndoSnapshot = useCallback(
+    (chatId: string, snapshot: Chat) => {
+      const undoStack = undoHistoryByChatRef.current.get(chatId) ?? [];
+      const nextUndoStack = [...undoStack, cloneChatSnapshot(snapshot)];
+      if (nextUndoStack.length > MAX_CHAT_HISTORY) {
+        nextUndoStack.splice(0, nextUndoStack.length - MAX_CHAT_HISTORY);
+      }
+      undoHistoryByChatRef.current.set(chatId, nextUndoStack);
+      redoHistoryByChatRef.current.set(chatId, []);
+      if (chatId === activeChatId) {
+        syncActiveHistoryState(chatId);
+      }
+    },
+    [activeChatId, syncActiveHistoryState],
+  );
+
+  const applyChatSnapshot = useCallback((chatId: string, snapshot: Chat) => {
+    const next = cloneChatSnapshot(snapshot);
+    if (draftChatRef.current?.id === chatId) {
+      draftChatRef.current = next;
+      setDraftChat(next);
+      return;
+    }
+    setChats((prev) => {
+      const updated = prev.map((chat) => (chat.id === chatId ? next : chat));
+      chatsRef.current = updated;
+      return updated;
+    });
+  }, []);
+
+  useEffect(() => {
+    syncActiveHistoryState(activeChatId);
+  }, [activeChatId, syncActiveHistoryState]);
 
   const syncQueueCount = useCallback((key: string, count: number) => {
     setQueuedCountByKey((prev) => {
@@ -482,6 +566,49 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     (chatId: string, threadId: string) =>
       streamingActivitiesByKey[threadResponseKey(chatId, threadId)] ?? [],
     [streamingActivitiesByKey],
+  );
+
+  const clearAgentActivityEvents = useCallback((chatId: string, threadId: string) => {
+    const key = threadResponseKey(chatId, threadId);
+    setAgentActivitiesByKey((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const appendAgentActivityEvent = useCallback(
+    (
+      chatId: string,
+      threadId: string,
+      type: AgentActivityType,
+      message: string,
+      filePath?: string,
+    ) => {
+      const key = threadResponseKey(chatId, threadId);
+      const trimmed = message.trim();
+      if (!trimmed) return;
+      const event: AgentActivityEvent = {
+        id: crypto.randomUUID(),
+        type,
+        message: trimmed,
+        timestamp: Date.now(),
+        filePath: filePath?.trim() || undefined,
+      };
+      setAgentActivitiesByKey((prev) => {
+        const existing = prev[key] ?? [];
+        const next = [...existing, event].slice(-80);
+        return { ...prev, [key]: next };
+      });
+    },
+    [],
+  );
+
+  const getAgentActivityEvents = useCallback(
+    (chatId: string, threadId: string) =>
+      agentActivitiesByKey[threadResponseKey(chatId, threadId)] ?? [],
+    [agentActivitiesByKey],
   );
 
   const persistProjectMemories = useCallback(() => {
@@ -584,6 +711,15 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         const next = [...existing, event].slice(-40);
         return { ...prev, [key]: next };
       });
+      appendAgentActivityEvent(
+        parsed.chatId,
+        parsed.threadId,
+        event.action === "read" ? "reading" : "editing",
+        event.action === "read"
+          ? `Reading ${event.path}`
+          : `Editing ${event.path}`,
+        event.path,
+      );
     })
       .then((unlisten) => {
         if (disposed) {
@@ -597,7 +733,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       disposed = true;
       off?.();
     };
-  }, []);
+  }, [appendAgentActivityEvent]);
 
   useEffect(() => {
     if (!activeChatId) return;
@@ -788,13 +924,57 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
   const selectChat = useCallback((id: string) => {
     setDraftChat((prev) => {
       if (!prev) return prev;
-      return id === prev.id ? prev : null;
+      if (id === prev.id) return prev;
+      if (chatShouldPersist(prev)) {
+        setChats((existing) => {
+          if (existing.some((chat) => chat.id === prev.id)) return existing;
+          return [prev, ...existing];
+        });
+      }
+      return null;
     });
     setActiveChatId(id);
   }, []);
 
+  const selectAgent = useCallback(
+    (chatId: string, threadId: string) => {
+      const focusThread = (chat: Chat): Chat => {
+        const t0 = chat.threads[0]?.id;
+        if (!t0) return chat;
+        const base = chat.workspace ?? createDefaultWorkspaceLayout(t0);
+        const valid = new Set(chat.threads.map((t) => t.id));
+        const reconciled = ensureFocusedLeafExists(
+          reconcileWorkspaceThreads(base, valid, t0),
+        );
+        const leaf = collectLeaves(reconciled.root).find(
+          (item) => item.threadId === threadId,
+        );
+        return {
+          ...chat,
+          workspace: {
+            ...reconciled,
+            focusedLeafId: leaf?.id ?? reconciled.focusedLeafId,
+          },
+          updatedAt: Date.now(),
+        };
+      };
+
+      selectChat(chatId);
+      setDraftChat((prev) =>
+        prev && prev.id === chatId ? focusThread(prev) : prev,
+      );
+      setChats((prev) =>
+        prev.map((chat) => (chat.id === chatId ? focusThread(chat) : chat)),
+      );
+    },
+    [selectChat],
+  );
+
   const patchChatById = useCallback(
     (chatId: string, updater: (chat: Chat) => Chat) => {
+      const current = getChatByIdSnapshot(chatId);
+      if (!current) return;
+      pushUndoSnapshot(chatId, current);
       if (draftChat?.id === chatId) {
         setDraftChat((prev) => (prev ? updater(prev) : null));
         return;
@@ -803,7 +983,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         prev.map((chat) => (chat.id === chatId ? updater(chat) : chat)),
       );
     },
-    [draftChat?.id],
+    [draftChat?.id, getChatByIdSnapshot, pushUndoSnapshot],
   );
 
   const renameChat = useCallback(
@@ -954,13 +1134,14 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       clearMessageQueue(chatId, threadId);
       activeStreamIdByThreadRef.current.delete(key);
       clearStreamingActivities(chatId, threadId);
+      appendAgentActivityEvent(chatId, threadId, "error", "Run interrupted");
       inFlightThreadsRef.current.delete(key);
       setResponseLoading((rl) => {
         if (rl?.chatId === chatId && rl.threadId === threadId) return null;
         return rl;
       });
     },
-    [clearMessageQueue, clearStreamingActivities],
+    [appendAgentActivityEvent, clearMessageQueue, clearStreamingActivities],
   );
 
   const forceKillThread = useCallback(
@@ -1000,8 +1181,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         delete projectMemoriesRef.current[id];
         persistProjectMemories();
       }
+      undoHistoryByChatRef.current.delete(id);
+      redoHistoryByChatRef.current.delete(id);
+      syncActiveHistoryState(activeChatId === id ? nextDraft?.id ?? nextChats[0]?.id ?? null : activeChatId);
     },
-    [persistProjectMemories],
+    [activeChatId, persistProjectMemories, syncActiveHistoryState],
   );
 
   const updateChatPermissions = useCallback(
@@ -1059,6 +1243,14 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         if (responseRunRef.current !== runId) return;
         const { visibleContent: afterTools, patches: toolPatches } =
           extractAssistantProjectTools(content);
+        if (toolPatches.length > 0) {
+          appendAgentActivityEvent(
+            chatId,
+            threadId,
+            "editing",
+            "Applying project configuration updates",
+          );
+        }
         const { visibleContent: afterPaneActions, actions } =
           extractAssistantPaneActions(afterTools);
         const { visibleContent, commands } =
@@ -1115,6 +1307,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         }
 
         const finalContent = visibleContent || content;
+        appendAgentActivityEvent(
+          chatId,
+          threadId,
+          "checking",
+          "Checking response and saving results",
+        );
         addUsage(
           recordResponseEstimates(
             targetModelIds,
@@ -1135,6 +1333,10 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
               ? [...workspace.enabledPaths]
               : undefined,
         };
+        const currentChat = getChatByIdSnapshot(chatId);
+        if (currentChat) {
+          pushUndoSnapshot(chatId, currentChat);
+        }
         setChats((prev) => {
           const next = appendAssistantToThread(
             prev,
@@ -1180,12 +1382,14 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         }
         activeStreamIdByThreadRef.current.delete(threadKey);
         clearStreamingActivities(chatId, threadId);
+        appendAgentActivityEvent(chatId, threadId, "done", "Done");
         inFlightThreadsRef.current.delete(threadKey);
         setResponseLoading(null);
         flushQueueRef.current(chatId, threadId);
       };
 
       const fail = (message: string) => {
+        appendAgentActivityEvent(chatId, threadId, "error", `Agent failed: ${message}`);
         finish(`**Could not get a response**\n\n${message}`);
       };
 
@@ -1209,6 +1413,15 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
       const workspaceEnabled =
         (workspace?.enabledPaths.length ?? 0) > 0;
+      if (workspaceEnabled) {
+        appendAgentActivityEvent(
+          chatId,
+          threadId,
+          "searching",
+          "Searching enabled workspace paths",
+        );
+      }
+      appendAgentActivityEvent(chatId, threadId, "planning", "Planning response");
       addUsage(
         recordSendEstimates(
           history,
@@ -1247,6 +1460,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         ].filter(Boolean);
         const systemPrompt = systemParts.length > 0 ? systemParts.join("\n\n") : null;
         if (targetModelIds.length === 1) {
+          appendAgentActivityEvent(
+            chatId,
+            threadId,
+            "checking",
+            `Checking model ${getModelById(targetModelIds[0])?.name ?? targetModelIds[0]}`,
+          );
           setResponseLoading({
             chatId,
             threadId,
@@ -1273,6 +1492,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           if (responseRunRef.current !== runId) return;
 
           const modelId = targetModelIds[i];
+          appendAgentActivityEvent(
+            chatId,
+            threadId,
+            "checking",
+            `Checking model ${getModelById(modelId)?.name ?? modelId}`,
+          );
           setResponseLoading({
             chatId,
             threadId,
@@ -1300,6 +1525,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           phase: "synthesizing",
           speakingModelIndex: -1,
         });
+        appendAgentActivityEvent(
+          chatId,
+          threadId,
+          "planning",
+          "Synthesizing model responses",
+        );
 
         const synthesized = await aiChatSynthesize(
           userContent,
@@ -1321,12 +1552,15 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     [
       addUsage,
       addMessageMemoryRecord,
+      appendAgentActivityEvent,
       clearStreamingActivities,
       requestBottomPanelTab,
       setWorkspaceBottomPanelOpen,
       setLeftSidebarViewVisible,
       patchWorkspaceSettings,
       enqueueCommands,
+      getChatByIdSnapshot,
+      pushUndoSnapshot,
     ],
   );
 
@@ -1345,6 +1579,13 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       const streamId = makeAiStreamId(resolvedChatId, finalThreadId, runId);
       activeStreamIdByThreadRef.current.set(key, streamId);
       clearStreamingActivities(resolvedChatId, finalThreadId);
+      clearAgentActivityEvents(resolvedChatId, finalThreadId);
+      appendAgentActivityEvent(
+        resolvedChatId,
+        finalThreadId,
+        "analyzing",
+        "Analyzing project structure",
+      );
 
       setResponseLoading({
         chatId: resolvedChatId,
@@ -1374,7 +1615,13 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         retrievedMemoryPrompt,
       );
     },
-    [runAiResponse, getRetrievedMemoryPrompt, clearStreamingActivities],
+    [
+      runAiResponse,
+      getRetrievedMemoryPrompt,
+      clearStreamingActivities,
+      clearAgentActivityEvents,
+      appendAgentActivityEvent,
+    ],
   );
 
   const flushMessageQueue = useCallback(
@@ -1443,6 +1690,9 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         draftChatRef.current,
         requestedChatId,
       );
+      if (chatBeforeSend) {
+        pushUndoSnapshot(chatBeforeSend.id, chatBeforeSend);
+      }
       if (chatBeforeSend) {
         const threadBeforeSend = resolveThreadId(
           chatBeforeSend,
@@ -1522,6 +1772,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         : [{ role: "user" as const, content: trimmed }];
 
       if (chatAfterCommit) {
+        recordGoToRecent("project", resolvedChatId);
         const relatedFiles = Object.entries(chatAfterCommit.permissions ?? {})
           .filter(([, permission]) => permission.enabled)
           .map(([path]) => path)
@@ -1570,10 +1821,47 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       addMessageMemoryRecord,
       enqueueMessage,
       interruptThreadResponse,
+      pushUndoSnapshot,
       refineWorkspaceTitle,
       startThreadAiRun,
     ],
   );
+
+  const undoActiveChat = useCallback((): boolean => {
+    if (!activeChatId) return false;
+    const undoStack = undoHistoryByChatRef.current.get(activeChatId) ?? [];
+    const previousSnapshot = undoStack[undoStack.length - 1];
+    if (!previousSnapshot) return false;
+    const current = getChatByIdSnapshot(activeChatId);
+    if (!current) return false;
+    undoHistoryByChatRef.current.set(activeChatId, undoStack.slice(0, -1));
+    const redoStack = redoHistoryByChatRef.current.get(activeChatId) ?? [];
+    redoHistoryByChatRef.current.set(activeChatId, [
+      ...redoStack,
+      cloneChatSnapshot(current),
+    ]);
+    applyChatSnapshot(activeChatId, previousSnapshot);
+    syncActiveHistoryState(activeChatId);
+    return true;
+  }, [activeChatId, applyChatSnapshot, getChatByIdSnapshot, syncActiveHistoryState]);
+
+  const redoActiveChat = useCallback((): boolean => {
+    if (!activeChatId) return false;
+    const redoStack = redoHistoryByChatRef.current.get(activeChatId) ?? [];
+    const nextSnapshot = redoStack[redoStack.length - 1];
+    if (!nextSnapshot) return false;
+    const current = getChatByIdSnapshot(activeChatId);
+    if (!current) return false;
+    redoHistoryByChatRef.current.set(activeChatId, redoStack.slice(0, -1));
+    const undoStack = undoHistoryByChatRef.current.get(activeChatId) ?? [];
+    undoHistoryByChatRef.current.set(activeChatId, [
+      ...undoStack,
+      cloneChatSnapshot(current),
+    ]);
+    applyChatSnapshot(activeChatId, nextSnapshot);
+    syncActiveHistoryState(activeChatId);
+    return true;
+  }, [activeChatId, applyChatSnapshot, getChatByIdSnapshot, syncActiveHistoryState]);
 
   const truncateThreadAfterMessage = useCallback(
     (chatId: string, threadId: string, messageId: string) => {
@@ -1607,6 +1895,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       clearMessageQueue(chatId, threadId);
       activeStreamIdByThreadRef.current.delete(key);
       clearStreamingActivities(chatId, threadId);
+      clearAgentActivityEvents(chatId, threadId);
       inFlightThreadsRef.current.delete(key);
       setResponseLoading((loading) => {
         if (loading?.chatId === chatId && loading.threadId === threadId) {
@@ -1615,7 +1904,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         return loading;
       });
     },
-    [patchChatById, clearMessageQueue, clearStreamingActivities],
+    [
+      patchChatById,
+      clearAgentActivityEvents,
+      clearMessageQueue,
+      clearStreamingActivities,
+    ],
   );
 
   const activeChat = useMemo(() => {
@@ -1638,6 +1932,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       renamingChatId,
       setRenamingChatId,
       selectChat,
+      selectAgent,
       renameChat,
       renameThread,
       patchAgentSettings,
@@ -1649,9 +1944,14 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       truncateThreadAfterMessage,
       getQueuedMessageCount,
       getStreamingActivities,
+      getAgentActivityEvents,
       updateChatPermissions,
       setChatPermissions,
       setChatGitProject,
+      canUndoActiveChat: activeHistoryState.canUndo,
+      canRedoActiveChat: activeHistoryState.canRedo,
+      undoActiveChat,
+      redoActiveChat,
     }),
     [
       chats,
@@ -1667,6 +1967,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       renamingChatId,
       setRenamingChatId,
       selectChat,
+      selectAgent,
       renameChat,
       renameThread,
       patchAgentSettings,
@@ -1678,9 +1979,14 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       truncateThreadAfterMessage,
       getQueuedMessageCount,
       getStreamingActivities,
+      getAgentActivityEvents,
       updateChatPermissions,
       setChatPermissions,
       setChatGitProject,
+      activeHistoryState.canUndo,
+      activeHistoryState.canRedo,
+      undoActiveChat,
+      redoActiveChat,
     ],
   );
 

@@ -1,4 +1,5 @@
 import { ActivityBar } from "@/components/layout/ActivityBar";
+import { EditContextMenu } from "@/components/layout/EditContextMenu";
 import { LeftSidebar } from "@/components/layout/LeftSidebar";
 import { MainWorkspace } from "@/components/layout/MainWorkspace";
 import { StatusBar } from "@/components/layout/StatusBar";
@@ -69,6 +70,7 @@ function App() {
                               <GitProvider>
                                 <TooltipProvider delayDuration={200}>
                                   <AppShell />
+                                  <EditContextMenu />
                                 </TooltipProvider>
                               </GitProvider>
                             </AppSelectionProvider>

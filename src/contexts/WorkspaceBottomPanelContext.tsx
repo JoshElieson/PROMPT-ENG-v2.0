@@ -196,22 +196,40 @@ export function WorkspaceBottomPanelProvider({
     reportBottomPanelKindsVisible,
     registerBottomPanelControl,
   } = useLayout();
+  // Only seed a tab when the panel is actually open at mount; otherwise start
+  // empty so a closed panel never holds a stale tab that gets auto-paired back
+  // in when a different kind is opened later.
+  const initialPanelOpen = useRef(workspaceBottomPanelOpen).current;
   const initialKind: BottomPanelTabKind =
     bottomPanelBoot === "browser" ? "browser" : "terminal";
-  const terminalCounterRef = useRef(initialKind === "browser" ? 0 : 1);
-  const browserCounterRef = useRef(initialKind === "browser" ? 1 : 0);
-  const [tabs, setTabs] = useState<BottomPanelTab[]>(() =>
-    initialKind === "browser"
-      ? [createTab("browser", 1)]
-      : [createTab("terminal", 1)],
+  const terminalCounterRef = useRef(
+    initialPanelOpen && initialKind === "terminal" ? 1 : 0,
   );
-  const [activeTabId, setActiveTabId] = useState(() => tabs[0]!.id);
+  const browserCounterRef = useRef(
+    initialPanelOpen && initialKind === "browser" ? 1 : 0,
+  );
+  const [tabs, setTabs] = useState<BottomPanelTab[]>(() =>
+    initialPanelOpen ? [createTab(initialKind, 1)] : [],
+  );
+  const [activeTabId, setActiveTabId] = useState(() => tabs[0]?.id ?? "");
   const splitOrientation: "horizontal" | "vertical" =
     activeLayoutId === "horizontal" ? "horizontal" : "vertical";
   const [visibleTabIdsRaw, setVisibleTabIdsRaw] = useState<string[]>([]);
+  // When the user explicitly hides a kind (View menu / dock toggle), suppress the
+  // terminal+browser auto-pairing so the hidden pane isn't immediately restored.
+  // Re-enabled by any action that intends to show a kind (focus/add/select/drop).
+  const [autoPairSuppressed, setAutoPairSuppressed] = useState(false);
   const visibleTabIdsState = useMemo(
-    () => normalizeBottomPanelVisibleIds(tabs, visibleTabIdsRaw, activeTabId),
-    [tabs, visibleTabIdsRaw, activeTabId],
+    () =>
+      autoPairSuppressed
+        ? normalizeVisiblePaneIds(
+            visibleTabIdsRaw,
+            tabs.map((tab) => tab.id),
+            activeTabId,
+            BOTTOM_PANEL_MAX_VISIBLE,
+          )
+        : normalizeBottomPanelVisibleIds(tabs, visibleTabIdsRaw, activeTabId),
+    [tabs, visibleTabIdsRaw, activeTabId, autoPairSuppressed],
   );
   const [dragTabId, setDragTabId] = useState<string | null>(null);
   const [twoPaneSizes, setTwoPaneSizes] = useState<[number, number]>([0.5, 0.5]);
@@ -268,6 +286,7 @@ export function WorkspaceBottomPanelProvider({
         return next;
       });
       setActiveTabId(tab.id);
+      setAutoPairSuppressed(false);
       selectBottomPanel();
     },
     [selectBottomPanel],
@@ -304,6 +323,7 @@ export function WorkspaceBottomPanelProvider({
       });
       setActiveTabId(tab.id);
     }
+    setAutoPairSuppressed(false);
     selectBottomPanel();
     clearBottomPanelBoot();
   }, [bottomPanelBoot, clearBottomPanelBoot, selectBottomPanel]);
@@ -315,9 +335,14 @@ export function WorkspaceBottomPanelProvider({
   const selectTab = useCallback(
     (tabId: string) => {
       requestTabFocus(tabId);
-      setVisibleTabIdsRaw((prev) =>
-        normalizeBottomPanelVisibleIds(tabsRef.current, prev, tabId),
-      );
+      // Selecting an already-visible tab should just focus it; re-normalizing here
+      // would auto-pair an explicitly hidden kind back in.
+      if (!visibleTabIdsRef.current.includes(tabId)) {
+        setAutoPairSuppressed(false);
+        setVisibleTabIdsRaw((prev) =>
+          normalizeBottomPanelVisibleIds(tabsRef.current, prev, tabId),
+        );
+      }
       selectBottomPanel();
     },
     [requestTabFocus, selectBottomPanel],
@@ -333,6 +358,10 @@ export function WorkspaceBottomPanelProvider({
 
       const next = prev.filter((t) => t.id !== tabId);
       if (next.length === 0) {
+        // Clear the removed tab so a re-opened panel starts fresh instead of
+        // resurrecting the closed kind via auto-pairing.
+        setTabs(next);
+        setVisibleTabIdsRaw([]);
         onClose();
         return;
       }
@@ -347,6 +376,7 @@ export function WorkspaceBottomPanelProvider({
   );
 
   const setVisibleTabIds = useCallback((ids: string[], focusTabId?: string) => {
+    setAutoPairSuppressed(false);
     setVisibleTabIdsRaw((prev) =>
       normalizeBottomPanelVisibleIds(
         tabsRef.current,
@@ -395,22 +425,34 @@ export function WorkspaceBottomPanelProvider({
       if (otherVisibleIds.length > 0) {
         const nextFocus =
           otherVisibleIds.find((id) => id === activeTabId) ?? otherVisibleIds[0]!;
+        // Respect explicit "hide kind" actions without auto-pairing kinds back in.
+        setAutoPairSuppressed(true);
         setVisibleTabIdsRaw(
-          normalizeBottomPanelVisibleIds(currentTabs, otherVisibleIds, nextFocus),
+          normalizeVisiblePaneIds(
+            otherVisibleIds,
+            currentTabs.map((tab) => tab.id),
+            nextFocus,
+            BOTTOM_PANEL_MAX_VISIBLE,
+          ),
         );
         setActiveTabId(nextFocus);
         return;
       }
 
-      const tab = currentTabs.find((t) => t.kind === kind);
-      if (!tab) return;
-      if (currentTabs.length === 1) {
-        onClose();
-        return;
+      // Hiding the final visible kind should fully collapse the panel, even if
+      // hidden tabs still exist in state.
+      for (const tab of currentTabs) {
+        if (tab.kind === "terminal") {
+          void killTerminalSession(tab.id);
+        }
       }
-      closeTab(tab.id);
+      setTabs([]);
+      setVisibleTabIdsRaw([]);
+      setActiveTabId("");
+      setAutoPairSuppressed(false);
+      onClose();
     },
-    [activeTabId, closeTab, onClose],
+    [activeTabId, onClose],
   );
 
   useEffect(() => {

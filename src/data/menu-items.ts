@@ -1,11 +1,25 @@
 export type MenuActionId =
   | "file.newAgent"
   | "file.newProject"
+  | "file.newTerminal"
+  | "file.newBrowser"
+  | "file.agentSettings"
+  | "file.exit"
+  | "edit.undo"
+  | "edit.redo"
+  | "edit.cut"
+  | "edit.copy"
+  | "edit.paste"
   | "view.explorer"
   | "view.agentCart"
   | "view.workspaceTerminal"
   | "view.workspaceBrowser"
-  | "view.toggleLeftSidebar";
+  | "view.toggleLeftSidebar"
+  | "view.fullScreen"
+  | "go.agent"
+  | "go.project"
+  | "go.previousMessage"
+  | "go.nextMessage";
 
 export type MenuEntry =
   | { type: "separator" }
@@ -28,11 +42,25 @@ export type MenuEntry =
 export const implementedMenuActions = new Set<MenuActionId>([
   "file.newAgent",
   "file.newProject",
+  "file.newTerminal",
+  "file.newBrowser",
+  "file.agentSettings",
+  "file.exit",
+  "edit.undo",
+  "edit.redo",
+  "edit.cut",
+  "edit.copy",
+  "edit.paste",
   "view.explorer",
   "view.agentCart",
   "view.workspaceTerminal",
   "view.workspaceBrowser",
   "view.toggleLeftSidebar",
+  "view.fullScreen",
+  "go.agent",
+  "go.project",
+  "go.previousMessage",
+  "go.nextMessage",
 ]);
 
 export function isMenuEntryImplemented(entry: MenuEntry): boolean {
@@ -70,78 +98,36 @@ export const appMenuGroups: MenuGroup[] = [
       },
       { type: "item", label: "New Project…", action: "file.newProject" },
       { type: "separator" },
-      { type: "item", label: "Open Project…", shortcut: "Ctrl+O" },
-      {
-        type: "submenu",
-        label: "Open Recent",
-        items: [
-          { type: "item", label: "Optimize Rust Function" },
-          { type: "item", label: "TypeScript Refactor" },
-          { type: "item", label: "API Design Review" },
-          { type: "separator" },
-          { type: "item", label: "Clear Recently Opened" },
-        ],
-      },
+      { type: "item", label: "New Terminal", action: "file.newTerminal" },
+      { type: "item", label: "New Browser", action: "file.newBrowser" },
       { type: "separator" },
-      { type: "item", label: "Save Prompt Template", shortcut: "Ctrl+S" },
-      { type: "item", label: "Save Chat As…", shortcut: "Ctrl+Shift+S" },
-      { type: "separator" },
-      { type: "item", label: "Export Chat…" },
-      { type: "item", label: "Export Round Table Summary…" },
-      { type: "item", label: "Export Token Usage Report…" },
-      { type: "separator" },
-      { type: "item", label: "Close Chat", shortcut: "Ctrl+W" },
-      { type: "item", label: "Close Project" },
-      { type: "separator" },
-      { type: "item", label: "Preferences…", shortcut: "Ctrl+," },
-      { type: "separator" },
-      { type: "item", label: "Exit", shortcut: "Alt+F4" },
+      { type: "item", label: "Agent Settings", action: "file.agentSettings" },
+      { type: "item", label: "Exit", action: "file.exit" },
     ],
   },
   {
     label: "Edit",
     items: [
-      { type: "item", label: "Undo", shortcut: "Ctrl+Z" },
-      { type: "item", label: "Redo", shortcut: "Ctrl+Shift+Z" },
+      { type: "item", label: "Undo", action: "edit.undo" },
+      {
+        type: "item",
+        label: "Redo",
+        action: "edit.redo",
+      },
       { type: "separator" },
-      { type: "item", label: "Cut", shortcut: "Ctrl+X" },
-      { type: "item", label: "Copy", shortcut: "Ctrl+C" },
-      { type: "item", label: "Paste", shortcut: "Ctrl+V" },
+      { type: "item", label: "Cut", shortcut: "Ctrl+X", action: "edit.cut" },
+      { type: "item", label: "Copy", shortcut: "Ctrl+C", action: "edit.copy" },
+      { type: "item", label: "Paste", shortcut: "Ctrl+V", action: "edit.paste" },
       { type: "separator" },
       { type: "item", label: "Find in Chat…", shortcut: "Ctrl+F" },
-      { type: "item", label: "Replace in Chat…", shortcut: "Ctrl+Alt+F" },
-      { type: "separator" },
-      { type: "item", label: "Copy Last Response" },
-      { type: "item", label: "Copy Code Block" },
-      { type: "item", label: "Copy as Markdown" },
       { type: "separator" },
       { type: "item", label: "Select All", shortcut: "Ctrl+A" },
-    ],
-  },
-  {
-    label: "Selection",
-    items: [
-      { type: "item", label: "Select All", shortcut: "Ctrl+A" },
-      { type: "item", label: "Expand Selection", shortcut: "Ctrl+Shift+→" },
-      { type: "item", label: "Shrink Selection", shortcut: "Ctrl+Shift+←" },
-      { type: "separator" },
-      { type: "item", label: "Add Selection to Context", shortcut: "@" },
-      { type: "item", label: "Add File to Context…" },
-      { type: "item", label: "Add Folder to Context…" },
-      { type: "separator" },
-      { type: "item", label: "Select Line" },
-      { type: "item", label: "Select Word" },
-      { type: "item", label: "Select Model Output…" },
-      { type: "separator" },
-      { type: "item", label: "Select Next Occurrence", shortcut: "Ctrl+D" },
-      { type: "item", label: "Select All Occurrences", shortcut: "Ctrl+Shift+L" },
     ],
   },
   {
     label: "View",
     items: [
       { type: "item", label: "Command Palette…", shortcut: "Ctrl+Shift+P" },
-      { type: "item", label: "Open Quick Pick…", shortcut: "Ctrl+P" },
       { type: "separator" },
       {
         type: "item",
@@ -182,15 +168,6 @@ export const appMenuGroups: MenuGroup[] = [
           { type: "item", label: "Sidebar Left" },
         ],
       },
-      {
-        type: "submenu",
-        label: "Editor Layout",
-        items: [
-          { type: "item", label: "Single Column" },
-          { type: "item", label: "Split Chat / Response" },
-          { type: "item", label: "Compare Model Outputs" },
-        ],
-      },
       { type: "separator" },
       {
         type: "item",
@@ -198,14 +175,8 @@ export const appMenuGroups: MenuGroup[] = [
         shortcut: "Ctrl+B",
         action: "view.toggleLeftSidebar",
       },
-      { type: "item", label: "Toggle Status Bar" },
-      { type: "item", label: "Toggle Activity Bar" },
       { type: "separator" },
-      { type: "item", label: "Zoom In", shortcut: "Ctrl++" },
-      { type: "item", label: "Zoom Out", shortcut: "Ctrl+-" },
-      { type: "item", label: "Reset Zoom", shortcut: "Ctrl+0" },
-      { type: "separator" },
-      { type: "item", label: "Full Screen", shortcut: "F11" },
+      { type: "item", label: "Full Screen", shortcut: "F11", action: "view.fullScreen" },
     ],
   },
   {
@@ -214,23 +185,28 @@ export const appMenuGroups: MenuGroup[] = [
       { type: "item", label: "Back", shortcut: "Ctrl+[" },
       { type: "item", label: "Forward", shortcut: "Ctrl+]" },
       { type: "separator" },
-      { type: "item", label: "Go to Chat…", shortcut: "Ctrl+Shift+O" },
-      { type: "item", label: "Go to Project…" },
-      { type: "item", label: "Go to File in Project…", shortcut: "Ctrl+P" },
+      {
+        type: "item",
+        label: "Go to Agent…",
+        shortcut: "Ctrl+Shift+O",
+        action: "go.agent",
+      },
+      { type: "item", label: "Go to Project…", action: "go.project" },
       { type: "separator" },
-      { type: "item", label: "Go to GPT-4o", shortcut: "Ctrl+1" },
-      { type: "item", label: "Go to Claude 3.5", shortcut: "Ctrl+2" },
-      { type: "item", label: "Go to Gemini 1.5", shortcut: "Ctrl+3" },
-      { type: "item", label: "Go to Mix (Round Table)", shortcut: "Ctrl+4" },
+      { type: "item", label: "Find in Chat...", shortcut: "Ctrl+F" },
       { type: "separator" },
-      { type: "item", label: "Go to Line…", shortcut: "Ctrl+G" },
-      { type: "item", label: "Go to Symbol in Project…", shortcut: "Ctrl+Shift+R" },
-      { type: "separator" },
-      { type: "item", label: "Previous Message", shortcut: "Ctrl+↑" },
-      { type: "item", label: "Next Message", shortcut: "Ctrl+↓" },
-      { type: "separator" },
-      { type: "item", label: "Go to Definition" },
-      { type: "item", label: "Go to References" },
+      {
+        type: "item",
+        label: "Previous Message",
+        shortcut: "Ctrl+↑",
+        action: "go.previousMessage",
+      },
+      {
+        type: "item",
+        label: "Next Message",
+        shortcut: "Ctrl+↓",
+        action: "go.nextMessage",
+      },
     ],
   },
 ];

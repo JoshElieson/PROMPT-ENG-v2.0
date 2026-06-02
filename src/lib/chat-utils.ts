@@ -15,6 +15,7 @@ export function chatHasMessages(chat: Chat): boolean {
 export function chatShouldPersist(chat: Chat): boolean {
   if (chat.hadMessages) return true;
   if (chatHasMessages(chat)) return true;
+  if (!isPlaceholderWorkspaceTitle(chat.title ?? "")) return true;
 
   const hasEnabledContext = Object.values(chat.permissions ?? {}).some(
     (permission) => permission.enabled,
@@ -33,12 +34,25 @@ export function chatShouldPersist(chat: Chat): boolean {
 /** ~“what context to my files” length; keeps sidebar/tab titles readable */
 const MAX_CHAT_TITLE_CHARS = 28;
 
-/** Pinned workspaces first, then most recently updated. */
+/** Pinned workspaces first, then most recently sent-to by user message. */
 export function sortWorkspaces(chats: Chat[]): Chat[] {
+  const latestUserMessageAt = (chat: Chat): number => {
+    let latest = 0;
+    for (const thread of chat.threads) {
+      for (const message of thread.messages) {
+        if (message.role !== "user") continue;
+        if (message.createdAt > latest) latest = message.createdAt;
+      }
+    }
+    return latest;
+  };
+
   return [...chats].sort((a, b) => {
     const pinDelta = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned));
     if (pinDelta !== 0) return pinDelta;
-    return b.updatedAt - a.updatedAt;
+    const recencyDelta = latestUserMessageAt(b) - latestUserMessageAt(a);
+    if (recencyDelta !== 0) return recencyDelta;
+    return b.createdAt - a.createdAt;
   });
 }
 

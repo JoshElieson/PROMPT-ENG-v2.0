@@ -488,6 +488,7 @@ export function MessageBubble({
 
   return (
     <article
+      data-chat-message-role={message.role}
       className={cn(
         "group flex w-full min-w-0 flex-col gap-0",
         isSent ? "items-stretch" : "items-start",
