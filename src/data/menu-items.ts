@@ -10,11 +10,13 @@ export type MenuActionId =
   | "edit.cut"
   | "edit.copy"
   | "edit.paste"
+  | "edit.findInChat"
   | "view.explorer"
   | "view.agentCart"
   | "view.workspaceTerminal"
   | "view.workspaceBrowser"
   | "view.toggleLeftSidebar"
+  | "view.appearance"
   | "view.fullScreen"
   | "go.agent"
   | "go.project"
@@ -51,11 +53,13 @@ export const implementedMenuActions = new Set<MenuActionId>([
   "edit.cut",
   "edit.copy",
   "edit.paste",
+  "edit.findInChat",
   "view.explorer",
   "view.agentCart",
   "view.workspaceTerminal",
   "view.workspaceBrowser",
   "view.toggleLeftSidebar",
+  "view.appearance",
   "view.fullScreen",
   "go.agent",
   "go.project",
@@ -119,7 +123,12 @@ export const appMenuGroups: MenuGroup[] = [
       { type: "item", label: "Copy", shortcut: "Ctrl+C", action: "edit.copy" },
       { type: "item", label: "Paste", shortcut: "Ctrl+V", action: "edit.paste" },
       { type: "separator" },
-      { type: "item", label: "Find in Chat…", shortcut: "Ctrl+F" },
+      {
+        type: "item",
+        label: "Find in Chat…",
+        shortcut: "Ctrl+F",
+        action: "edit.findInChat",
+      },
       { type: "separator" },
       { type: "item", label: "Select All", shortcut: "Ctrl+A" },
     ],
@@ -127,8 +136,6 @@ export const appMenuGroups: MenuGroup[] = [
   {
     label: "View",
     items: [
-      { type: "item", label: "Command Palette…", shortcut: "Ctrl+Shift+P" },
-      { type: "separator" },
       {
         type: "item",
         label: "Projects",
@@ -158,15 +165,9 @@ export const appMenuGroups: MenuGroup[] = [
       },
       { type: "separator" },
       {
-        type: "submenu",
-        label: "Appearance",
-        items: [
-          { type: "item", label: "Dark (Default)" },
-          { type: "item", label: "Light" },
-          { type: "item", label: "High Contrast" },
-          { type: "separator" },
-          { type: "item", label: "Sidebar Left" },
-        ],
+        type: "item",
+        label: "Appearance…",
+        action: "view.appearance",
       },
       { type: "separator" },
       {
@@ -182,9 +183,6 @@ export const appMenuGroups: MenuGroup[] = [
   {
     label: "Go",
     items: [
-      { type: "item", label: "Back", shortcut: "Ctrl+[" },
-      { type: "item", label: "Forward", shortcut: "Ctrl+]" },
-      { type: "separator" },
       {
         type: "item",
         label: "Go to Agent…",
@@ -193,7 +191,12 @@ export const appMenuGroups: MenuGroup[] = [
       },
       { type: "item", label: "Go to Project…", action: "go.project" },
       { type: "separator" },
-      { type: "item", label: "Find in Chat...", shortcut: "Ctrl+F" },
+      {
+        type: "item",
+        label: "Find in Chat...",
+        shortcut: "Ctrl+F",
+        action: "edit.findInChat",
+      },
       { type: "separator" },
       {
         type: "item",

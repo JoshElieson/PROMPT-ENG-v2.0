@@ -38,6 +38,7 @@ import { useWorkspacePanes } from "@/contexts/WorkspacePanesContext";
 import { buildModelKeyboardShortcuts } from "@/data/keyboard-shortcuts";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { resolveAutoScrollEnabled } from "@/lib/chat-behavior";
+import { triggerNativeFind } from "@/lib/find-in-chat";
 import { extractForgeActivities } from "@/lib/forge-activity";
 import { gitRestorePaths } from "@/lib/git";
 import { threadDisplayTitle } from "@/lib/chat-utils";
@@ -451,6 +452,9 @@ function ChatPaneBody({
 
   const scrollElRef = useRef<HTMLDivElement>(null);
   const scrollWriteTimer = useRef(0);
+  const lastFindSurfaceRef = useRef<"composer" | "messages">("messages");
+  const paneRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<ChatComposerHandle>(null);
 
   const { selectedIds, activeIds } = useChatRoundTable();
   const keyboardShortcuts = useMemo(
@@ -501,6 +505,20 @@ function ChatPaneBody({
 
   useEffect(() => {
     if (!isActive) return;
+    const pane = paneRef.current;
+    if (!pane) return;
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest("[data-composer-textarea]")) {
+        lastFindSurfaceRef.current = "composer";
+        return;
+      }
+      if (target.closest("[data-workspace-screen]")) {
+        lastFindSurfaceRef.current = "messages";
+      }
+    };
+    pane.addEventListener("focusin", onFocusIn);
     const onGoPreviousMessage = () => {
       selectWorkspaceScreen();
       scrollToPreviousUserMessage();
@@ -519,12 +537,42 @@ function ChatPaneBody({
       const end = inputEl.value.length;
       inputEl.setSelectionRange(end, end);
     };
+    const onFindInChat = () => {
+      selectWorkspaceScreen();
+      const composer = paneRef.current?.querySelector<HTMLTextAreaElement>(
+        "[data-composer-textarea]",
+      );
+      const scroll = scrollElRef.current;
+      const active = document.activeElement;
+      const focusComposer =
+        active instanceof HTMLElement &&
+        composer != null &&
+        (active === composer || composer.contains(active));
+      const focusMessages =
+        active instanceof HTMLElement &&
+        scroll != null &&
+        (active === scroll || scroll.contains(active));
+
+      if (focusComposer) {
+        composer.focus();
+      } else if (focusMessages) {
+        scroll.focus();
+      } else if (lastFindSurfaceRef.current === "composer" && composer) {
+        composer.focus();
+      } else {
+        scroll?.focus();
+      }
+      requestAnimationFrame(() => triggerNativeFind());
+    };
 
     window.addEventListener("forge:go-previous-message", onGoPreviousMessage);
     window.addEventListener("forge:go-next-message", onGoNextMessage);
+    window.addEventListener("forge:find-in-chat", onFindInChat);
     return () => {
+      pane.removeEventListener("focusin", onFocusIn);
       window.removeEventListener("forge:go-previous-message", onGoPreviousMessage);
       window.removeEventListener("forge:go-next-message", onGoNextMessage);
+      window.removeEventListener("forge:find-in-chat", onFindInChat);
     };
   }, [isActive, scrollToPreviousUserMessage, selectWorkspaceScreen]);
 
@@ -549,8 +597,6 @@ function ChatPaneBody({
     };
   }, []);
 
-  const paneRef = useRef<HTMLDivElement>(null);
-  const composerRef = useRef<ChatComposerHandle>(null);
   const [undoMessageId, setUndoMessageId] = useState<string | null>(null);
   const [undoError, setUndoError] = useState<string | null>(null);
 

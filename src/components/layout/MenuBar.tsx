@@ -18,6 +18,7 @@ import {
   type MenuEntry,
 } from "@/data/menu-items";
 import type { SidebarView } from "@/components/layout/ActivityBar";
+import { AppearancePanel } from "@/components/layout/AppearancePanel";
 import { GoToPanel, type GoToPanelKind } from "@/components/layout/GoToPanel";
 import { useChats } from "@/contexts/ChatsContext";
 import { useAppSelection } from "@/contexts/AppSelectionContext";
@@ -59,14 +60,24 @@ function isGoToActionId(action?: MenuActionId): action is "go.agent" | "go.proje
   return action === "go.agent" || action === "go.project";
 }
 
+function isAppearanceActionId(
+  action?: MenuActionId,
+): action is "view.appearance" {
+  return action === "view.appearance";
+}
+
 function MenuEntries({
   items,
   onOpenGoTo,
   onCloseGoTo,
+  onOpenAppearance,
+  onCloseAppearance,
 }: {
   items: MenuEntry[];
   onOpenGoTo: (kind: GoToPanelKind, anchor: DOMRect) => void;
   onCloseGoTo: () => void;
+  onOpenAppearance: (anchor: DOMRect) => void;
+  onCloseAppearance: () => void;
 }) {
   const {
     createChat,
@@ -139,6 +150,11 @@ function MenuEntries({
         void pasteIntoChatInput(chatInput, start, end);
         return;
       }
+      if (action === "edit.findInChat") {
+        selectWorkspaceScreen();
+        window.dispatchEvent(new CustomEvent("forge:find-in-chat"));
+        return;
+      }
       if (action === "go.previousMessage") {
         selectWorkspaceScreen();
         window.dispatchEvent(new CustomEvent("forge:go-previous-message"));
@@ -180,6 +196,8 @@ function MenuEntries({
                   items={entry.items}
                   onOpenGoTo={onOpenGoTo}
                   onCloseGoTo={onCloseGoTo}
+                  onOpenAppearance={onOpenAppearance}
+                  onCloseAppearance={onCloseAppearance}
                 />
               </DropdownMenuSubContent>
             </DropdownMenuSub>
@@ -237,17 +255,24 @@ function MenuEntries({
             ? "agent"
             : "project"
           : null;
+        const isAppearanceAction = isAppearanceActionId(entry.action);
 
         return (
           <DropdownMenuItem
             key={entry.label}
             disabled={isActionDisabled}
             data-go-to={isGoToAction ? entry.action : undefined}
+            data-appearance={isAppearanceAction ? "view.appearance" : undefined}
             onPointerEnter={(event) => {
               if (goToKind) {
+                onCloseAppearance();
                 onOpenGoTo(goToKind, goToAnchorFromItem(event.currentTarget));
+              } else if (isAppearanceAction) {
+                onCloseGoTo();
+                onOpenAppearance(goToAnchorFromItem(event.currentTarget));
               } else {
                 onCloseGoTo();
+                onCloseAppearance();
               }
             }}
             onSelect={(event) => {
@@ -260,6 +285,14 @@ function MenuEntries({
                     `[data-go-to="${entry.action}"]`,
                   );
                 if (node) onOpenGoTo(goToKind, goToAnchorFromItem(node));
+                return;
+              }
+              if (isAppearanceAction) {
+                event.preventDefault();
+                const node =
+                  (event.currentTarget as HTMLElement | null) ??
+                  document.querySelector<HTMLElement>('[data-appearance="view.appearance"]');
+                if (node) onOpenAppearance(goToAnchorFromItem(node));
                 return;
               }
               if (entry.action) runMenuAction(entry.action);
@@ -285,6 +318,8 @@ function MenuGroupDropdown({
   onTriggerMouseEnter,
   onOpenGoTo,
   onCloseGoTo,
+  onOpenAppearance,
+  onCloseAppearance,
 }: {
   label: string;
   items: MenuEntry[];
@@ -294,6 +329,8 @@ function MenuGroupDropdown({
   onTriggerMouseEnter: () => void;
   onOpenGoTo: (kind: GoToPanelKind, anchor: DOMRect) => void;
   onCloseGoTo: () => void;
+  onOpenAppearance: (anchor: DOMRect) => void;
+  onCloseAppearance: () => void;
 }) {
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
@@ -320,7 +357,9 @@ function MenuGroupDropdown({
           const target = event.target;
           if (
             target instanceof Element &&
-            target.closest("[data-menu-trigger], [data-go-to-panel]")
+            target.closest(
+              "[data-menu-trigger], [data-go-to-panel], [data-appearance-panel]",
+            )
           ) {
             event.preventDefault();
           }
@@ -329,7 +368,9 @@ function MenuGroupDropdown({
           const target = event.target;
           if (
             target instanceof Element &&
-            target.closest("[data-menu-trigger], [data-go-to-panel]")
+            target.closest(
+              "[data-menu-trigger], [data-go-to-panel], [data-appearance-panel]",
+            )
           ) {
             event.preventDefault();
           }
@@ -339,6 +380,8 @@ function MenuGroupDropdown({
           items={items}
           onOpenGoTo={onOpenGoTo}
           onCloseGoTo={onCloseGoTo}
+          onOpenAppearance={onOpenAppearance}
+          onCloseAppearance={onCloseAppearance}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -362,6 +405,7 @@ export function MenuBar({ className }: MenuBarProps) {
     kind: GoToPanelKind;
     anchor: DOMRect;
   } | null>(null);
+  const [appearance, setAppearance] = useState<{ anchor: DOMRect } | null>(null);
   const menuSession = useRef(false);
   const openMenuRef = useRef<string | null>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -374,10 +418,15 @@ export function MenuBar({ className }: MenuBarProps) {
     setGoTo(null);
   }, []);
 
+  const closeAppearancePanel = useCallback(() => {
+    setAppearance(null);
+  }, []);
+
   const endSession = useCallback(() => {
     menuSession.current = false;
     setOpenMenu(null);
     setGoTo(null);
+    setAppearance(null);
   }, []);
 
   const beginSession = useCallback((label: string) => {
@@ -392,6 +441,10 @@ export function MenuBar({ className }: MenuBarProps) {
     [],
   );
 
+  const openAppearancePanel = useCallback((anchor: DOMRect) => {
+    setAppearance({ anchor });
+  }, []);
+
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       if (!menuSession.current) return;
@@ -402,7 +455,9 @@ export function MenuBar({ className }: MenuBarProps) {
       const inNav = navRef.current?.contains(target);
       const inMenu =
         target instanceof Element &&
-        target.closest('[role="menu"], [role="menuitem"], [data-go-to-panel]');
+        target.closest(
+          '[role="menu"], [role="menuitem"], [data-go-to-panel], [data-appearance-panel]',
+        );
 
       if (!inNav && !inMenu) {
         endSession();
@@ -477,7 +532,10 @@ export function MenuBar({ className }: MenuBarProps) {
           open={openMenu === group.label}
           onTriggerMouseEnter={() => {
             if (menuSession.current) {
-              if (openMenuRef.current !== group.label) closeGoToPanel();
+              if (openMenuRef.current !== group.label) {
+                closeGoToPanel();
+                closeAppearancePanel();
+              }
               beginSession(group.label);
             }
           }}
@@ -491,6 +549,7 @@ export function MenuBar({ className }: MenuBarProps) {
               return;
             }
             closeGoToPanel();
+            closeAppearancePanel();
             if (menuSession.current) {
               beginSession(group.label);
             } else {
@@ -503,6 +562,8 @@ export function MenuBar({ className }: MenuBarProps) {
           }}
           onOpenGoTo={openGoToPanel}
           onCloseGoTo={closeGoToPanel}
+          onOpenAppearance={openAppearancePanel}
+          onCloseAppearance={closeAppearancePanel}
         />
       ))}
       {goTo && (
@@ -511,6 +572,9 @@ export function MenuBar({ className }: MenuBarProps) {
           anchor={goTo.anchor}
           onClose={endSession}
         />
+      )}
+      {appearance && (
+        <AppearancePanel anchor={appearance.anchor} onClose={endSession} />
       )}
     </nav>
   );
