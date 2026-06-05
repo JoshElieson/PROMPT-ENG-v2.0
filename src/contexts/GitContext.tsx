@@ -8,7 +8,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { listen } from "@tauri-apps/api/event";
 import * as git from "@/lib/git";
+import { isTauri } from "@/lib/tauri";
 import { shouldRefreshGitFromFsPaths } from "@/lib/fs-ignore-paths";
 import { listenProjectFsChanged, syncProjectFsWatchers } from "@/lib/fs-watch";
 import { pathsEqual } from "@/lib/project-paths";
@@ -144,6 +146,23 @@ export function GitProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
+    const onGitRefresh = () => {
+      void refresh({ silent: true });
+    };
+    window.addEventListener("forge:git-refresh", onGitRefresh);
+    let unlistenTauri: (() => void) | undefined;
+    if (isTauri()) {
+      void listen("forge:git-refresh", onGitRefresh).then((fn) => {
+        unlistenTauri = fn;
+      });
+    }
+    return () => {
+      window.removeEventListener("forge:git-refresh", onGitRefresh);
+      unlistenTauri?.();
+    };
+  }, [refresh]);
+
+  useEffect(() => {
     const roots = projects.map((project) => project.rootPath);
     void syncProjectFsWatchers(roots);
   }, [projects]);
@@ -224,6 +243,9 @@ export function GitProvider({ children }: { children: ReactNode }) {
       try {
         const result = await git.gitClone(url, parentPath);
         setMessage(result.success, result.output || "Clone complete.");
+        if (result.success) {
+          await refresh({ silent: true });
+        }
         return result;
       } catch (e) {
         const msg = git.formatInvokeError(e, "Clone failed.");
@@ -233,7 +255,7 @@ export function GitProvider({ children }: { children: ReactNode }) {
         setIsOperating(false);
       }
     },
-    [setMessage],
+    [refresh, setMessage],
   );
 
   const commit = useCallback(

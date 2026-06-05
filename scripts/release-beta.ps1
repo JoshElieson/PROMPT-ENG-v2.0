@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$version = "1.0.0-1"
+$version = "1.0.0-2"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $releaseDir = Join-Path $repoRoot ("release\" + $version)
 $bundleRoot = Join-Path $repoRoot "src-tauri\target\release\bundle"
@@ -56,8 +56,28 @@ if (Test-Path $releaseDir) {
 }
 New-Item -ItemType Directory -Path $releaseDir | Out-Null
 
-Write-Host "Building FORGE $version..."
-npm run tauri build
+$cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
+if (Test-Path $cargoBin) {
+  $env:Path = "$cargoBin;$env:Path"
+}
+
+$distIndex = Join-Path $repoRoot "dist\index.html"
+$releaseTauriConfig = Join-Path $repoRoot "src-tauri\tauri.release.conf.json"
+
+Write-Host "Building FORGE $version frontend..."
+npm run build
+$buildExit = $LASTEXITCODE
+if ($buildExit -ne 0) {
+  # Windows Node can exit with -1073740791 after a successful Vite build (libuv UV_HANDLE_CLOSING).
+  if (Test-Path $distIndex) {
+    Write-Warning "npm run build exited with $buildExit but dist/ exists; continuing."
+  } else {
+    throw "Frontend build failed with exit code $buildExit"
+  }
+}
+
+Write-Host "Building FORGE $version installer..."
+npm run tauri build -- -c $releaseTauriConfig
 if ($LASTEXITCODE -ne 0) {
   throw "Tauri build failed with exit code $LASTEXITCODE"
 }

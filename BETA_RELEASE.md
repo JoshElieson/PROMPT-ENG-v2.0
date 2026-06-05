@@ -134,15 +134,17 @@ npm run release:beta
 
 (`npm run release:managed` is the same build.)
 
-Output: `release/1.0.0-1/` containing:
+Output: `release/1.0.0-2/` containing:
 
-- `FORGE_1.0.0-1_x64-setup.exe` (recommended for users)
-- `FORGE_1.0.0-1_x64_en-US.msi`
+- `FORGE_1.0.0-2_x64-setup.exe` (recommended for users)
+- `FORGE_1.0.0-2_x64_en-US.msi`
 - `SHA256SUMS.txt`
 - `BETA_INSTALL.txt` (user-facing notes)
 - `BUILD_INFO.txt` (confirms embedded backend host)
 
 **Important:** Rebuild whenever you change backend URL or token. Do **not** ship `npm run release:local` builds to beta testers (that build expects users to supply their own keys).
+
+Stop `npm run tauri:dev` before a release build. The release script builds the frontend once, then runs Tauri with `src-tauri/tauri.release.conf.json` (skips a second `npm run build` that can flake on Windows with `UV_HANDLE_CLOSING`).
 
 ### CI build (optional)
 
@@ -162,7 +164,7 @@ Run **Actions → Build beta release → Run workflow**, then download artifacts
 ### Option A — GitHub Releases (recommended)
 
 1. Create a repo (or use existing) on GitHub.
-2. Tag: `git tag v1.0.0-1 && git push origin v1.0.0-1` (or upload manually).
+2. Tag: `git tag v1.0.0-2 && git push origin v1.0.0-2` (or upload manually).
 3. **Releases → New release** → attach `FORGE_*_x64-setup.exe` and `SHA256SUMS.txt`.
 4. Paste release notes from `BETA_INSTALL.txt`.
 5. Share the release URL with beta users.
@@ -179,7 +181,7 @@ Template: `docs/beta/index.html`
 
 ### Option C — Direct file share
 
-Upload `release/1.0.0-1/FORGE_1.0.0-1_x64-setup.exe` to Google Drive / Dropbox / S3 and share the link. Include `SHA256SUMS.txt` for verification.
+Upload `release/1.0.0-2/FORGE_1.0.0-2_x64-setup.exe` to Google Drive / Dropbox / S3 and share the link. Include `SHA256SUMS.txt` for verification.
 
 ---
 
@@ -187,7 +189,7 @@ Upload `release/1.0.0-1/FORGE_1.0.0-1_x64-setup.exe` to Google Drive / Dropbox /
 
 Send something like:
 
-1. Download **FORGE_1.0.0-1_x64-setup.exe** from [your link].
+1. Download **FORGE_1.0.0-2_x64-setup.exe** from [your link].
 2. (Optional) Verify SHA256 against `SHA256SUMS.txt`.
 3. Run the installer. Windows may show SmartScreen for unsigned builds — **More info → Run anyway** until you add code signing.
 4. Launch **FORGE**. Sign in with GitHub/Google if you enabled OAuth (see `.env` / `GOOGLE_SETUP.md` for *your* dev keys — separate from AI keys).

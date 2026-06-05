@@ -84,7 +84,10 @@ export async function aiChatComplete(
       modelId,
       messages,
       workspace:
-        workspace && workspace.enabledPaths.length > 0 ? workspace : null,
+        workspace &&
+        (workspace.enabledPaths.length > 0 || workspace.allowGit)
+          ? workspace
+          : null,
       system: systemPrompt.length > 0 ? systemPrompt : null,
       streamId: streamId?.trim() ? streamId.trim() : null,
     });

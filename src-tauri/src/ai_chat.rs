@@ -9,6 +9,10 @@ use crate::ai_workspace::{
     tool_clear_directory, tool_list_directory, tool_read_file, tool_remove_path, tool_write_file,
     AiWorkspace, ClearDirectoryResult, RemovePathResult, WorkspacePolicy, WriteFileResult,
 };
+use crate::git::{
+    git_clone, git_commit, git_fetch, git_init, git_pull, git_push, git_restore_paths, git_status,
+    GitStatusResult,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::Emitter;
@@ -99,8 +103,18 @@ fn extract_error_detail(data: &serde_json::Value, raw: &str) -> String {
         .to_string()
 }
 
-fn tools_schema_openai(allow_write: bool) -> Vec<serde_json::Value> {
-    let mut tools = vec![
+const GIT_TOOLS_GUIDANCE: &str = "\n\
+Git/source control:\n\
+- You have git tools for the active repository. Use them when the user asks to commit, push, pull, fetch, check status, init, clone, or discard changes.\n\
+- Do not tell the user to run terminal git commands manually when you can call a git tool instead.\n\
+- For commit, call git_commit with a clear message. Use stageAll=true when the user wants every change committed.\n\
+- For push/pull/fetch, call the matching git tool and report the tool result.\n";
+
+fn append_file_tools_openai(tools: &mut Vec<serde_json::Value>, policy: &WorkspacePolicy) {
+    if !policy.has_file_access() {
+        return;
+    }
+    tools.extend([
         json!({
             "type": "function",
             "function": {
@@ -129,8 +143,8 @@ fn tools_schema_openai(allow_write: bool) -> Vec<serde_json::Value> {
                 }
             }
         }),
-    ];
-    if allow_write {
+    ]);
+    if policy.allows_write() {
         tools.extend([
             json!({
                 "type": "function",
@@ -176,6 +190,107 @@ fn tools_schema_openai(allow_write: bool) -> Vec<serde_json::Value> {
                 }
             }),
         ]);
+    }
+}
+
+fn append_git_tools_openai(tools: &mut Vec<serde_json::Value>) {
+    tools.extend([
+        json!({
+            "type": "function",
+            "function": {
+                "name": "git_status",
+                "description": "Show git status for the active repository (branch, ahead/behind, changed files).",
+                "parameters": { "type": "object", "properties": {} }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "git_pull",
+                "description": "Pull latest changes from the remote for the active repository.",
+                "parameters": { "type": "object", "properties": {} }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "git_push",
+                "description": "Push local commits to the remote for the active repository.",
+                "parameters": { "type": "object", "properties": {} }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "git_fetch",
+                "description": "Fetch from the remote without merging.",
+                "parameters": { "type": "object", "properties": {} }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "git_init",
+                "description": "Initialize a new git repository in the active project directory.",
+                "parameters": { "type": "object", "properties": {} }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "git_commit",
+                "description": "Create a git commit in the active repository.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "message": { "type": "string", "description": "Commit message" },
+                        "stageAll": { "type": "boolean", "description": "Stage all changes before committing (default false)" }
+                    },
+                    "required": ["message"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "git_clone",
+                "description": "Clone a remote repository into a parent directory.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": { "type": "string", "description": "Repository URL" },
+                        "parentPath": { "type": "string", "description": "Parent directory (defaults to active repo root)" }
+                    },
+                    "required": ["url"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "git_restore_paths",
+                "description": "Discard changes to tracked files and remove untracked paths.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "paths": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Repo-relative or absolute paths"
+                        }
+                    },
+                    "required": ["paths"]
+                }
+            }
+        }),
+    ]);
+}
+
+fn tools_schema_openai(policy: &WorkspacePolicy) -> Vec<serde_json::Value> {
+    let mut tools = Vec::new();
+    append_file_tools_openai(&mut tools, policy);
+    if policy.allows_git() {
+        append_git_tools_openai(&mut tools);
     }
     tools
 }
@@ -230,9 +345,11 @@ fn chat_system_prompt(user: Option<&str>) -> String {
 }
 
 fn workspace_system_prompt(policy: &WorkspacePolicy) -> String {
-    if policy.allows_write() {
-        format!(
-            "The user enabled the following locations for AI file access. You have tools read_file, write_file, list_directory, remove_path, and clear_directory to work on their real project on disk.\n\
+    let mut sections = Vec::new();
+    if policy.has_file_access() {
+        if policy.allows_write() {
+            sections.push(format!(
+                "The user enabled the following locations for AI file access. You have tools read_file, write_file, list_directory, remove_path, and clear_directory to work on their real project on disk.\n\
 \n\
 How to work:\n\
 - Whenever the request depends on this codebase (behavior, errors, structure, config, or \"what does X do\"), use list_directory and/or read_file early instead of guessing.\n\
@@ -247,12 +364,12 @@ Rules:\n\
 - Prefer read_file or list_directory before overwriting files.\n\
 - write_file replaces the entire file contents; it does not delete files.\n\
 - remove_path cannot delete an AI-enabled folder root in one step—use clear_directory on that folder instead.\n\
-- Use absolute paths exactly as they appear on disk.{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}",
-            policy.roots_summary()
-        )
-    } else {
-        format!(
-            "The user enabled read-only file access for the following locations. You have tools read_file and list_directory only—do not modify or delete files.\n\
+- Use absolute paths exactly as they appear on disk.",
+                policy.roots_summary()
+            ));
+        } else {
+            sections.push(format!(
+                "The user enabled read-only file access for the following locations. You have tools read_file and list_directory only—do not modify or delete files.\n\
 \n\
 How to work:\n\
 - Whenever the request depends on this codebase (behavior, errors, structure, config, or \"what does X do\"), use list_directory and/or read_file early instead of guessing.\n\
@@ -261,10 +378,22 @@ How to work:\n\
 \n\
 Rules:\n\
 - Only access paths under these AI-enabled locations (absolute paths):\n{}\n\
-- Use absolute paths exactly as they appear on disk.{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}",
-            policy.roots_summary()
-        )
+- Use absolute paths exactly as they appear on disk.",
+                policy.roots_summary()
+            ));
+        }
     }
+    if policy.allows_git() {
+        sections.push(format!(
+            "Active git repository root: {}\n{}",
+            policy.git_repo_path().unwrap_or(""),
+            GIT_TOOLS_GUIDANCE.trim()
+        ));
+    }
+    format!(
+        "{}{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}",
+        sections.join("\n\n")
+    )
 }
 
 fn synthesis_system_prompt(user: Option<&str>) -> String {
@@ -327,6 +456,133 @@ impl ToolActivitySink {
         };
         let _ = self.app.emit("ai-tool-activity", payload);
     }
+
+    fn emit_git_refresh(&self) {
+        let _ = self.app.emit("forge:git-refresh", ());
+    }
+}
+
+fn format_git_status_summary(status: GitStatusResult) -> String {
+    if !status.is_repo {
+        return "Not a git repository.".to_string();
+    }
+    let mut lines = vec![
+        format!("Branch: {}", status.branch.unwrap_or_else(|| "(unknown)".to_string())),
+        format!("Ahead: {}, Behind: {}", status.ahead, status.behind),
+    ];
+    if status.clean {
+        lines.push("Working tree clean.".to_string());
+    } else {
+        lines.push(format!("{} change(s):", status.changes.len()));
+        for change in status.changes.iter().take(40) {
+            let stage = if change.staged { "staged" } else { "unstaged" };
+            lines.push(format!(
+                "- {} ({stage}): {}",
+                change.status, change.path
+            ));
+        }
+        if status.changes.len() > 40 {
+            lines.push(format!("…and {} more", status.changes.len() - 40));
+        }
+    }
+    lines.join("\n")
+}
+
+fn git_repo_for_policy(policy: &WorkspacePolicy) -> Result<String, String> {
+    policy
+        .git_repo_path()
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            "No git repository is selected for this workspace. Choose one in Source Control."
+                .to_string()
+        })
+}
+
+fn git_tool_output(
+    policy: &WorkspacePolicy,
+    name: &str,
+    v: &serde_json::Value,
+    activity_sink: Option<&ToolActivitySink>,
+) -> Result<String, String> {
+    if !policy.allows_git() {
+        return Err(format!("{name}: git commands are disabled for this agent"));
+    }
+    let repo = git_repo_for_policy(policy)?;
+    let output = match name {
+        "git_status" => {
+            let status = git_status(repo)?;
+            format_git_status_summary(status)
+        }
+        "git_pull" => match git_pull(repo)? {
+            r if r.success => r.output,
+            r => return Err(r.output),
+        },
+        "git_push" => match git_push(repo)? {
+            r if r.success => r.output,
+            r => return Err(r.output),
+        },
+        "git_fetch" => match git_fetch(repo)? {
+            r if r.success => r.output,
+            r => return Err(r.output),
+        },
+        "git_init" => match git_init(repo)? {
+            r if r.success => r.output,
+            r => return Err(r.output),
+        },
+        "git_commit" => {
+            let message = v["message"]
+                .as_str()
+                .ok_or_else(|| "git_commit: missing message".to_string())?
+                .trim()
+                .to_string();
+            if message.is_empty() {
+                return Err("git_commit: message cannot be empty".to_string());
+            }
+            let stage_all = v["stageAll"].as_bool().unwrap_or(false);
+            match git_commit(repo, message, stage_all)? {
+                r if r.success => r.output,
+                r => return Err(r.output),
+            }
+        }
+        "git_clone" => {
+            let url = v["url"]
+                .as_str()
+                .ok_or_else(|| "git_clone: missing url".to_string())?
+                .trim()
+                .to_string();
+            let parent = v["parentPath"]
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| repo.clone());
+            match git_clone(url, parent)? {
+                r if r.success => r.output,
+                r => return Err(r.output),
+            }
+        }
+        "git_restore_paths" => {
+            let paths: Vec<String> = v["paths"]
+                .as_array()
+                .ok_or_else(|| "git_restore_paths: missing paths".to_string())?
+                .iter()
+                .filter_map(|entry| entry.as_str().map(str::trim).filter(|s| !s.is_empty()))
+                .map(|s| s.to_string())
+                .collect();
+            if paths.is_empty() {
+                return Err("git_restore_paths: paths cannot be empty".to_string());
+            }
+            match git_restore_paths(repo, paths)? {
+                r if r.success => r.output,
+                r => return Err(r.output),
+            }
+        }
+        _ => return Err(format!("Unknown git tool: {name}")),
+    };
+    if let Some(sink) = activity_sink {
+        sink.emit_git_refresh();
+    }
+    Ok(output)
 }
 
 fn with_tool_activity(content: String, activities: &[ToolActivity]) -> String {
@@ -377,6 +633,15 @@ fn run_tool(
         ];
         if !policy.allows_write() && write_tools.contains(&name) {
             return Err(format!("{name}: file write access is disabled for this agent"));
+        }
+        if name.starts_with("git_") {
+            return git_tool_output(policy, name, &v, activity_sink).map(|output| ToolExecution {
+                output,
+                activity: None,
+            });
+        }
+        if !policy.has_file_access() {
+            return Err(format!("{name}: file access is disabled for this agent"));
         }
         match name {
             "read_file" => {
@@ -555,7 +820,7 @@ async fn openai_agent_loop(
     validate_base_url(Provider::OpenAi, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = tools_schema_openai(policy.allows_write());
+    let tools = tools_schema_openai(policy);
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
@@ -725,7 +990,7 @@ async fn deepseek_agent_loop(
     validate_base_url(Provider::DeepSeek, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = tools_schema_openai(policy.allows_write());
+    let tools = tools_schema_openai(policy);
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
@@ -911,7 +1176,7 @@ async fn xai_agent_loop_once(
     validate_base_url(Provider::Xai, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = tools_schema_openai(policy.allows_write());
+    let tools = tools_schema_openai(policy);
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
@@ -1017,8 +1282,11 @@ async fn xai_agent_loop(
     }
 }
 
-fn anthropic_tools(allow_write: bool) -> Vec<serde_json::Value> {
-    let mut tools = vec![
+fn append_file_tools_anthropic(tools: &mut Vec<serde_json::Value>, policy: &WorkspacePolicy) {
+    if !policy.has_file_access() {
+        return;
+    }
+    tools.extend([
         json!({
             "name": "read_file",
             "description": "Read a UTF-8 text file under AI-enabled paths. Prefer this over guessing when the answer depends on source, configs, docs, or logs.",
@@ -1041,8 +1309,8 @@ fn anthropic_tools(allow_write: bool) -> Vec<serde_json::Value> {
                 "required": ["path"]
             }
         }),
-    ];
-    if allow_write {
+    ]);
+    if policy.allows_write() {
         tools.extend([
             json!({
                 "name": "write_file",
@@ -1079,6 +1347,79 @@ fn anthropic_tools(allow_write: bool) -> Vec<serde_json::Value> {
                 }
             }),
         ]);
+    }
+}
+
+fn append_git_tools_anthropic(tools: &mut Vec<serde_json::Value>) {
+    tools.extend([
+        json!({
+            "name": "git_status",
+            "description": "Show git status for the active repository.",
+            "input_schema": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "git_pull",
+            "description": "Pull latest changes from the remote.",
+            "input_schema": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "git_push",
+            "description": "Push local commits to the remote.",
+            "input_schema": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "git_fetch",
+            "description": "Fetch from the remote without merging.",
+            "input_schema": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "git_init",
+            "description": "Initialize a new git repository.",
+            "input_schema": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "git_commit",
+            "description": "Create a git commit.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "message": { "type": "string" },
+                    "stageAll": { "type": "boolean" }
+                },
+                "required": ["message"]
+            }
+        }),
+        json!({
+            "name": "git_clone",
+            "description": "Clone a remote repository.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string" },
+                    "parentPath": { "type": "string" }
+                },
+                "required": ["url"]
+            }
+        }),
+        json!({
+            "name": "git_restore_paths",
+            "description": "Discard changes to tracked files and remove untracked paths.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "paths": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["paths"]
+            }
+        }),
+    ]);
+}
+
+fn anthropic_tools(policy: &WorkspacePolicy) -> Vec<serde_json::Value> {
+    let mut tools = Vec::new();
+    append_file_tools_anthropic(&mut tools, policy);
+    if policy.allows_git() {
+        append_git_tools_anthropic(&mut tools);
     }
     tools
 }
@@ -1176,7 +1517,7 @@ async fn anthropic_agent_loop(
     validate_base_url(Provider::Anthropic, &base)?;
     let url = format!("{}/v1/messages", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = anthropic_tools(policy.allows_write());
+    let tools = anthropic_tools(policy);
 
     let mut api_messages: Vec<serde_json::Value> = Vec::new();
     let mut activities: Vec<ToolActivity> = Vec::new();
@@ -1281,8 +1622,11 @@ async fn anthropic_agent_loop(
     Err("Anthropic: stopped after too many tool rounds.".to_string())
 }
 
-fn gemini_tool_declarations(allow_write: bool) -> serde_json::Value {
-    let mut declarations = vec![
+fn append_file_tools_gemini(declarations: &mut Vec<serde_json::Value>, policy: &WorkspacePolicy) {
+    if !policy.has_file_access() {
+        return;
+    }
+    declarations.extend([
         json!({
             "name": "read_file",
             "description": "Read a UTF-8 text file under AI-enabled paths. Prefer over guessing when the task depends on real project contents.",
@@ -1305,8 +1649,8 @@ fn gemini_tool_declarations(allow_write: bool) -> serde_json::Value {
                 "required": ["path"]
             }
         }),
-    ];
-    if allow_write {
+    ]);
+    if policy.allows_write() {
         declarations.extend([
             json!({
                 "name": "write_file",
@@ -1343,6 +1687,79 @@ fn gemini_tool_declarations(allow_write: bool) -> serde_json::Value {
                 }
             }),
         ]);
+    }
+}
+
+fn append_git_tools_gemini(declarations: &mut Vec<serde_json::Value>) {
+    declarations.extend([
+        json!({
+            "name": "git_status",
+            "description": "Show git status for the active repository.",
+            "parameters": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "git_pull",
+            "description": "Pull latest changes from the remote.",
+            "parameters": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "git_push",
+            "description": "Push local commits to the remote.",
+            "parameters": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "git_fetch",
+            "description": "Fetch from the remote without merging.",
+            "parameters": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "git_init",
+            "description": "Initialize a new git repository.",
+            "parameters": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "git_commit",
+            "description": "Create a git commit.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": { "type": "string" },
+                    "stageAll": { "type": "boolean" }
+                },
+                "required": ["message"]
+            }
+        }),
+        json!({
+            "name": "git_clone",
+            "description": "Clone a remote repository.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string" },
+                    "parentPath": { "type": "string" }
+                },
+                "required": ["url"]
+            }
+        }),
+        json!({
+            "name": "git_restore_paths",
+            "description": "Discard changes to tracked files and remove untracked paths.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "paths": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["paths"]
+            }
+        }),
+    ]);
+}
+
+fn gemini_tool_declarations(policy: &WorkspacePolicy) -> serde_json::Value {
+    let mut declarations = Vec::new();
+    append_file_tools_gemini(&mut declarations, policy);
+    if policy.allows_git() {
+        append_git_tools_gemini(&mut declarations);
     }
     json!([{ "function_declarations": declarations }])
 }
@@ -1457,7 +1874,7 @@ async fn gemini_agent_loop(
             "systemInstruction": {
                 "parts": [{ "text": workspace_system_prompt(policy) }],
             },
-            "tools": gemini_tool_declarations(policy.allows_write()),
+            "tools": gemini_tool_declarations(policy),
         });
 
         let res = client

@@ -50,6 +50,7 @@ import {
   loadActiveChatId,
   loadChats,
   loadProjectMemories,
+  loadProjects,
   saveActiveChatId,
   saveChats,
   saveProjectMemories,
@@ -70,6 +71,14 @@ import {
   extractAssistantUiCommands,
 } from "@/lib/assistant-ui-commands";
 import { extractAssistantProjectTools } from "@/lib/assistant-project-tools";
+import {
+  buildGitCommandsSystemGuidance,
+  extractAssistantGitCommands,
+} from "@/lib/assistant-git-commands";
+import {
+  executeGitAssistantCommands,
+  formatGitCommandResults,
+} from "@/lib/execute-git-assistant-command";
 import {
   applyProjectToolsPatches,
   dedupeProjectTools,
@@ -1239,7 +1248,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       const threadKey = threadResponseKey(chatId, threadId);
       const streamId = makeAiStreamId(chatId, threadId, runId);
 
-      const finish = (content: string) => {
+      const finish = async (content: string) => {
         if (responseRunRef.current !== runId) return;
         const { visibleContent: afterTools, patches: toolPatches } =
           extractAssistantProjectTools(content);
@@ -1253,8 +1262,10 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         }
         const { visibleContent: afterPaneActions, actions } =
           extractAssistantPaneActions(afterTools);
-        const { visibleContent, commands } =
+        const { visibleContent: afterUiCommands, commands } =
           extractAssistantUiCommands(afterPaneActions);
+        const { visibleContent, commands: gitCommands } =
+          extractAssistantGitCommands(afterUiCommands);
         let chatSnapshot = findChatSnapshot(
           chatsRef.current,
           draftChatRef.current,
@@ -1306,7 +1317,25 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           enqueueCommands(commands);
         }
 
-        const finalContent = visibleContent || content;
+        let finalContent = visibleContent || content;
+        if (gitCommands.length > 0 && agentPermissions.git) {
+          appendAgentActivityEvent(
+            chatId,
+            threadId,
+            "editing",
+            `Running ${gitCommands.length} git command${gitCommands.length === 1 ? "" : "s"}`,
+          );
+          const gitResults = await executeGitAssistantCommands(
+            gitCommands,
+            chatSnapshot?.gitProjectId,
+          );
+          const gitSummary = formatGitCommandResults(gitResults);
+          if (gitSummary) {
+            finalContent = [finalContent.trim(), gitSummary]
+              .filter(Boolean)
+              .join("\n\n");
+          }
+        }
         appendAgentActivityEvent(
           chatId,
           threadId,
@@ -1388,13 +1417,13 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         flushQueueRef.current(chatId, threadId);
       };
 
-      const fail = (message: string) => {
+      const fail = async (message: string) => {
         appendAgentActivityEvent(chatId, threadId, "error", `Agent failed: ${message}`);
-        finish(`**Could not get a response**\n\n${message}`);
+        await finish(`**Could not get a response**\n\n${message}`);
       };
 
       if (!isTauri()) {
-        fail(
+        await fail(
           "AI chat requires the desktop app. Run with `npm run tauri:dev` and configure either `FORGE_BACKEND_URL` (recommended) or provider API keys in `.env`.",
         );
         return;
@@ -1405,7 +1434,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         const names = unsupported
           .map((id) => getModelById(id)?.name ?? id)
           .join(", ");
-        fail(
+        await fail(
           `${names} ${unsupported.length === 1 ? "is" : "are"} not connected to a provider yet. Use GPT-4o, Claude, Gemini, DeepSeek, or Grok models.`,
         );
         return;
@@ -1447,6 +1476,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           chatSnapshot?.projectDescription?.trim() ?? "";
         const projectTools = dedupeProjectTools(chatSnapshot?.projectTools ?? []);
         const projectToolsPrompt = formatProjectToolsPrompt(projectTools);
+        const gitRepoPath =
+          chatSnapshot?.gitProjectId != null
+            ? (loadProjects().find((p) => p.id === chatSnapshot.gitProjectId)
+                ?.rootPath ?? null)
+            : null;
         const systemParts = [
           agentSystemPrompt,
           permissionsNote ?? "",
@@ -1455,6 +1489,9 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             : "",
           projectToolsPrompt ?? "",
           agentPermissions.inAppSettings ? PROJECT_TOOLS_UPDATE_GUIDANCE : "",
+          agentPermissions.git
+            ? buildGitCommandsSystemGuidance(gitRepoPath)
+            : "",
           AI_UI_COMMAND_SYSTEM_GUIDANCE,
           retrievedMemoryPrompt ?? "",
         ].filter(Boolean);
@@ -1482,7 +1519,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             streamId,
           );
           modelOutputs = [{ modelId: targetModelIds[0], content }];
-          finish(content);
+          await finish(content);
           return;
         }
 
@@ -1542,11 +1579,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           systemPrompt,
         );
 
-        finish(synthesized);
+        await finish(synthesized);
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "An unexpected error occurred.";
-        fail(message);
+        await fail(message);
       }
     },
     [

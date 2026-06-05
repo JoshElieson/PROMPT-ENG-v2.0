@@ -109,20 +109,14 @@ fn parse_status_code(code: &str) -> String {
     }
 }
 
-fn parse_porcelain_line(line: &str) -> Option<GitFileChange> {
+fn parse_porcelain_line(line: &str) -> Vec<GitFileChange> {
     if line.len() < 4 {
-        return None;
+        return Vec::new();
     }
-    let x = line.chars().next()?;
-    let y = line.chars().nth(1)?;
+    let x = line.chars().next().unwrap_or(' ');
+    let y = line.chars().nth(1).unwrap_or(' ');
     if x == '#' || y == '#' {
-        return None;
-    }
-
-    let staged = x != ' ' && x != '?';
-    let unstaged = y != ' ';
-    if !staged && !unstaged {
-        return None;
+        return Vec::new();
     }
 
     let mut rest = line[3..].trim();
@@ -130,17 +124,28 @@ fn parse_porcelain_line(line: &str) -> Option<GitFileChange> {
         rest = rest.split(" -> ").nth(1).unwrap_or(rest);
     }
 
-    let status_code = if x != ' ' {
-        x.to_string()
-    } else {
-        y.to_string()
-    };
+    let mut changes = Vec::new();
+    if x != ' ' && x != '?' {
+        changes.push(GitFileChange {
+            path: rest.to_string(),
+            status: parse_status_code(&x.to_string()),
+            staged: true,
+        });
+    }
+    if y != ' ' {
+        let status_code = if y == '?' {
+            "??".to_string()
+        } else {
+            y.to_string()
+        };
+        changes.push(GitFileChange {
+            path: rest.to_string(),
+            status: parse_status_code(&status_code),
+            staged: false,
+        });
+    }
 
-    Some(GitFileChange {
-        path: rest.to_string(),
-        status: parse_status_code(&status_code),
-        staged,
-    })
+    changes
 }
 
 fn parse_branch_line(line: &str) -> (Option<String>, u32, u32) {
@@ -206,8 +211,8 @@ pub fn git_status(path: String) -> Result<GitStatusResult, String> {
             branch = parsed.0;
             ahead = parsed.1;
             behind = parsed.2;
-        } else if let Some(change) = parse_porcelain_line(line) {
-            changes.push(change);
+        } else {
+            changes.extend(parse_porcelain_line(line));
         }
     }
 

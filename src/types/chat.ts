@@ -86,6 +86,10 @@ export interface AiWorkspacePayload {
   enabledPaths: string[];
   /** When false, only read/list tools are exposed (default: true). */
   allowWrite?: boolean;
+  /** When true, git_* tools are exposed for gitRepoPath. */
+  allowGit?: boolean;
+  /** Active repository root for git tools (from Source Control selection). */
+  gitRepoPath?: string;
 }
 
 export interface SendMessagePayload {

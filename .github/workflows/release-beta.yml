@@ -44,11 +44,11 @@ jobs:
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: forge-windows-1.0.0-1
+          name: forge-windows-1.0.0-2
           path: |
-            release/1.0.0-1/*.exe
-            release/1.0.0-1/*.msi
-            release/1.0.0-1/SHA256SUMS.txt
-            release/1.0.0-1/BETA_INSTALL.txt
-            release/1.0.0-1/.env.example
+            release/1.0.0-2/*.exe
+            release/1.0.0-2/*.msi
+            release/1.0.0-2/SHA256SUMS.txt
+            release/1.0.0-2/BETA_INSTALL.txt
+            release/1.0.0-2/.env.example
           if-no-files-found: error

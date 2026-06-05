@@ -1,5 +1,10 @@
 import type { GitFileChange } from "@/types/git";
 import { aiChatComplete, type ChatTurn } from "@/lib/ai-chat";
+import { parseUserGitCommand } from "@/lib/assistant-git-commands";
+import {
+  executeGitAssistantCommand,
+  formatGitCommandResults,
+} from "@/lib/execute-git-assistant-command";
 import { formatInvokeError } from "@/lib/git";
 
 export interface CommitChatMessage {
@@ -138,7 +143,18 @@ export async function replyToCommitChat(
   userText: string,
   changes: GitFileChange[],
   currentDraft: string,
+  gitProjectId?: string | null,
 ): Promise<CommitChatMessage> {
+  const gitCommand = parseUserGitCommand(userText);
+  if (gitCommand) {
+    const result = await executeGitAssistantCommand(gitCommand, gitProjectId);
+    return {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: formatGitCommandResults([result]),
+    };
+  }
+
   const lower = userText.toLowerCase();
   const suggested = suggestCommitMessage(changes);
 
@@ -207,7 +223,7 @@ export async function replyToCommitChat(
     id: crypto.randomUUID(),
     role: "assistant",
     content:
-      'Ask me to **generate** a message, make it **shorter**, or use **conventional** format. I use your changed files as context.',
+      'Ask me to **generate** a message, make it **shorter**, use **conventional** format, or run git commands like `status`, `pull`, `push`, or `commit -m "message"`.',
     suggestedCommit: changes.length > 0 ? suggested : undefined,
   };
 }

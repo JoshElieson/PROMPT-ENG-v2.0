@@ -6,6 +6,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useGit } from "@/contexts/GitContext";
 import { replyToCommitChat, type CommitChatMessage } from "@/lib/commit-message";
 import type { GitFileChange } from "@/types/git";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ export function CommitMessageChat({
   onApply,
   disabled,
 }: CommitMessageChatProps) {
+  const { projectId } = useGit();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<CommitChatMessage[]>([]);
@@ -50,12 +52,14 @@ export function CommitMessageChat({
       setInput("");
       setIsGenerating(true);
       try {
-        pushAssistant(await replyToCommitChat(trimmed, changes, draft));
+        pushAssistant(
+          await replyToCommitChat(trimmed, changes, draft, projectId),
+        );
       } finally {
         setIsGenerating(false);
       }
     },
-    [changes, draft, pushAssistant],
+    [changes, draft, projectId, pushAssistant],
   );
 
   return (
@@ -123,7 +127,7 @@ export function CommitMessageChat({
                 void send(input);
               }
             }}
-            placeholder="Ask me to run git commands"
+            placeholder="Generate a message or run git status, pull, push…"
             disabled={disabled || isGenerating}
             className="border-border-subtle bg-panel text-foreground focus:border-accent min-w-0 flex-1 rounded border px-2 py-1 text-[11px] outline-none"
           />

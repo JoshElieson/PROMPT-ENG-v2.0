@@ -15,12 +15,20 @@ pub struct AiWorkspace {
     /// When false, only read/list tools are exposed (default: true).
     #[serde(default)]
     pub allow_write: Option<bool>,
+    /// When true, git_* tools are exposed for the configured repository.
+    #[serde(default)]
+    pub allow_git: Option<bool>,
+    /// Absolute path to the active git repository root.
+    #[serde(default)]
+    pub git_repo_path: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePolicy {
     roots: Vec<std::path::PathBuf>,
     allow_write: bool,
+    allow_git: bool,
+    git_repo_path: Option<String>,
 }
 
 impl WorkspacePolicy {
@@ -32,17 +40,38 @@ impl WorkspacePolicy {
             .filter(|s| !s.is_empty())
             .map(std::path::PathBuf::from)
             .collect();
-        if roots.is_empty() {
+        let allow_git = ws.allow_git.unwrap_or(false);
+        let git_repo_path = ws
+            .git_repo_path
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        if roots.is_empty() && !(allow_git && git_repo_path.is_some()) {
             return None;
         }
         Some(Self {
             roots,
             allow_write: ws.allow_write.unwrap_or(true),
+            allow_git: allow_git && git_repo_path.is_some(),
+            git_repo_path,
         })
+    }
+
+    pub fn has_file_access(&self) -> bool {
+        !self.roots.is_empty()
     }
 
     pub fn allows_write(&self) -> bool {
         self.allow_write
+    }
+
+    pub fn allows_git(&self) -> bool {
+        self.allow_git
+    }
+
+    pub fn git_repo_path(&self) -> Option<&str> {
+        self.git_repo_path.as_deref()
     }
 
     /// True if `path` is an enabled root, lies under one, or is a parent of one

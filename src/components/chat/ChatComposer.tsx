@@ -125,7 +125,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   const { sendMessage, activeChat, chats, responseLoading, getQueuedMessageCount } =
     useChats();
   const { selectWorkspaceScreen } = useAppSelection();
-  const { setDirectoryPermissions } = useProjects();
+  const { projects, setDirectoryPermissions } = useProjects();
   const {
     autoEnabled,
     setAutoEnabled,
@@ -159,17 +159,27 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
   const aiWorkspace = useMemo(() => {
     const agentPermissions = resolveAgentPermissions(composerThread);
-    if (!agentPermissions.fileRead) return undefined;
-    if (composerChat?.fileAccessEnabled === false) return undefined;
-    const enabledPaths = Object.entries(composerChat?.permissions ?? {})
-      .filter(([, p]) => p.enabled)
-      .map(([path]) => path);
-    if (enabledPaths.length === 0) return undefined;
+    const gitRepoPath =
+      composerChat?.gitProjectId != null
+        ? projects.find((project) => project.id === composerChat.gitProjectId)
+            ?.rootPath
+        : undefined;
+    const allowGit = agentPermissions.git && !!gitRepoPath;
+    const fileAccessAllowed =
+      agentPermissions.fileRead && composerChat?.fileAccessEnabled !== false;
+    const enabledPaths = fileAccessAllowed
+      ? Object.entries(composerChat?.permissions ?? {})
+          .filter(([, p]) => p.enabled)
+          .map(([path]) => path)
+      : [];
+    if (enabledPaths.length === 0 && !allowGit) return undefined;
     return {
       enabledPaths,
       allowWrite: agentPermissions.fileWrite,
+      allowGit,
+      gitRepoPath,
     };
-  }, [composerChat, composerThread]);
+  }, [composerChat, composerThread, projects]);
 
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
