@@ -8,34 +8,35 @@ import {
   type ReactNode,
 } from "react";
 import {
-  emptyApiUsage,
-  mergeApiUsage,
-  type ApiUsageTotals,
+  applyUsageDeltas,
+  emptyApiUsageSnapshot,
+  type ApiUsageSnapshot,
+  type ModelUsageDelta,
 } from "@/lib/token-usage";
 import { loadApiUsage, saveApiUsage } from "@/lib/storage";
 
 interface ApiUsageContextValue {
-  usage: ApiUsageTotals;
-  addUsage: (delta: ApiUsageTotals) => void;
+  usage: ApiUsageSnapshot;
+  addUsage: (deltas: ModelUsageDelta[]) => void;
   resetUsage: () => void;
 }
 
 const ApiUsageContext = createContext<ApiUsageContextValue | null>(null);
 
 export function ApiUsageProvider({ children }: { children: ReactNode }) {
-  const [usage, setUsage] = useState<ApiUsageTotals>(() => loadApiUsage());
+  const [usage, setUsage] = useState<ApiUsageSnapshot>(() => loadApiUsage());
 
   useEffect(() => {
     saveApiUsage(usage);
   }, [usage]);
 
-  const addUsage = useCallback((delta: ApiUsageTotals) => {
-    if (delta.tokens <= 0 && delta.costUsd <= 0) return;
-    setUsage((prev) => mergeApiUsage(prev, delta));
+  const addUsage = useCallback((deltas: ModelUsageDelta[]) => {
+    if (deltas.length === 0) return;
+    setUsage((prev) => applyUsageDeltas(prev, deltas));
   }, []);
 
   const resetUsage = useCallback(() => {
-    setUsage(emptyApiUsage());
+    setUsage(emptyApiUsageSnapshot());
   }, []);
 
   const value = useMemo(

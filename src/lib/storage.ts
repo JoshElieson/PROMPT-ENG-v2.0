@@ -1,6 +1,10 @@
 import type { ProjectMemory } from "@/types/agent-memory";
 import { normalizeAgentPermissions } from "@/lib/agent-permissions";
 import { normalizeProjectTools } from "@/lib/project-tools";
+import type {
+  ApiUsageSnapshot,
+  ModelUsageTotals,
+} from "@/lib/token-usage";
 import type { Chat, ChatMessage, ChatThread } from "@/types/chat";
 import type { NodePermissions, Project } from "@/types/project";
 import { DEFAULT_PERMISSIONS } from "@/types/project";
@@ -235,26 +239,55 @@ export function saveActiveChatId(id: string | null): void {
   }
 }
 
-export function loadApiUsage(): { tokens: number; costUsd: number } {
+function parseFiniteNonNegative(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, value)
+    : 0;
+}
+
+function parseModelUsageTotals(value: unknown): ModelUsageTotals | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  return {
+    inputTokens: parseFiniteNonNegative(record.inputTokens),
+    outputTokens: parseFiniteNonNegative(record.outputTokens),
+    costUsd: parseFiniteNonNegative(record.costUsd),
+  };
+}
+
+export function loadApiUsage(): ApiUsageSnapshot {
   try {
     const raw = localStorage.getItem(API_USAGE_KEY);
-    if (!raw) return { tokens: 0, costUsd: 0 };
-    const parsed = JSON.parse(raw) as { tokens?: unknown; costUsd?: unknown };
-    const tokens =
-      typeof parsed.tokens === "number" && Number.isFinite(parsed.tokens)
-        ? Math.max(0, parsed.tokens)
-        : 0;
-    const costUsd =
-      typeof parsed.costUsd === "number" && Number.isFinite(parsed.costUsd)
-        ? Math.max(0, parsed.costUsd)
-        : 0;
-    return { tokens, costUsd };
+    if (!raw) return { totals: { tokens: 0, costUsd: 0 }, byModel: {} };
+    const parsed = JSON.parse(raw) as {
+      tokens?: unknown;
+      costUsd?: unknown;
+      byModel?: unknown;
+    };
+    const tokens = parseFiniteNonNegative(parsed.tokens);
+    const costUsd = parseFiniteNonNegative(parsed.costUsd);
+    const byModel: Record<string, ModelUsageTotals> = {};
+    if (parsed.byModel && typeof parsed.byModel === "object") {
+      for (const [modelId, entry] of Object.entries(parsed.byModel)) {
+        const usage = parseModelUsageTotals(entry);
+        if (!usage) continue;
+        if (
+          usage.inputTokens <= 0 &&
+          usage.outputTokens <= 0 &&
+          usage.costUsd <= 0
+        ) {
+          continue;
+        }
+        byModel[modelId] = usage;
+      }
+    }
+    return { totals: { tokens, costUsd }, byModel };
   } catch {
-    return { tokens: 0, costUsd: 0 };
+    return { totals: { tokens: 0, costUsd: 0 }, byModel: {} };
   }
 }
 
-export function saveApiUsage(usage: { tokens: number; costUsd: number }): void {
+export function saveApiUsage(usage: ApiUsageSnapshot): void {
   localStorage.setItem(API_USAGE_KEY, JSON.stringify(usage));
 }
 

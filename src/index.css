@@ -136,6 +136,36 @@
     animation: ai-dock-item-in 0.44s cubic-bezier(0.34, 1.22, 0.64, 1) both;
   }
 
+  @keyframes premium-gold-shine {
+    to {
+      background-position: 200% center;
+    }
+  }
+
+  .text-premium-gold {
+    background: linear-gradient(
+      90deg,
+      #9a7409 0%,
+      #ffd700 22%,
+      #fff8dc 50%,
+      #ffd700 78%,
+      #9a7409 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: premium-gold-shine 4s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .text-premium-gold {
+      animation: none;
+      background-position: center;
+    }
+  }
+
   .ai-dock-shell {
     transition:
       max-height 0.5s cubic-bezier(0.34, 1.18, 0.64, 1),

@@ -31,8 +31,33 @@ export interface ApiUsageTotals {
   costUsd: number;
 }
 
+export interface ModelUsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface ApiUsageSnapshot {
+  totals: ApiUsageTotals;
+  byModel: Record<string, ModelUsageTotals>;
+}
+
+export interface ModelUsageDelta {
+  modelId: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export function emptyApiUsage(): ApiUsageTotals {
   return { tokens: 0, costUsd: 0 };
+}
+
+export function emptyModelUsage(): ModelUsageTotals {
+  return { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+}
+
+export function emptyApiUsageSnapshot(): ApiUsageSnapshot {
+  return { totals: emptyApiUsage(), byModel: {} };
 }
 
 export function estimateTextTokens(text: string): number {
@@ -65,12 +90,8 @@ export function usageDelta(
   modelId: string,
   inputTokens: number,
   outputTokens: number,
-): ApiUsageTotals {
-  const tokens = inputTokens + outputTokens;
-  return {
-    tokens,
-    costUsd: costForTokens(modelId, inputTokens, outputTokens),
-  };
+): ModelUsageDelta {
+  return { modelId, inputTokens, outputTokens };
 }
 
 export function mergeApiUsage(
@@ -81,6 +102,69 @@ export function mergeApiUsage(
     tokens: current.tokens + delta.tokens,
     costUsd: current.costUsd + delta.costUsd,
   };
+}
+
+export function applyUsageDeltas(
+  snapshot: ApiUsageSnapshot,
+  deltas: ModelUsageDelta[],
+): ApiUsageSnapshot {
+  if (deltas.length === 0) return snapshot;
+
+  const byModel = { ...snapshot.byModel };
+  let totalTokens = snapshot.totals.tokens;
+  let totalCost = snapshot.totals.costUsd;
+
+  for (const delta of deltas) {
+    const inputTokens = Math.max(0, delta.inputTokens);
+    const outputTokens = Math.max(0, delta.outputTokens);
+    if (inputTokens <= 0 && outputTokens <= 0) continue;
+
+    const tokens = inputTokens + outputTokens;
+    const costUsd = costForTokens(delta.modelId, inputTokens, outputTokens);
+    const prev = byModel[delta.modelId] ?? emptyModelUsage();
+
+    byModel[delta.modelId] = {
+      inputTokens: prev.inputTokens + inputTokens,
+      outputTokens: prev.outputTokens + outputTokens,
+      costUsd: prev.costUsd + costUsd,
+    };
+    totalTokens += tokens;
+    totalCost += costUsd;
+  }
+
+  return {
+    totals: { tokens: totalTokens, costUsd: totalCost },
+    byModel,
+  };
+}
+
+export function formatTokenCount(value: number): string {
+  const n = Math.max(0, Math.round(value));
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString();
+}
+
+export function formatCostUsd(value: number): string {
+  const n = Math.max(0, value);
+  if (n >= 1) return `$${n.toFixed(2)}`;
+  if (n >= 0.01) return `$${n.toFixed(2)}`;
+  if (n <= 0) return "$0.00";
+  return `$${n.toFixed(4)}`;
+}
+
+export function totalInputTokens(snapshot: ApiUsageSnapshot): number {
+  return Object.values(snapshot.byModel).reduce(
+    (sum, entry) => sum + entry.inputTokens,
+    0,
+  );
+}
+
+export function totalOutputTokens(snapshot: ApiUsageSnapshot): number {
+  return Object.values(snapshot.byModel).reduce(
+    (sum, entry) => sum + entry.outputTokens,
+    0,
+  );
 }
 
 /** Mirrors Tauri `synthesis_provider_for_models` (first participant, then fallback). */
@@ -121,9 +205,9 @@ export function recordSendEstimates(
   userContent: string,
   targetModelIds: string[],
   workspaceEnabled: boolean,
-): ApiUsageTotals {
+): ModelUsageDelta[] {
   const models = targetModelIds.filter(isAiModelSupported);
-  if (models.length === 0) return emptyApiUsage();
+  if (models.length === 0) return [];
 
   const inputPerCall = estimatePerModelInputTokens(
     history,
@@ -131,11 +215,7 @@ export function recordSendEstimates(
     workspaceEnabled,
   );
 
-  let total = emptyApiUsage();
-  for (const modelId of models) {
-    total = mergeApiUsage(total, usageDelta(modelId, inputPerCall, 0));
-  }
-  return total;
+  return models.map((modelId) => usageDelta(modelId, inputPerCall, 0));
 }
 
 export function recordResponseEstimates(
@@ -143,22 +223,21 @@ export function recordResponseEstimates(
   userContent: string,
   outputs: { modelId: string; content: string }[],
   synthesizedContent: string | null,
-): ApiUsageTotals {
+): ModelUsageDelta[] {
   const models = targetModelIds.filter(isAiModelSupported);
-  if (models.length === 0) return emptyApiUsage();
+  if (models.length === 0) return [];
 
-  let total = emptyApiUsage();
+  const deltas: ModelUsageDelta[] = [];
 
   if (models.length === 1) {
     const out = estimateTextTokens(synthesizedContent ?? outputs[0]?.content ?? "");
-    total = mergeApiUsage(total, usageDelta(models[0], 0, out));
-    return total;
+    deltas.push(usageDelta(models[0], 0, out));
+    return deltas;
   }
 
   for (const entry of outputs) {
     if (!isAiModelSupported(entry.modelId)) continue;
-    total = mergeApiUsage(
-      total,
+    deltas.push(
       usageDelta(entry.modelId, 0, estimateTextTokens(entry.content)),
     );
   }
@@ -171,7 +250,7 @@ export function recordResponseEstimates(
     outputs.map((o) => o.content),
   );
   const synthOut = estimateTextTokens(synthesizedContent ?? "");
-  total = mergeApiUsage(total, usageDelta(synthModelId, synthIn, synthOut));
+  deltas.push(usageDelta(synthModelId, synthIn, synthOut));
 
-  return total;
+  return deltas;
 }

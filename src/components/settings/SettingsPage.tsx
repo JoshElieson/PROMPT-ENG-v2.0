@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { SettingsGeneralPanel } from "@/components/settings/SettingsGeneralPanel";
+import { SettingsPlanUsagePanel } from "@/components/settings/SettingsPlanUsagePanel";
 import {
   SETTINGS_NAV_GROUPS,
   SETTINGS_SECTION_LABELS,
@@ -28,6 +29,28 @@ interface SettingsSearchResult {
   keywords: string;
   sectionLabel: string;
 }
+
+const PLAN_USAGE_SEARCH_TERMS: Array<{
+  label: string;
+  keywords: string;
+}> = [
+  {
+    label: "Tokens sent",
+    keywords: "usage tokens sent input models api cost",
+  },
+  {
+    label: "Usage by model",
+    keywords: "usage model tokens per model breakdown",
+  },
+  {
+    label: "Reset usage",
+    keywords: "reset usage tokens clear statistics",
+  },
+  {
+    label: "See Pricing Plans",
+    keywords: "premium pricing plans upgrade billing subscription",
+  },
+];
 
 const GENERAL_SETTING_SEARCH_TERMS: Array<{
   label: string;
@@ -81,6 +104,13 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchResult[] = [
     label: item.label,
     keywords: item.keywords.toLowerCase(),
     sectionLabel: SETTINGS_SECTION_LABELS.general,
+  })),
+  ...PLAN_USAGE_SEARCH_TERMS.map((item, index) => ({
+    id: `plan-usage-setting-${index}`,
+    sectionId: "plan-usage" as const,
+    label: item.label,
+    keywords: item.keywords.toLowerCase(),
+    sectionLabel: SETTINGS_SECTION_LABELS["plan-usage"],
   })),
 ];
 
@@ -178,9 +208,11 @@ function SettingsContent({ sectionId }: { sectionId: SettingsSectionId }) {
       {sectionId === "general" && <SettingsGeneralPanel />}
       {sectionId === "models" && <SettingsModelsPanel />}
       {sectionId === "appearance" && <SettingsAppearancePanel />}
+      {sectionId === "plan-usage" && <SettingsPlanUsagePanel />}
       {sectionId !== "general" &&
         sectionId !== "models" &&
-        sectionId !== "appearance" && (
+        sectionId !== "appearance" &&
+        sectionId !== "plan-usage" && (
           <SettingsPlaceholderPanel sectionId={sectionId} />
         )}
     </div>

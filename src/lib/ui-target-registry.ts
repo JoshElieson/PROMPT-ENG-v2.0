@@ -40,6 +40,18 @@ export const aiTargets: Record<string, AiTargetMeta> = {
     route: "/settings/appearance",
     settingKey: "theme",
   },
+  "settings.plan-usage.summary": {
+    label: "Usage Summary",
+    route: "/settings/plan-usage",
+  },
+  "settings.plan-usage.reset": {
+    label: "Reset Usage",
+    route: "/settings/plan-usage",
+  },
+  "settings.plan-usage.upgrade": {
+    label: "See Pricing Plans",
+    route: "/settings/plan-usage",
+  },
   "chat.settings.button": { label: "Chat Settings" },
   "chat.model-selector": { label: "Model Selector" },
   "chat.settings.agent-name": { label: "Agent Name" },
