@@ -97,6 +97,89 @@ fn is_git_repo(path: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn rev_list_count(path: &str, range: &str) -> u32 {
+    run_git(path, &["rev-list", "--count", range])
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
+
+fn remote_branch_ref(path: &str, branch: &str) -> Option<String> {
+    let remote_ref = format!("origin/{branch}");
+    if run_git(
+        path,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/remotes/{remote_ref}"),
+        ],
+    )
+    .is_ok()
+    {
+        Some(remote_ref)
+    } else {
+        None
+    }
+}
+
+fn current_branch(path: &str) -> Option<String> {
+    run_git(path, &["branch", "--show-current"])
+        .ok()
+        .filter(|s| !s.is_empty())
+}
+
+fn resolve_branch(path: &str, branch: Option<String>) -> Result<String, String> {
+    branch
+        .map(|b| b.trim().to_string())
+        .filter(|b| !b.is_empty())
+        .or_else(|| current_branch(path))
+        .ok_or_else(|| "Could not determine the current branch.".to_string())
+}
+
+fn resolve_ahead_behind(
+    path: &str,
+    branch: Option<&str>,
+    parsed_ahead: u32,
+    parsed_behind: u32,
+) -> (u32, u32) {
+    if parsed_ahead > 0 || parsed_behind > 0 {
+        return (parsed_ahead, parsed_behind);
+    }
+
+    let Some(branch) = branch.filter(|b| !b.is_empty()) else {
+        return (parsed_ahead, parsed_behind);
+    };
+
+    if let Some(remote_ref) = remote_branch_ref(path, branch) {
+        return (
+            rev_list_count(path, &format!("{remote_ref}..HEAD")),
+            rev_list_count(path, &format!("HEAD..{remote_ref}")),
+        );
+    }
+
+    let unpublished = rev_list_count(path, "HEAD --not --remotes");
+    if unpublished > 0 {
+        return (unpublished, 0);
+    }
+
+    (parsed_ahead, parsed_behind)
+}
+
+fn push_branch(path: &str, branch: &str) -> Result<String, String> {
+    match run_git(path, &["push"]) {
+        Ok(output) => Ok(output),
+        Err(first_error) => match run_git(path, &["push", "-u", "origin", branch]) {
+            Ok(output) => Ok(output),
+            Err(second_error) => Err(if second_error.is_empty() {
+                first_error
+            } else {
+                second_error
+            }),
+        },
+    }
+}
+
 fn parse_status_code(code: &str) -> String {
     match code {
         "M" | "MM" => "modified".to_string(),
@@ -178,6 +261,213 @@ fn parse_branch_line(line: &str) -> (Option<String>, u32, u32) {
     (branch, ahead, behind)
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchEntry {
+    pub name: String,
+    pub is_current: bool,
+    pub is_remote: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchListResult {
+    pub current: Option<String>,
+    pub branches: Vec<GitBranchEntry>,
+}
+
+fn branch_exists_local(path: &str, branch: &str) -> bool {
+    run_git(path, &["show-ref", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_ok()
+}
+
+fn branch_exists_remote(path: &str, branch: &str) -> bool {
+    run_git(
+        path,
+        &[
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/remotes/origin/{branch}"),
+        ],
+    )
+    .is_ok()
+}
+
+fn checkout_branch(path: &str, branch: &str) -> Result<String, String> {
+    if branch_exists_local(path, branch) {
+        return run_git(path, &["switch", branch]);
+    }
+    if branch_exists_remote(path, branch) {
+        if let Ok(output) = run_git(path, &["switch", branch]) {
+            return Ok(output);
+        }
+        return run_git(
+            path,
+            &["switch", "-c", branch, &format!("origin/{branch}")],
+        );
+    }
+    Err(format!("Branch \"{branch}\" was not found locally or on origin."))
+}
+
+#[tauri::command]
+pub fn git_list_branches(path: String) -> Result<GitBranchListResult, String> {
+    if !is_git_repo(&path) {
+        return Err("Not a git repository.".to_string());
+    }
+
+    let current = run_git(&path, &["branch", "--show-current"])
+        .ok()
+        .filter(|s| !s.is_empty());
+
+    let mut seen = std::collections::HashSet::new();
+    let mut branches = Vec::new();
+
+    if let Ok(local) = run_git(
+        &path,
+        &[
+            "for-each-ref",
+            "refs/heads/",
+            "--format=%(refname:short)",
+            "--sort=-committerdate",
+        ],
+    ) {
+        for name in local.lines() {
+            let name = name.trim();
+            if name.is_empty() || !seen.insert(name.to_string()) {
+                continue;
+            }
+            branches.push(GitBranchEntry {
+                name: name.to_string(),
+                is_current: current.as_deref() == Some(name),
+                is_remote: false,
+            });
+        }
+    }
+
+    if let Ok(remote) = run_git(
+        &path,
+        &[
+            "for-each-ref",
+            "refs/remotes/origin/",
+            "--format=%(refname:short)",
+            "--sort=-committerdate",
+        ],
+    ) {
+        for line in remote.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.ends_with("/HEAD") {
+                continue;
+            }
+            let name = line.strip_prefix("origin/").unwrap_or(line);
+            if name == "HEAD" || !seen.insert(name.to_string()) {
+                continue;
+            }
+            branches.push(GitBranchEntry {
+                name: name.to_string(),
+                is_current: current.as_deref() == Some(name),
+                is_remote: true,
+            });
+        }
+    }
+
+    branches.sort_by(|a, b| {
+        match (a.is_current, b.is_current) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => match (a.is_remote, b.is_remote) {
+                (false, true) => std::cmp::Ordering::Less,
+                (true, false) => std::cmp::Ordering::Greater,
+                _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            },
+        }
+    });
+
+    Ok(GitBranchListResult { current, branches })
+}
+
+#[tauri::command]
+pub fn git_checkout_branch(path: String, branch: String) -> Result<GitCommandResult, String> {
+    if !is_git_repo(&path) {
+        return Err("Not a git repository.".to_string());
+    }
+    let branch = branch.trim();
+    if branch.is_empty() {
+        return Err("Branch name is required.".to_string());
+    }
+    match checkout_branch(&path, branch) {
+        Ok(output) => Ok(GitCommandResult {
+            success: true,
+            output,
+        }),
+        Err(e) => Ok(GitCommandResult {
+            success: false,
+            output: e,
+        }),
+    }
+}
+
+#[tauri::command]
+pub fn git_sync_branch(path: String, branch: String) -> Result<GitCommandResult, String> {
+    if !is_git_repo(&path) {
+        return Err("Not a git repository.".to_string());
+    }
+    let branch = branch.trim();
+    if branch.is_empty() {
+        return Err("Branch name is required.".to_string());
+    }
+
+    let mut steps = Vec::new();
+
+    if let Err(e) = run_git(&path, &["fetch", "--prune"]) {
+        steps.push(format!("fetch: {e}"));
+    } else {
+        steps.push("fetch: ok".to_string());
+    }
+
+    let current = run_git(&path, &["branch", "--show-current"]).unwrap_or_default();
+    if current != branch {
+        match checkout_branch(&path, branch) {
+            Ok(output) => {
+                if !output.is_empty() {
+                    steps.push(output);
+                }
+                steps.push(format!("checked out {branch}"));
+            }
+            Err(e) => {
+                return Ok(GitCommandResult {
+                    success: false,
+                    output: format!("{}\n{}", steps.join("\n"), e),
+                });
+            }
+        }
+    }
+
+    match run_git(&path, &["pull", "--ff-only"]) {
+        Ok(output) => Ok(GitCommandResult {
+            success: true,
+            output: if output.is_empty() {
+                format!("{}\nPull complete.", steps.join("\n"))
+            } else {
+                format!("{}\n{output}", steps.join("\n"))
+            },
+        }),
+        Err(_) => match run_git(&path, &["pull"]) {
+            Ok(output) => Ok(GitCommandResult {
+                success: true,
+                output: if output.is_empty() {
+                    format!("{}\nPull complete.", steps.join("\n"))
+                } else {
+                    format!("{}\n{output}", steps.join("\n"))
+                },
+            }),
+            Err(e) => Ok(GitCommandResult {
+                success: false,
+                output: format!("{}\n{e}", steps.join("\n")),
+            }),
+        },
+    }
+}
+
 #[tauri::command]
 pub fn git_status(path: String) -> Result<GitStatusResult, String> {
     let dir = Path::new(&path);
@@ -217,10 +507,10 @@ pub fn git_status(path: String) -> Result<GitStatusResult, String> {
     }
 
     if branch.is_none() {
-        branch = run_git(&path, &["branch", "--show-current"])
-            .ok()
-            .filter(|s| !s.is_empty());
+        branch = current_branch(&path);
     }
+
+    let (ahead, behind) = resolve_ahead_behind(&path, branch.as_deref(), ahead, behind);
 
     let clean = changes.is_empty();
     Ok(GitStatusResult {
@@ -251,20 +541,112 @@ pub fn git_pull(path: String) -> Result<GitCommandResult, String> {
 }
 
 #[tauri::command]
-pub fn git_push(path: String) -> Result<GitCommandResult, String> {
+pub fn git_push(path: String, branch: Option<String>) -> Result<GitCommandResult, String> {
     if !is_git_repo(&path) {
         return Err("Not a git repository.".to_string());
     }
-    match run_git(&path, &["push"]) {
+    let branch = resolve_branch(&path, branch)?;
+    match push_branch(&path, &branch) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
-            output,
+            output: if output.is_empty() {
+                format!("Pushed to origin/{branch}.")
+            } else {
+                output
+            },
         }),
         Err(e) => Ok(GitCommandResult {
             success: false,
             output: e,
         }),
     }
+}
+
+#[tauri::command]
+pub fn git_sync(path: String, branch: Option<String>) -> Result<GitCommandResult, String> {
+    if !is_git_repo(&path) {
+        return Err("Not a git repository.".to_string());
+    }
+
+    let branch = resolve_branch(&path, branch)?;
+    let mut steps: Vec<String> = Vec::new();
+
+    if let Err(e) = run_git(&path, &["fetch", "origin"]) {
+        steps.push(format!("fetch: {e}"));
+    } else {
+        steps.push("fetch: ok".to_string());
+    }
+
+    let current = current_branch(&path).unwrap_or_default();
+    if current != branch {
+        match checkout_branch(&path, &branch) {
+            Ok(output) => {
+                if !output.is_empty() {
+                    steps.push(output);
+                }
+                steps.push(format!("checked out {branch}"));
+            }
+            Err(e) => {
+                return Ok(GitCommandResult {
+                    success: false,
+                    output: format!("{}\n{e}", steps.join("\n")),
+                });
+            }
+        }
+    }
+
+    let (_, behind) = resolve_ahead_behind(&path, Some(&branch), 0, 0);
+
+    if behind > 0 {
+        match run_git(&path, &["pull", "--ff-only"]) {
+            Ok(output) => {
+                if !output.is_empty() {
+                    steps.push(output);
+                }
+                steps.push("pull: ok".to_string());
+            }
+            Err(_) => match run_git(&path, &["pull"]) {
+                Ok(output) => {
+                    if !output.is_empty() {
+                        steps.push(output);
+                    }
+                    steps.push("pull: ok".to_string());
+                }
+                Err(e) => {
+                    return Ok(GitCommandResult {
+                        success: false,
+                        output: format!("{}\n{e}", steps.join("\n")),
+                    });
+                }
+            },
+        }
+    }
+
+    let (ahead, _) = resolve_ahead_behind(&path, Some(&branch), 0, 0);
+
+    if ahead > 0 {
+        match push_branch(&path, &branch) {
+            Ok(output) => {
+                if !output.is_empty() {
+                    steps.push(output);
+                }
+                steps.push(format!("pushed {ahead} commit(s) to origin/{branch}"));
+            }
+            Err(e) => {
+                return Ok(GitCommandResult {
+                    success: false,
+                    output: format!("{}\n{e}", steps.join("\n")),
+                });
+            }
+        }
+    } else if behind == 0 {
+        steps.push("Already up to date with remote.".to_string());
+    }
+
+    Ok(GitCommandResult {
+        success: true,
+        output: steps.join("\n"),
+    })
 }
 
 #[tauri::command]

@@ -22,7 +22,8 @@ use fs::{
 };
 use fs_watch::{sync_project_fs_watchers, FsWatchState};
 use git::{
-    git_clone, git_commit, git_fetch, git_init, git_pull, git_push, git_restore_paths, git_status,
+    git_checkout_branch, git_clone, git_commit, git_fetch, git_init, git_list_branches, git_pull,
+    git_push, git_restore_paths, git_status, git_sync, git_sync_branch,
 };
 use ai_chat::{ai_chat_complete, ai_chat_synthesize};
 use embedded_browser::{
@@ -66,8 +67,12 @@ pub fn run() {
             relative_path_from_root,
             sync_project_fs_watchers,
             git_status,
+            git_list_branches,
+            git_checkout_branch,
+            git_sync_branch,
             git_pull,
             git_push,
+            git_sync,
             git_fetch,
             git_init,
             git_clone,

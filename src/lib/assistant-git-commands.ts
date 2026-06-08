@@ -118,7 +118,7 @@ export function buildGitCommandsSystemGuidance(repoPath: string | null): string 
   ].join("\n");
 }
 
-/** Parse simple natural-language git requests from the commit assistant input. */
+/** Parse simple natural-language git requests from user text. */
 export function parseUserGitCommand(text: string): GitAssistantCommand | null {
   const trimmed = text.trim();
   if (!trimmed) return null;

@@ -16,20 +16,31 @@ import { listenProjectFsChanged, syncProjectFsWatchers } from "@/lib/fs-watch";
 import { pathsEqual } from "@/lib/project-paths";
 import { useChats } from "@/contexts/ChatsContext";
 import { useProjects } from "@/contexts/ProjectsContext";
-import type { GitCommandResult, GitStatusResult } from "@/types/git";
+import type {
+  GitBranchEntry,
+  GitBranchListResult,
+  GitCommandResult,
+  GitStatusResult,
+} from "@/types/git";
 
 interface GitContextValue {
   repoPath: string | null;
   projectId: string | null;
   setActiveProject: (id: string | null) => void;
   status: GitStatusResult | null;
+  branches: GitBranchEntry[];
+  isLoadingBranches: boolean;
   isLoading: boolean;
   isOperating: boolean;
   lastMessage: string | null;
   lastMessageOk: boolean;
   refresh: () => Promise<void>;
+  loadBranches: () => Promise<void>;
+  checkoutBranch: (branch: string) => Promise<void>;
+  syncBranch: (branch: string) => Promise<void>;
   pull: () => Promise<void>;
-  push: () => Promise<void>;
+  push: (branch?: string) => Promise<void>;
+  syncChanges: (branch?: string) => Promise<void>;
   fetch: () => Promise<void>;
   init: () => Promise<void>;
   clone: (url: string, parentPath: string) => Promise<GitCommandResult>;
@@ -97,6 +108,8 @@ export function GitProvider({ children }: { children: ReactNode }) {
   );
 
   const [status, setStatus] = useState<GitStatusResult | null>(null);
+  const [branches, setBranches] = useState<GitBranchEntry[]>([]);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isOperating, setIsOperating] = useState(false);
   const [lastMessage, setLastMessage] = useState<string | null>(null);
@@ -140,6 +153,30 @@ export function GitProvider({ children }: { children: ReactNode }) {
     },
     [repoPath, setMessage],
   );
+
+  const loadBranches = useCallback(async () => {
+    if (!repoPath || !status?.isRepo) {
+      setBranches([]);
+      return;
+    }
+    setIsLoadingBranches(true);
+    try {
+      const result: GitBranchListResult = await git.gitListBranches(repoPath);
+      setBranches(result.branches);
+    } catch (e) {
+      setBranches([]);
+      setMessage(
+        false,
+        git.formatInvokeError(e, "Failed to list git branches."),
+      );
+    } finally {
+      setIsLoadingBranches(false);
+    }
+  }, [repoPath, status?.isRepo, setMessage]);
+
+  useEffect(() => {
+    void loadBranches();
+  }, [loadBranches, status?.branch]);
 
   useEffect(() => {
     queueMicrotask(() => void refresh());
@@ -221,10 +258,43 @@ export function GitProvider({ children }: { children: ReactNode }) {
     await runOp("Pull complete.", () => git.gitPull(repoPath));
   }, [repoPath, runOp]);
 
-  const push = useCallback(async () => {
-    if (!repoPath) return;
-    await runOp("Push complete.", () => git.gitPush(repoPath));
-  }, [repoPath, runOp]);
+  const checkoutBranch = useCallback(
+    async (branch: string) => {
+      if (!repoPath) return;
+      await runOp(`Checked out ${branch}.`, () =>
+        git.gitCheckoutBranch(repoPath, branch),
+      );
+      await loadBranches();
+    },
+    [repoPath, runOp, loadBranches],
+  );
+
+  const syncBranch = useCallback(
+    async (branch: string) => {
+      if (!repoPath) return;
+      await runOp(`Updated ${branch} from remote.`, () =>
+        git.gitSyncBranch(repoPath, branch),
+      );
+      await loadBranches();
+    },
+    [repoPath, runOp, loadBranches],
+  );
+
+  const push = useCallback(
+    async (branch?: string) => {
+      if (!repoPath) return;
+      await runOp("Push complete.", () => git.gitPush(repoPath, branch));
+    },
+    [repoPath, runOp],
+  );
+
+  const syncChanges = useCallback(
+    async (branch?: string) => {
+      if (!repoPath) return;
+      await runOp("Sync complete.", () => git.gitSync(repoPath, branch));
+    },
+    [repoPath, runOp],
+  );
 
   const fetchRemote = useCallback(async () => {
     if (!repoPath) return;
@@ -274,13 +344,19 @@ export function GitProvider({ children }: { children: ReactNode }) {
       projectId,
       setActiveProject,
       status,
+      branches,
+      isLoadingBranches,
       isLoading,
       isOperating,
       lastMessage,
       lastMessageOk,
       refresh,
+      loadBranches,
+      checkoutBranch,
+      syncBranch,
       pull,
       push,
+      syncChanges,
       fetch: fetchRemote,
       init,
       clone,
@@ -292,13 +368,19 @@ export function GitProvider({ children }: { children: ReactNode }) {
       projectId,
       setActiveProject,
       status,
+      branches,
+      isLoadingBranches,
       isLoading,
       isOperating,
       lastMessage,
       lastMessageOk,
       refresh,
+      loadBranches,
+      checkoutBranch,
+      syncBranch,
       pull,
       push,
+      syncChanges,
       fetchRemote,
       init,
       clone,

@@ -25,3 +25,14 @@ export interface GitCommandResult {
   success: boolean;
   output: string;
 }
+
+export interface GitBranchEntry {
+  name: string;
+  isCurrent: boolean;
+  isRemote: boolean;
+}
+
+export interface GitBranchListResult {
+  current: string | null;
+  branches: GitBranchEntry[];
+}

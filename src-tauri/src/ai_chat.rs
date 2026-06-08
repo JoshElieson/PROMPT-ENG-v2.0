@@ -517,7 +517,7 @@ fn git_tool_output(
             r if r.success => r.output,
             r => return Err(r.output),
         },
-        "git_push" => match git_push(repo)? {
+        "git_push" => match git_push(repo, None)? {
             r if r.success => r.output,
             r => return Err(r.output),
         },

@@ -1,18 +1,6 @@
 import type { GitFileChange } from "@/types/git";
 import { aiChatComplete, type ChatTurn } from "@/lib/ai-chat";
-import { parseUserGitCommand } from "@/lib/assistant-git-commands";
-import {
-  executeGitAssistantCommand,
-  formatGitCommandResults,
-} from "@/lib/execute-git-assistant-command";
 import { formatInvokeError } from "@/lib/git";
-
-export interface CommitChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  suggestedCommit?: string;
-}
 
 function basename(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/");
@@ -137,93 +125,4 @@ export function suggestCommitMessage(changes: GitFileChange[]): string {
       : `update ${changes.length} files`;
 
   return `${type}: ${headline}\n\n${summary}`;
-}
-
-export async function replyToCommitChat(
-  userText: string,
-  changes: GitFileChange[],
-  currentDraft: string,
-  gitProjectId?: string | null,
-): Promise<CommitChatMessage> {
-  const gitCommand = parseUserGitCommand(userText);
-  if (gitCommand) {
-    const result = await executeGitAssistantCommand(gitCommand, gitProjectId);
-    return {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: formatGitCommandResults([result]),
-    };
-  }
-
-  const lower = userText.toLowerCase();
-  const suggested = suggestCommitMessage(changes);
-
-  if (
-    lower.includes("generate") ||
-    lower.includes("suggest") ||
-    lower.includes("write") ||
-    lower.trim() === ""
-  ) {
-    let aiSuggested: string | undefined;
-    let content =
-      "Here's a commit message from AI. Click **Use message** to apply it.";
-    if (changes.length > 0) {
-      try {
-        aiSuggested = await generateCommitMessageWithAi(changes);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "AI generation failed.";
-        return {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `I couldn't generate with AI right now: ${message}`,
-          suggestedCommit: suggested.split("\n")[0] ?? "update project files",
-        };
-      }
-    } else {
-      content = "No pending changes to summarize. Stage or edit files first.";
-    }
-    return {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content,
-      suggestedCommit: changes.length > 0 ? aiSuggested : undefined,
-    };
-  }
-
-  if (lower.includes("shorter") || lower.includes("brief")) {
-    const short = `${inferType(changes)}: ${changes.length === 1 ? `update ${basename(changes[0].path)}` : `update ${changes.length} files`}`;
-    return {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "Shortened the message:",
-      suggestedCommit: short,
-    };
-  }
-
-  if (lower.includes("conventional") || lower.includes("format")) {
-    return {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "Conventional commit format:",
-      suggestedCommit: suggested,
-    };
-  }
-
-  if (currentDraft.trim()) {
-    return {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: `You can refine your draft:\n\n"${currentDraft.trim()}"\n\nOr try: "generate", "shorter", or "conventional".`,
-      suggestedCommit: currentDraft.trim(),
-    };
-  }
-
-  return {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    content:
-      'Ask me to **generate** a message, make it **shorter**, use **conventional** format, or run git commands like `status`, `pull`, `push`, or `commit -m "message"`.',
-    suggestedCommit: changes.length > 0 ? suggested : undefined,
-  };
 }

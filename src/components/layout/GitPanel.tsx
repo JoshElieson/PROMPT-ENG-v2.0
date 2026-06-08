@@ -9,7 +9,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { CommitMessageChat } from "@/components/git/CommitMessageChat";
+import { GitBranchSelector } from "@/components/git/GitBranchSelector";
 import { GitFileIcon } from "@/components/git/GitFileIcon";
 import { SourceControlIcon } from "@/components/git/SourceControlIcon";
 import { Button } from "@/components/ui/button";
@@ -141,6 +141,7 @@ export function GitPanel({ active }: GitPanelProps) {
     refresh,
     pull,
     push,
+    syncChanges,
     fetch,
     init,
     clone,
@@ -162,7 +163,6 @@ export function GitPanel({ active }: GitPanelProps) {
   const hasStaged = staged.length > 0;
   const hasChanges = allChanges.length > 0;
   const ahead = status?.ahead ?? 0;
-  const behind = status?.behind ?? 0;
   const showSyncChanges = ahead > 0 && !hasChanges;
   const branchLabel = status?.branch ?? "main";
   const selectedProject = useMemo(
@@ -181,11 +181,8 @@ export function GitPanel({ active }: GitPanelProps) {
   );
 
   const handleSyncChanges = useCallback(async () => {
-    if (behind > 0) {
-      await pull();
-    }
-    await push();
-  }, [behind, pull, push]);
+    await syncChanges(branchLabel);
+  }, [branchLabel, syncChanges]);
 
   const onCommitKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -240,7 +237,7 @@ export function GitPanel({ active }: GitPanelProps) {
         <DropdownMenuItem onClick={() => void pull()} disabled={busy || !isRepo}>
           Pull
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => void push()} disabled={busy || !isRepo}>
+        <DropdownMenuItem onClick={() => void push(branchLabel)} disabled={busy || !isRepo}>
           Push
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => void fetch()} disabled={busy || !isRepo}>
@@ -390,9 +387,13 @@ export function GitPanel({ active }: GitPanelProps) {
                         className="h-[26px] flex-1 gap-1.5 rounded-r-none bg-[#0e639c] text-xs text-white hover:bg-[#1177bb]"
                         disabled={busy}
                         onClick={() => void handleSyncChanges()}
+                        title={`Push ${ahead} commit${ahead === 1 ? "" : "s"} to origin/${branchLabel}`}
                       >
                         <RefreshCw className="h-3.5 w-3.5" />
                         Sync Changes
+                        <span className="ml-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white/20 px-1.5 text-[10px] font-semibold tabular-nums">
+                          {ahead}
+                        </span>
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -408,7 +409,7 @@ export function GitPanel({ active }: GitPanelProps) {
                           <DropdownMenuItem onClick={() => void pull()} disabled={busy}>
                             Pull
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => void push()} disabled={busy}>
+                          <DropdownMenuItem onClick={() => void push(branchLabel)} disabled={busy}>
                             Push
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -448,7 +449,7 @@ export function GitPanel({ active }: GitPanelProps) {
                           <DropdownMenuItem
                             onClick={async () => {
                               await handleCommit(true);
-                              await push();
+                              await push(branchLabel);
                             }}
                           >
                             Commit All & Push
@@ -531,7 +532,7 @@ export function GitPanel({ active }: GitPanelProps) {
                 </div>
               )}
 
-              {projectId && isRepo && status?.clean && (
+              {projectId && isRepo && status?.clean && !showSyncChanges && (
                 <p className="text-muted px-3 py-4 text-center text-xs">
                   No changes. Working tree clean.
                 </p>
@@ -546,12 +547,7 @@ export function GitPanel({ active }: GitPanelProps) {
             </ScrollArea>
 
             {projectId && isRepo && (
-              <CommitMessageChat
-                changes={allChanges}
-                draft={commitMessage}
-                onApply={setCommitMessage}
-                disabled={busy}
-              />
+              <GitBranchSelector disabled={busy} />
             )}
           </>
         )}
