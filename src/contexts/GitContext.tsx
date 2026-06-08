@@ -297,20 +297,11 @@ export function GitProvider({ children }: { children: ReactNode }) {
   const syncChanges = useCallback(
     async (branch?: string) => {
       if (!repoPath) return;
-      if (!githubToken) {
-        setMessage(
-          false,
-          session?.provider === "google"
-            ? "GitHub sync requires signing in with GitHub from your profile."
-            : "Sign in with GitHub from your profile to sync repository changes.",
-        );
-        return;
-      }
       await runOp("Sync complete.", () =>
         git.gitSync(repoPath, branch, githubToken),
       );
     },
-    [repoPath, runOp, githubToken, session?.provider, setMessage],
+    [repoPath, runOp, githubToken],
   );
 
   const fetchRemote = useCallback(async () => {

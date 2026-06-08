@@ -58,6 +58,47 @@ fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
     run_git_with_auth(cwd, args, None)
 }
 
+fn normalize_github_token(token: Option<String>) -> Option<String> {
+    token.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn load_github_token_from_store() -> Option<String> {
+    #[cfg(windows)]
+    let config_dir = std::env::var("APPDATA").ok()?;
+    #[cfg(not(windows))]
+    let config_dir = std::env::var("HOME")
+        .ok()
+        .map(|home| format!("{home}/.config"))?;
+
+    let path = PathBuf::from(config_dir)
+        .join("com.forge.desktop")
+        .join("auth.v1.json");
+    let content = std::fs::read_to_string(path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let session = json.get("session")?;
+    if session.get("provider")?.as_str()? != "github" {
+        return None;
+    }
+    session
+        .get("accessToken")
+        .or_else(|| session.get("access_token"))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn resolve_github_token(github_token: Option<String>) -> Option<String> {
+    normalize_github_token(github_token).or_else(load_github_token_from_store)
+}
+
 fn run_git_with_auth(
     cwd: &str,
     args: &[&str],
@@ -70,13 +111,10 @@ fn run_git_with_auth(
 
     if let Some(token) = github_token.filter(|t| !t.trim().is_empty()) {
         let token = token.trim();
+        cmd.arg("-c").arg("credential.helper=");
         cmd.arg("-c").arg(format!(
-            "http.https://github.com/.extraHeader=AUTHORIZATION: bearer {token}"
+            "url.https://x-access-token:{token}@github.com/.insteadOf=https://github.com/"
         ));
-        let helper = format!(
-            "!f() {{ echo username=x-access-token; echo password={token}; }}; f"
-        );
-        cmd.arg("-c").arg(format!("credential.helper={helper}"));
     }
 
     cmd.args(args);
@@ -97,17 +135,6 @@ fn run_git_with_auth(
     } else {
         Err(if stderr.is_empty() { stdout } else { stderr })
     }
-}
-
-fn normalize_github_token(token: Option<String>) -> Option<String> {
-    token.and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    })
 }
 
 fn normalize_pathspec(repo_path: &Path, raw_path: &str) -> String {
@@ -206,11 +233,13 @@ fn format_git_error(raw: &str) -> String {
         || lower.contains("could not read username")
         || lower.contains("terminal prompts disabled")
         || lower.contains("permission denied (publickey)")
-        || lower.contains("access denied")
-        || lower.contains("403")
-        || lower.contains("401")
     {
-        return "GitHub repository access failed. Sign out and sign in again from your profile to grant repo access, then retry."
+        return "GitHub authentication failed while pushing. Sign in with GitHub from your profile, then retry Sync Changes."
+            .to_string();
+    }
+
+    if lower.contains("access denied") || lower.contains("403") || lower.contains("401") {
+        return "GitHub denied repository access for this push. Confirm you are signed in with GitHub and have access to this repository."
             .to_string();
     }
 
@@ -494,7 +523,7 @@ pub fn git_sync_branch(
     if branch.is_empty() {
         return Err("Branch name is required.".to_string());
     }
-    let token = normalize_github_token(github_token);
+    let token = resolve_github_token(github_token);
     let token_ref = token.as_deref();
     let mut steps = Vec::new();
 
@@ -614,7 +643,7 @@ pub fn git_pull(path: String, github_token: Option<String>) -> Result<GitCommand
     if !is_git_repo(&path) {
         return Err("Not a git repository.".to_string());
     }
-    let token = normalize_github_token(github_token);
+    let token = resolve_github_token(github_token);
     match run_git_with_auth(&path, &["pull"], token.as_deref()) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
@@ -637,7 +666,7 @@ pub fn git_push(
         return Err("Not a git repository.".to_string());
     }
     let branch = resolve_branch(&path, branch)?;
-    let token = normalize_github_token(github_token);
+    let token = resolve_github_token(github_token);
     match push_branch(&path, &branch, token.as_deref()) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
@@ -665,7 +694,7 @@ pub fn git_sync(
     }
 
     let branch = resolve_branch(&path, branch)?;
-    let token = normalize_github_token(github_token);
+    let token = resolve_github_token(github_token);
     let token_ref = token.as_deref();
     let mut steps: Vec<String> = Vec::new();
 
@@ -763,7 +792,7 @@ pub fn git_fetch(path: String, github_token: Option<String>) -> Result<GitComman
     if !is_git_repo(&path) {
         return Err("Not a git repository.".to_string());
     }
-    let token = normalize_github_token(github_token);
+    let token = resolve_github_token(github_token);
     match run_git_with_auth(&path, &["fetch"], token.as_deref()) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
@@ -847,7 +876,7 @@ pub fn git_clone(
         return Err("Repository URL is required.".to_string());
     }
 
-    let token = normalize_github_token(github_token);
+    let token = resolve_github_token(github_token);
     match run_git_with_auth(&parent_path, &["clone", url], token.as_deref()) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
