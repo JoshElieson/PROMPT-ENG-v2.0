@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { getModelById } from "@/data/ai-models";
+import { normalizeTargetModelIds } from "@/lib/ai-chat";
 
 const STORAGE_KEY = "prompt:app-settings:v1";
 
@@ -42,7 +43,7 @@ interface AppSettingsContextValue {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  defaultModel: "openai/gpt-4o",
+  defaultModel: "gpt4o",
   theme: "dark",
   systemNotifications: true,
   warningNotifications: false,
@@ -60,8 +61,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function normalizeSettings(raw: unknown): AppSettings {
   if (!isRecord(raw)) return DEFAULT_SETTINGS;
   const defaultModel =
-    typeof raw.defaultModel === "string" && getModelById(raw.defaultModel)
-      ? raw.defaultModel
+    typeof raw.defaultModel === "string"
+      ? (getModelById(raw.defaultModel)?.id ??
+        normalizeTargetModelIds([raw.defaultModel])[0] ??
+        DEFAULT_SETTINGS.defaultModel)
       : DEFAULT_SETTINGS.defaultModel;
   const theme = raw.theme;
   const normalizedTheme: AppTheme =

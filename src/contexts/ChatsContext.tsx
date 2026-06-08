@@ -12,8 +12,8 @@ import { getModelById } from "@/data/ai-models";
 import {
   aiChatComplete,
   aiChatSynthesize,
-  isAiModelSupported,
   listenAiToolActivity,
+  normalizeTargetModelIds,
   type AiToolActivityEvent,
   type ChatTurn,
 } from "@/lib/ai-chat";
@@ -1247,6 +1247,19 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       let modelOutputs: { modelId: string; content: string }[] = [];
       const threadKey = threadResponseKey(chatId, threadId);
       const streamId = makeAiStreamId(chatId, threadId, runId);
+      const resolvedTargetModelIds = normalizeTargetModelIds(targetModelIds);
+      const resolvedContributions =
+        contributions
+          .map((entry) => ({
+            ...entry,
+            modelId:
+              normalizeTargetModelIds([entry.modelId])[0] ?? entry.modelId,
+          }))
+          .filter((entry) => resolvedTargetModelIds.includes(entry.modelId));
+      const contributionsForMessage =
+        resolvedContributions.length > 0
+          ? resolvedContributions
+          : evenContributions(resolvedTargetModelIds);
 
       const finish = async (content: string) => {
         if (responseRunRef.current !== runId) return;
@@ -1344,19 +1357,30 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         );
         addUsage(
           recordResponseEstimates(
-            targetModelIds,
+            resolvedTargetModelIds,
             userContent,
             modelOutputs,
             finalContent,
           ),
         );
+        const respondingModelId =
+          modelOutputs.length === 1
+            ? modelOutputs[0]!.modelId
+            : resolvedTargetModelIds.length === 1
+              ? resolvedTargetModelIds[0]
+              : undefined;
         const assistantMessage: ChatMessage = {
           id: crypto.randomUUID(),
           role: "assistant",
           content: finalContent,
           createdAt: Date.now(),
+          targetModelIds: resolvedTargetModelIds,
           modelContributions:
-            targetModelIds.length > 1 ? contributions : undefined,
+            resolvedTargetModelIds.length > 1
+              ? contributionsForMessage
+              : respondingModelId
+                ? [{ modelId: respondingModelId, percentage: 100 }]
+                : undefined,
           toolContextRoots:
             workspace && workspace.enabledPaths.length > 0
               ? [...workspace.enabledPaths]
@@ -1429,13 +1453,9 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const unsupported = targetModelIds.filter((id) => !isAiModelSupported(id));
-      if (unsupported.length > 0) {
-        const names = unsupported
-          .map((id) => getModelById(id)?.name ?? id)
-          .join(", ");
+      if (resolvedTargetModelIds.length === 0) {
         await fail(
-          `${names} ${unsupported.length === 1 ? "is" : "are"} not connected to a provider yet. Use GPT-4o, Claude, Gemini, DeepSeek, or Grok models.`,
+          "No supported models are selected. Add DeepSeek (or another wired model) to your Model Cart and turn it on in the Round Table.",
         );
         return;
       }
@@ -1455,7 +1475,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         recordSendEstimates(
           history,
           userContent,
-          targetModelIds,
+          resolvedTargetModelIds,
           workspaceEnabled,
         ),
       );
@@ -1496,39 +1516,39 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           retrievedMemoryPrompt ?? "",
         ].filter(Boolean);
         const systemPrompt = systemParts.length > 0 ? systemParts.join("\n\n") : null;
-        if (targetModelIds.length === 1) {
+        if (resolvedTargetModelIds.length === 1) {
           appendAgentActivityEvent(
             chatId,
             threadId,
             "checking",
-            `Checking model ${getModelById(targetModelIds[0])?.name ?? targetModelIds[0]}`,
+            `Checking model ${getModelById(resolvedTargetModelIds[0])?.name ?? resolvedTargetModelIds[0]}`,
           );
           setResponseLoading({
             chatId,
             threadId,
-            targetModelIds,
+            targetModelIds: resolvedTargetModelIds,
             phase: "roundtable",
             speakingModelIndex: 0,
           });
 
           const content = await aiChatComplete(
-            targetModelIds[0],
+            resolvedTargetModelIds[0],
             history,
             workspace,
             systemPrompt,
             streamId,
           );
-          modelOutputs = [{ modelId: targetModelIds[0], content }];
+          modelOutputs = [{ modelId: resolvedTargetModelIds[0], content }];
           await finish(content);
           return;
         }
 
         modelOutputs = [];
 
-        for (let i = 0; i < targetModelIds.length; i++) {
+        for (let i = 0; i < resolvedTargetModelIds.length; i++) {
           if (responseRunRef.current !== runId) return;
 
-          const modelId = targetModelIds[i];
+          const modelId = resolvedTargetModelIds[i];
           appendAgentActivityEvent(
             chatId,
             threadId,
@@ -1538,7 +1558,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           setResponseLoading({
             chatId,
             threadId,
-            targetModelIds,
+            targetModelIds: resolvedTargetModelIds,
             phase: "roundtable",
             speakingModelIndex: i,
           });
@@ -1558,7 +1578,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         setResponseLoading({
           chatId,
           threadId,
-          targetModelIds,
+          targetModelIds: resolvedTargetModelIds,
           phase: "synthesizing",
           speakingModelIndex: -1,
         });

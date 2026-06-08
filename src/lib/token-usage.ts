@@ -145,6 +145,17 @@ export function formatTokenCount(value: number): string {
   return n.toLocaleString();
 }
 
+export const FREE_PLAN_TOKEN_LIMIT = 100_000;
+
+export function formatPlanTokenCount(value: number): string {
+  return Math.max(0, Math.round(value)).toLocaleString();
+}
+
+export function freePlanUsageRatio(usedTokens: number): number {
+  if (FREE_PLAN_TOKEN_LIMIT <= 0) return 0;
+  return Math.min(Math.max(0, usedTokens) / FREE_PLAN_TOKEN_LIMIT, 1);
+}
+
 export function formatCostUsd(value: number): string {
   const n = Math.max(0, value);
   if (n >= 1) return `$${n.toFixed(2)}`;

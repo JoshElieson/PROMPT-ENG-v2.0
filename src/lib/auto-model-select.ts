@@ -1,4 +1,4 @@
-import { isAiModelSupported, SUPPORTED_AI_MODEL_IDS } from "@/lib/ai-chat";
+import { normalizeTargetModelIds } from "@/lib/ai-chat";
 
 export type TaskProfile =
   | "code"
@@ -200,11 +200,7 @@ export type AutoSelectOptions = {
 export function selectAutoModels(options: AutoSelectOptions): string[] {
   const { message, goal, candidateIds, hasWorkspace = false } = options;
 
-  const poolSource =
-    candidateIds.length > 0
-      ? candidateIds
-      : Array.from(SUPPORTED_AI_MODEL_IDS);
-  const pool = [...new Set(poolSource)].filter((id) => isAiModelSupported(id));
+  const pool = normalizeTargetModelIds(candidateIds);
   if (pool.length === 0) return [];
   if (pool.length === 1) return pool;
 

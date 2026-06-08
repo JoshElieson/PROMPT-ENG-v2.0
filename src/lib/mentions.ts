@@ -1,5 +1,6 @@
 import { getModelById, type AiModel } from "@/data/ai-models";
 import { selectAutoModels } from "@/lib/auto-model-select";
+import { normalizeTargetModelIds } from "@/lib/ai-chat";
 
 /** Composer @-tokens include display names while typing (e.g. @GPT-4o). */
 const COMPOSER_MENTION_PATTERN = /@([^\s@]*)/g;
@@ -198,28 +199,32 @@ export function resolveTargetModelIds(
   roundTableActiveIds: string[],
   options?: ResolveTargetOptions,
 ): string[] {
-  const mentioned = parseMentions(content, cartSelectedIds);
+  const cartIds = normalizeTargetModelIds(cartSelectedIds);
+  const activeIds = normalizeTargetModelIds(roundTableActiveIds);
+  const mentioned = normalizeTargetModelIds(parseMentions(content, cartSelectedIds));
+
   if (mentioned.length > 0) {
     if (options?.autoEnabled) {
-      return mentioned.filter((id) => cartSelectedIds.includes(id));
+      return mentioned.filter((id) => cartIds.includes(id));
     }
-    const activeMentioned = mentioned.filter((id) =>
-      roundTableActiveIds.includes(id),
-    );
+    const activeMentioned = mentioned.filter((id) => activeIds.includes(id));
     return activeMentioned.length > 0 ? activeMentioned : [];
   }
 
   if (options?.autoEnabled) {
-    const picked = selectAutoModels({
+    const rawCartCount = cartSelectedIds.filter((id) => id.trim()).length;
+    if (cartIds.length === 0 && rawCartCount > 0) {
+      return [];
+    }
+    return selectAutoModels({
       message: content,
       goal: options.goal,
-      candidateIds: cartSelectedIds,
+      candidateIds: cartIds,
       hasWorkspace: options.hasWorkspace,
     });
-    return picked;
   }
 
-  return [...roundTableActiveIds];
+  return activeIds;
 }
 
 export function buildMentionTextForModels(models: AiModel[]): string {

@@ -8,6 +8,7 @@ import type {
   WorkspacePaneLayout,
 } from "@/types/workspace-pane";
 import { DEFAULT_ROUND_TABLE_IDS } from "@/data/ai-models";
+import { normalizeTargetModelIds } from "@/lib/ai-chat";
 import { DEFAULT_ROUND_TABLE_WEIGHTS } from "@/lib/round-table-weights";
 
 /** Legacy global workspace blob (cleared on reset layout). */
@@ -24,14 +25,31 @@ export function defaultModelSession(): PaneModelSession {
   };
 }
 
+function sanitizeModelSession(session: PaneModelSession): PaneModelSession {
+  const selectedIds = normalizeTargetModelIds(session.selectedIds);
+  const activeIds = normalizeTargetModelIds(session.activeIds).filter((id) =>
+    selectedIds.includes(id),
+  );
+  const weights: Record<string, number> = {};
+  for (const [key, value] of Object.entries(session.weights)) {
+    const id = normalizeTargetModelIds([key])[0];
+    if (!id || !selectedIds.includes(id)) continue;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      weights[id] = value;
+    }
+  }
+  return { selectedIds, activeIds, weights };
+}
+
 /** Legacy panes saved with an empty cart get the standard trio on load. */
 function normalizeModelSession(session: PaneModelSession): PaneModelSession {
-  if (session.selectedIds.length > 0) return session;
+  const sanitized = sanitizeModelSession(session);
+  if (sanitized.selectedIds.length > 0) return sanitized;
   const ids = [...DEFAULT_ROUND_TABLE_IDS];
   return {
     selectedIds: ids,
     activeIds: ids,
-    weights: session.weights,
+    weights: { ...DEFAULT_ROUND_TABLE_WEIGHTS },
   };
 }
 

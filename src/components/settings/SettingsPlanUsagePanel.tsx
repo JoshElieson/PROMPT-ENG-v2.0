@@ -6,7 +6,10 @@ import { getModelById } from "@/data/ai-models";
 import { openExternal } from "@/lib/open-external";
 import {
   formatCostUsd,
+  formatPlanTokenCount,
   formatTokenCount,
+  FREE_PLAN_TOKEN_LIMIT,
+  freePlanUsageRatio,
   totalInputTokens,
   totalOutputTokens,
   type ModelUsageTotals,
@@ -65,6 +68,8 @@ export function SettingsPlanUsagePanel() {
 
   const sentTokens = totalInputTokens(usage);
   const receivedTokens = totalOutputTokens(usage);
+  const usedTokens = usage.totals.tokens;
+  const planUsageRatio = freePlanUsageRatio(usedTokens);
   const hasUsage = usage.totals.tokens > 0 || modelRows.length > 0;
 
   return (
@@ -96,6 +101,35 @@ export function SettingsPlanUsagePanel() {
             <RotateCcw className="h-3.5 w-3.5 opacity-70" />
             Reset
           </Button>
+        </div>
+        <div className="mb-4">
+          <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px]">
+            <span className="text-muted-foreground">Free plan</span>
+            <span className="text-foreground tabular-nums">
+              {formatPlanTokenCount(usedTokens)}/
+              {formatPlanTokenCount(FREE_PLAN_TOKEN_LIMIT)} tokens used
+            </span>
+          </div>
+          <div
+            className="bg-panel-elevated/80 h-1 w-full overflow-hidden rounded-full"
+            role="progressbar"
+            aria-valuenow={Math.round(planUsageRatio * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Free plan token usage: ${formatPlanTokenCount(usedTokens)} of ${formatPlanTokenCount(FREE_PLAN_TOKEN_LIMIT)} tokens used`}
+          >
+            <div
+              className={cn(
+                "h-full rounded-full transition-[width,background-color] duration-300 ease-out",
+                planUsageRatio >= 1
+                  ? "bg-amber-500"
+                  : planUsageRatio >= 0.9
+                    ? "bg-amber-400"
+                    : "bg-accent",
+              )}
+              style={{ width: `${planUsageRatio * 100}%` }}
+            />
+          </div>
         </div>
         <div className="border-border-subtle grid grid-cols-1 gap-4 border-t pt-4 sm:grid-cols-3">
           <SummaryStat

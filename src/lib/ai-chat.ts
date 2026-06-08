@@ -43,8 +43,66 @@ export const SUPPORTED_AI_MODEL_IDS = new Set([
   "grok-code",
 ]);
 
-export function isAiModelSupported(modelId: string): boolean {
+/** Legacy / provider-style ids mapped to app model ids. */
+const MODEL_ID_ALIASES: Record<string, string> = {
+  "openai/gpt-4o": "gpt4o",
+  "openai/gpt-4-turbo": "gpt4-turbo",
+  "openai/o1": "o1",
+  "gpt-4o": "gpt4o",
+  "gpt-4-turbo": "gpt4-turbo",
+  "anthropic/claude": "claude",
+  "anthropic/claude-opus": "claude-opus",
+  "claude-3-5-sonnet": "claude",
+  "claude-3-opus": "claude-opus",
+  "google/gemini": "gemini",
+  "deepseek-chat": "deepseek",
+  "deepseek-coder": "deepseek",
+  "deepseek/deepseek-chat": "deepseek",
+  "xai/grok": "grok",
+};
+
+function modelIdIsWired(modelId: string): boolean {
   return SUPPORTED_AI_MODEL_IDS.has(modelId) || modelId.startsWith("gemini");
+}
+
+/** Resolve a raw cart/active id to a wired app model id, or null if unsupported. */
+export function resolveModelId(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const byCatalog = getModelById(trimmed);
+  if (byCatalog && modelIdIsWired(byCatalog.id)) {
+    return byCatalog.id;
+  }
+
+  const alias = MODEL_ID_ALIASES[trimmed.toLowerCase()];
+  if (alias && modelIdIsWired(alias)) {
+    return alias;
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (modelIdIsWired(lower)) {
+    return lower;
+  }
+
+  return null;
+}
+
+export function isAiModelSupported(modelId: string): boolean {
+  return resolveModelId(modelId) != null;
+}
+
+/** Normalize a list of model ids: trim, alias, drop duplicates and unsupported entries. */
+export function normalizeTargetModelIds(modelIds: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of modelIds) {
+    const id = resolveModelId(raw);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
 }
 
 function requireTauri(): void {
@@ -73,6 +131,12 @@ export async function aiChatComplete(
   streamId?: string | null,
 ): Promise<string> {
   requireTauri();
+  const resolvedModelId = resolveModelId(modelId);
+  if (!resolvedModelId) {
+    throw new Error(
+      `Model "${modelId.trim()}" is not connected to a provider yet.`,
+    );
+  }
   const baseSystemPrompt = system?.trim() ?? "";
   const knowledgePrompt = buildForgeKnowledgePrompt(latestUserQuery(messages)) ?? "";
   const systemPrompt = [baseSystemPrompt, knowledgePrompt]
@@ -81,7 +145,7 @@ export async function aiChatComplete(
     .trim();
   try {
     return await invoke<string>("ai_chat_complete", {
-      modelId,
+      modelId: resolvedModelId,
       messages,
       workspace:
         workspace &&
