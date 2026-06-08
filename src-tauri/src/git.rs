@@ -55,10 +55,32 @@ fn git_executable() -> PathBuf {
 }
 
 fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
+    run_git_with_auth(cwd, args, None)
+}
+
+fn run_git_with_auth(
+    cwd: &str,
+    args: &[&str],
+    github_token: Option<&str>,
+) -> Result<String, String> {
     let git = git_executable();
-    let output = Command::new(&git)
-        .args(args)
-        .current_dir(cwd)
+    let mut cmd = Command::new(&git);
+    cmd.current_dir(cwd);
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+
+    if let Some(token) = github_token.filter(|t| !t.trim().is_empty()) {
+        let token = token.trim();
+        cmd.arg("-c").arg(format!(
+            "http.https://github.com/.extraHeader=AUTHORIZATION: bearer {token}"
+        ));
+        let helper = format!(
+            "!f() {{ echo username=x-access-token; echo password={token}; }}; f"
+        );
+        cmd.arg("-c").arg(format!("credential.helper={helper}"));
+    }
+
+    cmd.args(args);
+    let output = cmd
         .output()
         .map_err(|e| {
             format!(
@@ -75,6 +97,17 @@ fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
     } else {
         Err(if stderr.is_empty() { stdout } else { stderr })
     }
+}
+
+fn normalize_github_token(token: Option<String>) -> Option<String> {
+    token.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
 }
 
 fn normalize_pathspec(repo_path: &Path, raw_path: &str) -> String {
@@ -177,7 +210,7 @@ fn format_git_error(raw: &str) -> String {
         || lower.contains("403")
         || lower.contains("401")
     {
-        return "Git authentication failed. Sign in to your remote (for example GitHub) and try again."
+        return "GitHub repository access failed. Sign out and sign in again from your profile to grant repo access, then retry."
             .to_string();
     }
 
@@ -207,10 +240,11 @@ fn is_git_auth_error(raw: &str) -> bool {
         || lower.contains("401")
 }
 
-fn push_branch(path: &str, branch: &str) -> Result<String, String> {
-    match run_git(path, &["push"]) {
+fn push_branch(path: &str, branch: &str, github_token: Option<&str>) -> Result<String, String> {
+    match run_git_with_auth(path, &["push"], github_token) {
         Ok(output) => Ok(output),
-        Err(first_error) => match run_git(path, &["push", "-u", "origin", branch]) {
+        Err(first_error) => match run_git_with_auth(path, &["push", "-u", "origin", branch], github_token)
+        {
             Ok(output) => Ok(output),
             Err(second_error) => Err(format_git_error(if second_error.is_empty() {
                 &first_error
@@ -448,7 +482,11 @@ pub fn git_checkout_branch(path: String, branch: String) -> Result<GitCommandRes
 }
 
 #[tauri::command]
-pub fn git_sync_branch(path: String, branch: String) -> Result<GitCommandResult, String> {
+pub fn git_sync_branch(
+    path: String,
+    branch: String,
+    github_token: Option<String>,
+) -> Result<GitCommandResult, String> {
     if !is_git_repo(&path) {
         return Err("Not a git repository.".to_string());
     }
@@ -456,11 +494,18 @@ pub fn git_sync_branch(path: String, branch: String) -> Result<GitCommandResult,
     if branch.is_empty() {
         return Err("Branch name is required.".to_string());
     }
-
+    let token = normalize_github_token(github_token);
+    let token_ref = token.as_deref();
     let mut steps = Vec::new();
 
-    if let Err(e) = run_git(&path, &["fetch", "--prune"]) {
-        steps.push(format!("fetch: {e}"));
+    if let Err(e) = run_git_with_auth(&path, &["fetch", "--prune"], token_ref) {
+        if is_git_auth_error(&e) {
+            return Ok(GitCommandResult {
+                success: false,
+                output: format_git_error(&e),
+            });
+        }
+        steps.push(format!("fetch: {}", format_git_error(&e)));
     } else {
         steps.push("fetch: ok".to_string());
     }
@@ -477,13 +522,13 @@ pub fn git_sync_branch(path: String, branch: String) -> Result<GitCommandResult,
             Err(e) => {
                 return Ok(GitCommandResult {
                     success: false,
-                    output: format!("{}\n{}", steps.join("\n"), e),
+                    output: format_git_error(&e),
                 });
             }
         }
     }
 
-    match run_git(&path, &["pull", "--ff-only"]) {
+    match run_git_with_auth(&path, &["pull", "--ff-only"], token_ref) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
             output: if output.is_empty() {
@@ -492,7 +537,7 @@ pub fn git_sync_branch(path: String, branch: String) -> Result<GitCommandResult,
                 format!("{}\n{output}", steps.join("\n"))
             },
         }),
-        Err(_) => match run_git(&path, &["pull"]) {
+        Err(_) => match run_git_with_auth(&path, &["pull"], token_ref) {
             Ok(output) => Ok(GitCommandResult {
                 success: true,
                 output: if output.is_empty() {
@@ -503,7 +548,7 @@ pub fn git_sync_branch(path: String, branch: String) -> Result<GitCommandResult,
             }),
             Err(e) => Ok(GitCommandResult {
                 success: false,
-                output: format!("{}\n{e}", steps.join("\n")),
+                output: format_git_error(&e),
             }),
         },
     }
@@ -565,11 +610,12 @@ pub fn git_status(path: String) -> Result<GitStatusResult, String> {
 }
 
 #[tauri::command]
-pub fn git_pull(path: String) -> Result<GitCommandResult, String> {
+pub fn git_pull(path: String, github_token: Option<String>) -> Result<GitCommandResult, String> {
     if !is_git_repo(&path) {
         return Err("Not a git repository.".to_string());
     }
-    match run_git(&path, &["pull"]) {
+    let token = normalize_github_token(github_token);
+    match run_git_with_auth(&path, &["pull"], token.as_deref()) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
             output,
@@ -582,12 +628,17 @@ pub fn git_pull(path: String) -> Result<GitCommandResult, String> {
 }
 
 #[tauri::command]
-pub fn git_push(path: String, branch: Option<String>) -> Result<GitCommandResult, String> {
+pub fn git_push(
+    path: String,
+    branch: Option<String>,
+    github_token: Option<String>,
+) -> Result<GitCommandResult, String> {
     if !is_git_repo(&path) {
         return Err("Not a git repository.".to_string());
     }
     let branch = resolve_branch(&path, branch)?;
-    match push_branch(&path, &branch) {
+    let token = normalize_github_token(github_token);
+    match push_branch(&path, &branch, token.as_deref()) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
             output: if output.is_empty() {
@@ -604,15 +655,21 @@ pub fn git_push(path: String, branch: Option<String>) -> Result<GitCommandResult
 }
 
 #[tauri::command]
-pub fn git_sync(path: String, branch: Option<String>) -> Result<GitCommandResult, String> {
+pub fn git_sync(
+    path: String,
+    branch: Option<String>,
+    github_token: Option<String>,
+) -> Result<GitCommandResult, String> {
     if !is_git_repo(&path) {
         return Err("Not a git repository.".to_string());
     }
 
     let branch = resolve_branch(&path, branch)?;
+    let token = normalize_github_token(github_token);
+    let token_ref = token.as_deref();
     let mut steps: Vec<String> = Vec::new();
 
-    if let Err(e) = run_git(&path, &["fetch", "origin"]) {
+    if let Err(e) = run_git_with_auth(&path, &["fetch", "origin"], token_ref) {
         if is_git_auth_error(&e) {
             return Ok(GitCommandResult {
                 success: false,
@@ -645,14 +702,14 @@ pub fn git_sync(path: String, branch: Option<String>) -> Result<GitCommandResult
     let (_, behind) = resolve_ahead_behind(&path, Some(&branch), 0, 0);
 
     if behind > 0 {
-        match run_git(&path, &["pull", "--ff-only"]) {
+        match run_git_with_auth(&path, &["pull", "--ff-only"], token_ref) {
             Ok(output) => {
                 if !output.is_empty() {
                     steps.push(output);
                 }
                 steps.push("pull: ok".to_string());
             }
-            Err(_) => match run_git(&path, &["pull"]) {
+            Err(_) => match run_git_with_auth(&path, &["pull"], token_ref) {
                 Ok(output) => {
                     if !output.is_empty() {
                         steps.push(output);
@@ -672,7 +729,7 @@ pub fn git_sync(path: String, branch: Option<String>) -> Result<GitCommandResult
     let (ahead, _) = resolve_ahead_behind(&path, Some(&branch), 0, 0);
 
     if ahead > 0 {
-        match push_branch(&path, &branch) {
+        match push_branch(&path, &branch, token_ref) {
             Ok(output) => {
                 if !output.is_empty() {
                     steps.push(output);
@@ -702,11 +759,12 @@ pub fn git_sync(path: String, branch: Option<String>) -> Result<GitCommandResult
 }
 
 #[tauri::command]
-pub fn git_fetch(path: String) -> Result<GitCommandResult, String> {
+pub fn git_fetch(path: String, github_token: Option<String>) -> Result<GitCommandResult, String> {
     if !is_git_repo(&path) {
         return Err("Not a git repository.".to_string());
     }
-    match run_git(&path, &["fetch"]) {
+    let token = normalize_github_token(github_token);
+    match run_git_with_auth(&path, &["fetch"], token.as_deref()) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
             output,
@@ -775,7 +833,11 @@ pub fn git_commit(
 }
 
 #[tauri::command]
-pub fn git_clone(url: String, parent_path: String) -> Result<GitCommandResult, String> {
+pub fn git_clone(
+    url: String,
+    parent_path: String,
+    github_token: Option<String>,
+) -> Result<GitCommandResult, String> {
     let parent = Path::new(&parent_path);
     if !parent.exists() || !parent.is_dir() {
         return Err(format!("Parent directory does not exist: {parent_path}"));
@@ -785,7 +847,8 @@ pub fn git_clone(url: String, parent_path: String) -> Result<GitCommandResult, S
         return Err("Repository URL is required.".to_string());
     }
 
-    match run_git(&parent_path, &["clone", url]) {
+    let token = normalize_github_token(github_token);
+    match run_git_with_auth(&parent_path, &["clone", url], token.as_deref()) {
         Ok(output) => Ok(GitCommandResult {
             success: true,
             output,

@@ -3,7 +3,7 @@ import type { AuthSession, DeviceFlowPending, AuthUser } from "@/types/auth";
 import { normalizeAuthSession, normalizeAuthUser } from "@/lib/auth-session";
 import { isTauri } from "@/lib/tauri";
 
-const SCOPES = "read:user user:email";
+const SCOPES = "read:user user:email repo";
 
 const DEVICE_CODE_PATH = "/login/device/code";
 const ACCESS_TOKEN_PATH = "/login/oauth/access_token";

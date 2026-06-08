@@ -1,4 +1,6 @@
 import * as git from "@/lib/git";
+import { loadAuthSession } from "@/lib/auth-storage";
+import { githubTokenFromSession } from "@/lib/github-git-auth";
 import { loadProjects } from "@/lib/storage";
 import type {
   GitAssistantCommand,
@@ -40,6 +42,8 @@ export async function executeGitAssistantCommand(
   gitProjectId: string | null | undefined,
 ): Promise<GitAssistantCommandResult> {
   const repoPath = resolveRepoPath(gitProjectId);
+  const session = await loadAuthSession();
+  const githubToken = githubTokenFromSession(session);
 
   try {
     switch (command.action) {
@@ -66,7 +70,7 @@ export async function executeGitAssistantCommand(
             output: "No repository selected for this workspace.",
           };
         }
-        const result = await git.gitPull(repoPath);
+        const result = await git.gitPull(repoPath, githubToken);
         return { action: command.action, ...result };
       }
       case "push": {
@@ -77,7 +81,7 @@ export async function executeGitAssistantCommand(
             output: "No repository selected for this workspace.",
           };
         }
-        const result = await git.gitPush(repoPath);
+        const result = await git.gitPush(repoPath, null, githubToken);
         return { action: command.action, ...result };
       }
       case "fetch": {
@@ -88,7 +92,7 @@ export async function executeGitAssistantCommand(
             output: "No repository selected for this workspace.",
           };
         }
-        const result = await git.gitFetch(repoPath);
+        const result = await git.gitFetch(repoPath, githubToken);
         return { action: command.action, ...result };
       }
       case "init": {
@@ -142,7 +146,7 @@ export async function executeGitAssistantCommand(
             output: "Repository URL is required.",
           };
         }
-        const result = await git.gitClone(url, parentPath);
+        const result = await git.gitClone(url, parentPath, githubToken);
         return { action: command.action, ...result };
       }
       case "restore": {

@@ -513,15 +513,15 @@ fn git_tool_output(
             let status = git_status(repo)?;
             format_git_status_summary(status)
         }
-        "git_pull" => match git_pull(repo)? {
+        "git_pull" => match git_pull(repo, None)? {
             r if r.success => r.output,
             r => return Err(r.output),
         },
-        "git_push" => match git_push(repo, None)? {
+        "git_push" => match git_push(repo, None, None)? {
             r if r.success => r.output,
             r => return Err(r.output),
         },
-        "git_fetch" => match git_fetch(repo)? {
+        "git_fetch" => match git_fetch(repo, None)? {
             r if r.success => r.output,
             r => return Err(r.output),
         },
@@ -556,7 +556,7 @@ fn git_tool_output(
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| repo.clone());
-            match git_clone(url, parent)? {
+            match git_clone(url, parent, None)? {
                 r if r.success => r.output,
                 r => return Err(r.output),
             }

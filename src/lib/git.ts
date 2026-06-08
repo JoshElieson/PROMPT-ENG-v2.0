@@ -35,30 +35,52 @@ export async function gitStatus(path: string): Promise<GitStatusResult> {
   return invoke<GitStatusResult>("git_status", { path });
 }
 
-export async function gitPull(path: string): Promise<GitCommandResult> {
+export async function gitPull(
+  path: string,
+  githubToken?: string | null,
+): Promise<GitCommandResult> {
   requireTauri();
-  return invoke<GitCommandResult>("git_pull", { path });
+  return invoke<GitCommandResult>("git_pull", {
+    path,
+    githubToken: githubToken ?? null,
+  });
 }
 
 export async function gitPush(
   path: string,
   branch?: string | null,
+  githubToken?: string | null,
 ): Promise<GitCommandResult> {
   requireTauri();
-  return invoke<GitCommandResult>("git_push", { path, branch: branch ?? null });
+  return invoke<GitCommandResult>("git_push", {
+    path,
+    branch: branch ?? null,
+    githubToken: githubToken ?? null,
+  });
 }
 
 export async function gitSync(
   path: string,
   branch?: string | null,
+  githubToken?: string | null,
 ): Promise<GitCommandResult> {
   requireTauri();
-  return invoke<GitCommandResult>("git_sync", { path, branch: branch ?? null });
+  return invoke<GitCommandResult>("git_sync", {
+    path,
+    branch: branch ?? null,
+    githubToken: githubToken ?? null,
+  });
 }
 
-export async function gitFetch(path: string): Promise<GitCommandResult> {
+export async function gitFetch(
+  path: string,
+  githubToken?: string | null,
+): Promise<GitCommandResult> {
   requireTauri();
-  return invoke<GitCommandResult>("git_fetch", { path });
+  return invoke<GitCommandResult>("git_fetch", {
+    path,
+    githubToken: githubToken ?? null,
+  });
 }
 
 export async function gitInit(path: string): Promise<GitCommandResult> {
@@ -69,9 +91,14 @@ export async function gitInit(path: string): Promise<GitCommandResult> {
 export async function gitClone(
   url: string,
   parentPath: string,
+  githubToken?: string | null,
 ): Promise<GitCommandResult> {
   requireTauri();
-  return invoke<GitCommandResult>("git_clone", { url, parentPath });
+  return invoke<GitCommandResult>("git_clone", {
+    url,
+    parentPath,
+    githubToken: githubToken ?? null,
+  });
 }
 
 export async function gitCommit(
@@ -107,7 +134,12 @@ export async function gitCheckoutBranch(
 export async function gitSyncBranch(
   path: string,
   branch: string,
+  githubToken?: string | null,
 ): Promise<GitCommandResult> {
   requireTauri();
-  return invoke<GitCommandResult>("git_sync_branch", { path, branch });
+  return invoke<GitCommandResult>("git_sync_branch", {
+    path,
+    branch,
+    githubToken: githubToken ?? null,
+  });
 }

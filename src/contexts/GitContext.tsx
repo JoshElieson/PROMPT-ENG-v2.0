@@ -15,7 +15,9 @@ import { shouldRefreshGitFromFsPaths } from "@/lib/fs-ignore-paths";
 import { listenProjectFsChanged, syncProjectFsWatchers } from "@/lib/fs-watch";
 import { pathsEqual } from "@/lib/project-paths";
 import { useChats } from "@/contexts/ChatsContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useProjects } from "@/contexts/ProjectsContext";
+import { githubTokenFromSession } from "@/lib/github-git-auth";
 import type {
   GitBranchEntry,
   GitBranchListResult,
@@ -83,7 +85,9 @@ function gitStatusEqual(
 
 export function GitProvider({ children }: { children: ReactNode }) {
   const { projects } = useProjects();
+  const { session } = useAuth();
   const { activeChatId, activeChat, setChatGitProject } = useChats();
+  const githubToken = githubTokenFromSession(session);
 
   const projectId = useMemo(() => {
     const id = activeChat?.gitProjectId;
@@ -255,8 +259,8 @@ export function GitProvider({ children }: { children: ReactNode }) {
 
   const pull = useCallback(async () => {
     if (!repoPath) return;
-    await runOp("Pull complete.", () => git.gitPull(repoPath));
-  }, [repoPath, runOp]);
+    await runOp("Pull complete.", () => git.gitPull(repoPath, githubToken));
+  }, [repoPath, runOp, githubToken]);
 
   const checkoutBranch = useCallback(
     async (branch: string) => {
@@ -273,33 +277,46 @@ export function GitProvider({ children }: { children: ReactNode }) {
     async (branch: string) => {
       if (!repoPath) return;
       await runOp(`Updated ${branch} from remote.`, () =>
-        git.gitSyncBranch(repoPath, branch),
+        git.gitSyncBranch(repoPath, branch, githubToken),
       );
       await loadBranches();
     },
-    [repoPath, runOp, loadBranches],
+    [repoPath, runOp, loadBranches, githubToken],
   );
 
   const push = useCallback(
     async (branch?: string) => {
       if (!repoPath) return;
-      await runOp("Push complete.", () => git.gitPush(repoPath, branch));
+      await runOp("Push complete.", () =>
+        git.gitPush(repoPath, branch, githubToken),
+      );
     },
-    [repoPath, runOp],
+    [repoPath, runOp, githubToken],
   );
 
   const syncChanges = useCallback(
     async (branch?: string) => {
       if (!repoPath) return;
-      await runOp("Sync complete.", () => git.gitSync(repoPath, branch));
+      if (!githubToken) {
+        setMessage(
+          false,
+          session?.provider === "google"
+            ? "GitHub sync requires signing in with GitHub from your profile."
+            : "Sign in with GitHub from your profile to sync repository changes.",
+        );
+        return;
+      }
+      await runOp("Sync complete.", () =>
+        git.gitSync(repoPath, branch, githubToken),
+      );
     },
-    [repoPath, runOp],
+    [repoPath, runOp, githubToken, session?.provider, setMessage],
   );
 
   const fetchRemote = useCallback(async () => {
     if (!repoPath) return;
-    await runOp("Fetch complete.", () => git.gitFetch(repoPath));
-  }, [repoPath, runOp]);
+    await runOp("Fetch complete.", () => git.gitFetch(repoPath, githubToken));
+  }, [repoPath, runOp, githubToken]);
 
   const init = useCallback(async () => {
     if (!repoPath) return;
@@ -311,7 +328,7 @@ export function GitProvider({ children }: { children: ReactNode }) {
       setIsOperating(true);
       setLastMessage(null);
       try {
-        const result = await git.gitClone(url, parentPath);
+        const result = await git.gitClone(url, parentPath, githubToken);
         setMessage(result.success, result.output || "Clone complete.");
         if (result.success) {
           await refresh({ silent: true });
@@ -325,7 +342,7 @@ export function GitProvider({ children }: { children: ReactNode }) {
         setIsOperating(false);
       }
     },
-    [refresh, setMessage],
+    [refresh, setMessage, githubToken],
   );
 
   const commit = useCallback(
