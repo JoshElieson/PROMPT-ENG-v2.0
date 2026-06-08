@@ -49,6 +49,7 @@ export function GitBranchSelector({ disabled }: GitBranchSelectorProps) {
 
   const localBranches = filteredBranches.filter((branch) => !branch.isRemote);
   const remoteBranches = filteredBranches.filter((branch) => branch.isRemote);
+  const showSearch = branches.length > 9;
 
   const busy = disabled || isOperating;
   const displayBranch = selectedBranch || currentBranch || "Select branch…";
@@ -115,25 +116,27 @@ export function GitBranchSelector({ disabled }: GitBranchSelectorProps) {
             sideOffset={6}
             className="w-[var(--radix-dropdown-menu-trigger-width)] p-0"
           >
-            <div className="border-border-subtle border-b p-2">
-              <label className="relative block">
-                <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search branches…"
-                  className="border-border-subtle bg-panel text-foreground focus:border-accent h-8 w-full rounded-md border pr-2 pl-7 text-xs outline-none"
-                  onKeyDown={(e) => e.stopPropagation()}
-                />
-              </label>
-            </div>
+            {showSearch && (
+              <div className="border-border-subtle border-b p-2">
+                <label className="relative block">
+                  <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2" />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search branches…"
+                    className="border-border-subtle bg-panel text-foreground focus:border-accent h-8 w-full rounded-md border pr-2 pl-7 text-xs outline-none"
+                    onKeyDown={(e) => e.stopPropagation()}
+                  />
+                </label>
+              </div>
+            )}
             <ScrollArea className="max-h-56">
               {filteredBranches.length === 0 ? (
                 <p className="text-muted px-3 py-4 text-center text-xs">
-                  {branches.length === 0
-                    ? "No branches found."
-                    : "No branches match your search."}
+                  {showSearch && branches.length > 0
+                    ? "No branches match your search."
+                    : "No branches found."}
                 </p>
               ) : (
                 <DropdownMenuRadioGroup

@@ -471,7 +471,12 @@ export function GitPanel({ active }: GitPanelProps) {
                     : "border-red-500/30 bg-red-500/10 text-red-300",
                 )}
               >
-                <span className="flex-1 leading-snug">{lastMessage}</span>
+                <span
+                  className="flex-1 line-clamp-3 leading-snug break-words"
+                  title={lastMessage}
+                >
+                  {lastMessage}
+                </span>
                 <button
                   type="button"
                   onClick={clearMessage}

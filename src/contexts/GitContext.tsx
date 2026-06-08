@@ -243,7 +243,7 @@ export function GitProvider({ children }: { children: ReactNode }) {
       try {
         const result = await fn();
         setMessage(result.success, result.output || label);
-        await refresh();
+        await refresh({ silent: true });
       } catch (e) {
         setMessage(false, git.formatInvokeError(e, `${label} failed.`));
       } finally {

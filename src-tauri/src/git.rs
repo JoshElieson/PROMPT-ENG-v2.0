@@ -166,16 +166,57 @@ fn resolve_ahead_behind(
     (parsed_ahead, parsed_behind)
 }
 
+fn format_git_error(raw: &str) -> String {
+    let lower = raw.to_lowercase();
+    if lower.contains("authentication failed")
+        || lower.contains("invalid credentials")
+        || lower.contains("could not read username")
+        || lower.contains("terminal prompts disabled")
+        || lower.contains("permission denied (publickey)")
+        || lower.contains("access denied")
+        || lower.contains("403")
+        || lower.contains("401")
+    {
+        return "Git authentication failed. Sign in to your remote (for example GitHub) and try again."
+            .to_string();
+    }
+
+    let summary = raw
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or(raw)
+        .trim();
+
+    if summary.len() > 220 {
+        format!("{}…", &summary[..220])
+    } else {
+        summary.to_string()
+    }
+}
+
+fn is_git_auth_error(raw: &str) -> bool {
+    let lower = raw.to_lowercase();
+    lower.contains("authentication failed")
+        || lower.contains("invalid credentials")
+        || lower.contains("could not read username")
+        || lower.contains("terminal prompts disabled")
+        || lower.contains("permission denied (publickey)")
+        || lower.contains("access denied")
+        || lower.contains("403")
+        || lower.contains("401")
+}
+
 fn push_branch(path: &str, branch: &str) -> Result<String, String> {
     match run_git(path, &["push"]) {
         Ok(output) => Ok(output),
         Err(first_error) => match run_git(path, &["push", "-u", "origin", branch]) {
             Ok(output) => Ok(output),
-            Err(second_error) => Err(if second_error.is_empty() {
-                first_error
+            Err(second_error) => Err(format_git_error(if second_error.is_empty() {
+                &first_error
             } else {
-                second_error
-            }),
+                &second_error
+            })),
         },
     }
 }
@@ -535,7 +576,7 @@ pub fn git_pull(path: String) -> Result<GitCommandResult, String> {
         }),
         Err(e) => Ok(GitCommandResult {
             success: false,
-            output: e,
+            output: format_git_error(&e),
         }),
     }
 }
@@ -572,7 +613,13 @@ pub fn git_sync(path: String, branch: Option<String>) -> Result<GitCommandResult
     let mut steps: Vec<String> = Vec::new();
 
     if let Err(e) = run_git(&path, &["fetch", "origin"]) {
-        steps.push(format!("fetch: {e}"));
+        if is_git_auth_error(&e) {
+            return Ok(GitCommandResult {
+                success: false,
+                output: format_git_error(&e),
+            });
+        }
+        steps.push(format!("fetch: {}", format_git_error(&e)));
     } else {
         steps.push("fetch: ok".to_string());
     }
@@ -589,7 +636,7 @@ pub fn git_sync(path: String, branch: Option<String>) -> Result<GitCommandResult
             Err(e) => {
                 return Ok(GitCommandResult {
                     success: false,
-                    output: format!("{}\n{e}", steps.join("\n")),
+                    output: format_git_error(&e),
                 });
             }
         }
@@ -615,7 +662,7 @@ pub fn git_sync(path: String, branch: Option<String>) -> Result<GitCommandResult
                 Err(e) => {
                     return Ok(GitCommandResult {
                         success: false,
-                        output: format!("{}\n{e}", steps.join("\n")),
+                        output: format_git_error(&e),
                     });
                 }
             },
@@ -630,12 +677,12 @@ pub fn git_sync(path: String, branch: Option<String>) -> Result<GitCommandResult
                 if !output.is_empty() {
                     steps.push(output);
                 }
-                steps.push(format!("pushed {ahead} commit(s) to origin/{branch}"));
+                steps.push(format!("Pushed {ahead} commit(s) to origin/{branch}."));
             }
             Err(e) => {
                 return Ok(GitCommandResult {
                     success: false,
-                    output: format!("{}\n{e}", steps.join("\n")),
+                    output: e,
                 });
             }
         }
@@ -645,7 +692,12 @@ pub fn git_sync(path: String, branch: Option<String>) -> Result<GitCommandResult
 
     Ok(GitCommandResult {
         success: true,
-        output: steps.join("\n"),
+        output: steps
+            .iter()
+            .rev()
+            .find(|step| !step.ends_with(": ok"))
+            .cloned()
+            .unwrap_or_else(|| "Sync complete.".to_string()),
     })
 }
 
@@ -661,7 +713,7 @@ pub fn git_fetch(path: String) -> Result<GitCommandResult, String> {
         }),
         Err(e) => Ok(GitCommandResult {
             success: false,
-            output: e,
+            output: format_git_error(&e),
         }),
     }
 }
