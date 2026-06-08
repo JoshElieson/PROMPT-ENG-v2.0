@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Loader2,
   MoreHorizontal,
+  RefreshCw,
   Sparkles,
   X,
 } from "lucide-react";
@@ -159,6 +160,10 @@ export function GitPanel({ active }: GitPanelProps) {
   const staged = allChanges.filter((c) => c.staged);
   const unstaged = allChanges.filter((c) => !c.staged);
   const hasStaged = staged.length > 0;
+  const hasChanges = allChanges.length > 0;
+  const ahead = status?.ahead ?? 0;
+  const behind = status?.behind ?? 0;
+  const showSyncChanges = ahead > 0 && !hasChanges;
   const branchLabel = status?.branch ?? "main";
   const selectedProject = useMemo(
     () => projects.find((p) => p.id === projectId),
@@ -175,10 +180,21 @@ export function GitPanel({ active }: GitPanelProps) {
     [commit, commitMessage],
   );
 
+  const handleSyncChanges = useCallback(async () => {
+    if (behind > 0) {
+      await pull();
+    }
+    await push();
+  }, [behind, pull, push]);
+
   const onCommitKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      void handleCommit(!hasStaged);
+      if (showSyncChanges) {
+        void handleSyncChanges();
+      } else {
+        void handleCommit(!hasStaged);
+      }
     }
   };
 
@@ -344,7 +360,11 @@ export function GitPanel({ active }: GitPanelProps) {
                     value={commitMessage}
                     onChange={(e) => setCommitMessage(e.target.value)}
                     onKeyDown={onCommitKeyDown}
-                    placeholder={`Message (Ctrl+Enter to commit on "${branchLabel}")`}
+                    placeholder={
+                      showSyncChanges
+                        ? `Ctrl+Enter to sync "${branchLabel}" with remote`
+                        : `Message (Ctrl+Enter to commit on "${branchLabel}")`
+                    }
                     disabled={busy}
                     rows={3}
                     className="text-foreground placeholder:text-muted relative z-[1] m-0 block w-full resize-none rounded-2xl border-0 bg-transparent px-2 py-1.5 pr-8 text-[13px] leading-snug outline-none focus:ring-0"
@@ -363,45 +383,80 @@ export function GitPanel({ active }: GitPanelProps) {
                 </div>
 
                 <div className="mt-2 flex">
-                  <Button
-                    type="button"
-                    className="h-[26px] flex-1 gap-1.5 rounded-r-none bg-[#0e639c] text-xs text-white hover:bg-[#1177bb]"
-                    disabled={busy || !commitMessage.trim()}
-                    onClick={() => void handleCommit(!hasStaged)}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    Commit
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                  {showSyncChanges ? (
+                    <>
                       <Button
                         type="button"
-                        className="h-[26px] rounded-l-none border-l border-[#0a4f7c] bg-[#0e639c] px-1.5 text-white hover:bg-[#1177bb]"
-                        disabled={busy || !commitMessage.trim()}
+                        className="h-[26px] flex-1 gap-1.5 rounded-r-none bg-[#0e639c] text-xs text-white hover:bg-[#1177bb]"
+                        disabled={busy}
+                        onClick={() => void handleSyncChanges()}
                       >
-                        <ChevronDown className="h-3.5 w-3.5" />
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Sync Changes
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => void handleCommit(false)}
-                        disabled={!hasStaged}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            className="h-[26px] rounded-l-none border-l border-[#0a4f7c] bg-[#0e639c] px-1.5 text-white hover:bg-[#1177bb]"
+                            disabled={busy}
+                          >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => void pull()} disabled={busy}>
+                            Pull
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => void push()} disabled={busy}>
+                            Push
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        type="button"
+                        className="h-[26px] flex-1 gap-1.5 rounded-r-none bg-[#0e639c] text-xs text-white hover:bg-[#1177bb]"
+                        disabled={busy || !commitMessage.trim()}
+                        onClick={() => void handleCommit(!hasStaged)}
                       >
-                        Commit Staged
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => void handleCommit(true)}>
-                        Commit All
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={async () => {
-                          await handleCommit(true);
-                          await push();
-                        }}
-                      >
-                        Commit All & Push
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <Check className="h-3.5 w-3.5" />
+                        Commit
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            className="h-[26px] rounded-l-none border-l border-[#0a4f7c] bg-[#0e639c] px-1.5 text-white hover:bg-[#1177bb]"
+                            disabled={busy || !commitMessage.trim()}
+                          >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => void handleCommit(false)}
+                            disabled={!hasStaged}
+                          >
+                            Commit Staged
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => void handleCommit(true)}>
+                            Commit All
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              await handleCommit(true);
+                              await push();
+                            }}
+                          >
+                            Commit All & Push
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </>
+                  )}
                 </div>
               </div>
             )}
