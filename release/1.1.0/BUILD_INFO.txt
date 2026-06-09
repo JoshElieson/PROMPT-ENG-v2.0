@@ -1,0 +1,4 @@
+FORGE beta build - zero-setup for testers
+Managed backend host: prompt-eng-v2-0.onrender.com
+Embedded at compile time: FORGE_BACKEND_URL, FORGE_BACKEND_TOKEN
+Testers do not need .env or API keys.

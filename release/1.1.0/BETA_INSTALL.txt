@@ -1,0 +1,32 @@
+FORGE Beta — Install notes
+==========================
+
+Thank you for testing FORGE.
+
+Install
+-------
+1. Run FORGE_*_x64-setup.exe (or the .msi installer).
+2. If Windows SmartScreen appears, choose "More info" then "Run anyway"
+   (beta builds may be unsigned until code signing is set up).
+3. Launch FORGE from the Start menu.
+
+AI / API keys
+-------------
+This beta build uses the hosted FORGE backend. You do NOT need to create
+a .env file or add your own OpenAI/Anthropic/Gemini keys.
+
+Sign-in (optional)
+------------------
+GitHub or Google sign-in may be offered if enabled for this beta build.
+Follow on-screen prompts if you want account-linked features.
+
+Verify download (optional)
+--------------------------
+Compare the installer SHA256 hash with SHA256SUMS.txt in this folder.
+
+Support
+-------
+Report issues to your beta contact with:
+- Windows version
+- What you were doing when the problem occurred
+- Screenshot or error text if possible
