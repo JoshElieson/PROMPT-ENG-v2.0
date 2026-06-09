@@ -17,6 +17,13 @@ import {
   type LayoutPresetId,
 } from "@/lib/layout-defaults";
 import { loadLayoutBool, saveLayoutBool } from "@/lib/layout-storage";
+import {
+  applySavedLayoutSnapshot,
+  captureCurrentLayoutSnapshot,
+  loadSavedLayoutSlots,
+  persistSavedLayoutSlots,
+  type SavedLayoutSlot,
+} from "@/lib/saved-layout-storage";
 import { closeAppWindow, toggleWindowMaximize } from "@/lib/window-controls";
 
 const WORKSPACE_BOTTOM_PANEL_KEY = "prompt:workspace-terminal-open";
@@ -32,6 +39,7 @@ type BottomPanelControl = {
   isKindVisible: (kind: BottomPanelBootTab) => boolean;
   focusKind: (kind: BottomPanelBootTab) => void;
   hideKind: (kind: BottomPanelBootTab) => void;
+  restoreKinds: (visible: BottomPanelKindsVisible) => void;
 };
 
 type SidebarControlFn = () => void;
@@ -43,9 +51,15 @@ interface LayoutContextValue {
   sidebarView: SidebarView;
   setSidebarView: (view: SidebarView) => void;
   activeLayoutId: LayoutPresetId;
+  activeSavedLayoutSlot: number | null;
+  savedLayoutSlots: SavedLayoutSlot[];
   layoutResetNonce: number;
+  layoutApplyNonce: number;
   applyDefaultLayout: () => void;
   applyLayoutPreset: (presetId: LayoutPresetId) => void;
+  saveCurrentLayout: (slot: number) => void;
+  applySavedLayout: (slot: number) => void;
+  deleteSavedLayout: (slot: number) => void;
   registerLeftSidebarExpand: (fn: SidebarControlFn) => () => void;
   registerLeftSidebarToggle: (fn: SidebarControlFn) => () => void;
   notifyLeftSidebarCollapsed: (collapsed: boolean) => void;
@@ -80,7 +94,10 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarView, setSidebarView] = useState<SidebarView>("explorer");
   const [activeLayoutId, setActiveLayoutId] = useState<LayoutPresetId>(loadLayoutPreset);
+  const [activeSavedLayoutSlot, setActiveSavedLayoutSlot] = useState<number | null>(null);
+  const [savedLayoutSlots, setSavedLayoutSlots] = useState<SavedLayoutSlot[]>(loadSavedLayoutSlots);
   const [layoutResetNonce, setLayoutResetNonce] = useState(0);
+  const [layoutApplyNonce, setLayoutApplyNonce] = useState(0);
   const [workspaceBottomPanelOpen, setWorkspaceBottomPanelOpen] = useState(() =>
     loadLayoutBool(WORKSPACE_BOTTOM_PANEL_KEY, false),
   );
@@ -95,6 +112,7 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   const leftSidebarExpandRef = useRef<SidebarControlFn | null>(null);
   const leftSidebarToggleRef = useRef<SidebarControlFn | null>(null);
   const bottomPanelControlRef = useRef<BottomPanelControl | null>(null);
+  const pendingBottomPanelRestoreRef = useRef<BottomPanelKindsVisible | null>(null);
 
   useEffect(() => {
     saveLayoutBool(WORKSPACE_BOTTOM_PANEL_KEY, workspaceBottomPanelOpen);
@@ -174,6 +192,11 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
 
   const registerBottomPanelControl = useCallback((control: BottomPanelControl) => {
     bottomPanelControlRef.current = control;
+    const pending = pendingBottomPanelRestoreRef.current;
+    if (pending) {
+      control.restoreKinds(pending);
+      pendingBottomPanelRestoreRef.current = null;
+    }
     return () => {
       if (bottomPanelControlRef.current === control) {
         bottomPanelControlRef.current = null;
@@ -236,9 +259,77 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   const applyLayoutPreset = useCallback((presetId: LayoutPresetId) => {
     clearWindowLayoutStorage();
     setLeftSidebarCollapsed(false);
+    setActiveSavedLayoutSlot(null);
     setActiveLayoutId(presetId);
     setLayoutResetNonce((n) => n + 1);
   }, []);
+
+  const saveCurrentLayout = useCallback(
+    (slot: number) => {
+      if (slot < 0 || slot >= 2) return;
+      const snapshot = captureCurrentLayoutSnapshot(
+        bottomPanelKindsVisible,
+        activeLayoutId,
+        workspaceBottomPanelOpen,
+      );
+      setSavedLayoutSlots((prev) => {
+        const next = [...prev] as SavedLayoutSlot[];
+        next[slot] = snapshot;
+        persistSavedLayoutSlots(next);
+        return next;
+      });
+      setActiveSavedLayoutSlot(slot);
+    },
+    [activeLayoutId, bottomPanelKindsVisible, workspaceBottomPanelOpen],
+  );
+
+  const applySavedLayout = useCallback(
+    (slot: number) => {
+      const snapshot = savedLayoutSlots[slot];
+      if (!snapshot) return;
+
+      applySavedLayoutSnapshot(snapshot);
+      setActiveSavedLayoutSlot(slot);
+      setActiveLayoutId(snapshot.activeLayoutId);
+      setLeftSidebarCollapsed(snapshot.leftSidebarCollapsed);
+
+      if (snapshot.workspaceBottomPanelOpen) {
+        pendingBottomPanelRestoreRef.current = snapshot.bottomPanelKindsVisible;
+        setWorkspaceBottomPanelOpen(true);
+      } else {
+        pendingBottomPanelRestoreRef.current = null;
+        setWorkspaceBottomPanelOpen(false);
+      }
+
+      if (!snapshot.leftSidebarCollapsed) {
+        expandLeftSidebar();
+      }
+
+      setLayoutApplyNonce((n) => n + 1);
+    },
+    [expandLeftSidebar, savedLayoutSlots],
+  );
+
+  const deleteSavedLayout = useCallback((slot: number) => {
+    if (slot < 0 || slot >= 2) return;
+    setSavedLayoutSlots((prev) => {
+      if (!prev[slot]) return prev;
+      const next = [...prev] as SavedLayoutSlot[];
+      next[slot] = null;
+      persistSavedLayoutSlots(next);
+      return next;
+    });
+    setActiveSavedLayoutSlot((current) => (current === slot ? null : current));
+  }, []);
+
+  useEffect(() => {
+    const pending = pendingBottomPanelRestoreRef.current;
+    if (!pending || !workspaceBottomPanelOpen) return;
+    const control = bottomPanelControlRef.current;
+    if (!control) return;
+    control.restoreKinds(pending);
+    pendingBottomPanelRestoreRef.current = null;
+  }, [layoutApplyNonce, workspaceBottomPanelOpen]);
 
   const applyDefaultLayout = useCallback(() => {
     applyLayoutPreset("default");
@@ -296,9 +387,15 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
       sidebarView,
       setSidebarView,
       activeLayoutId,
+      activeSavedLayoutSlot,
+      savedLayoutSlots,
       layoutResetNonce,
+      layoutApplyNonce,
       applyDefaultLayout,
       applyLayoutPreset,
+      saveCurrentLayout,
+      applySavedLayout,
+      deleteSavedLayout,
       registerLeftSidebarExpand,
       registerLeftSidebarToggle,
       notifyLeftSidebarCollapsed,
@@ -321,9 +418,15 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
       closeSettings,
       sidebarView,
       activeLayoutId,
+      activeSavedLayoutSlot,
+      savedLayoutSlots,
       layoutResetNonce,
+      layoutApplyNonce,
       applyDefaultLayout,
       applyLayoutPreset,
+      saveCurrentLayout,
+      applySavedLayout,
+      deleteSavedLayout,
       registerLeftSidebarExpand,
       registerLeftSidebarToggle,
       notifyLeftSidebarCollapsed,

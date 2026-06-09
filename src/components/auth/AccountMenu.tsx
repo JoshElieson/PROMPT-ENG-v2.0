@@ -28,11 +28,15 @@ import { GitHubAuthStatus } from "@/components/auth/GitHubAuthStatus";
 
 import { UserXpBar } from "@/components/auth/UserXpBar";
 
+import { useApiUsage } from "@/contexts/ApiUsageContext";
+
 import { useAuth } from "@/contexts/AuthContext";
 
 import { openExternal } from "@/lib/open-external";
 
 import { cn } from "@/lib/utils";
+
+import { USER_PLAN_LABELS } from "@/types/user-plan";
 
 
 
@@ -68,7 +72,7 @@ export function AccountMenu() {
 
   } = useAuth();
 
-
+  const { plan } = useApiUsage();
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -195,6 +199,21 @@ export function AccountMenu() {
                 {session.provider === "google" ? " · Google" : " · GitHub"}
 
               </p>
+
+              {plan ? (
+                <p className="mt-1.5">
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
+                      plan === "premium"
+                        ? "bg-premium-gold/15 text-premium-gold"
+                        : "bg-panel-elevated text-muted-foreground",
+                    )}
+                  >
+                    {USER_PLAN_LABELS[plan]}
+                  </span>
+                </p>
+              ) : null}
 
               <UserXpBar className="mt-3" />
 

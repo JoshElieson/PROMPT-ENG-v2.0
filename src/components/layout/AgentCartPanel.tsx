@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import {
   filterModelsGroupedByOrg,
-  getModelsGroupedByOrg,
+  getCartModelsGroupedByOrg,
   getTopModelForOrg,
   type AiModel,
   type ModelOrg,
@@ -14,7 +14,7 @@ import { ModelLogo } from "@/components/models/ModelLogo";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { cn } from "@/lib/utils";
 
-const allGroupedOrgs = getModelsGroupedByOrg();
+const allGroupedOrgs = getCartModelsGroupedByOrg();
 
 const flyoutItemSurface =
   "rounded-md outline-none transition-colors duration-150 ease-out hover:bg-menu-hover hover:text-foreground focus-visible:bg-menu-hover focus-visible:text-foreground";
@@ -321,10 +321,13 @@ export function AgentCartPanel({ active }: AgentCartPanelProps) {
         />
       )}
 
-      <footer className="shrink-0 px-3 py-2">
+      <footer className="shrink-0 space-y-1 px-3 py-2">
         <p className="text-muted-foreground text-xs">
           <span className="text-foreground font-medium">{selectedIds.length}</span>
           {selectedIds.length === 1 ? " model" : " models"} selected
+        </p>
+        <p className="text-muted text-[10px] leading-snug">
+          More models coming with future updates!
         </p>
       </footer>
     </SidebarPanel>

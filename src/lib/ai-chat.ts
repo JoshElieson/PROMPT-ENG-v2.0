@@ -2,10 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getModelById } from "@/data/ai-models";
 import { buildForgeKnowledgePrompt } from "@/lib/forge-knowledge";
+import { prependActiveRulesPrompt } from "@/lib/user-rules-prompt";
 import { formatInvokeError } from "@/lib/git";
 import { isTauri } from "@/lib/tauri";
 
 import type { AiWorkspacePayload } from "@/types/chat";
+import type { RuleApplicationContext } from "@/types/rule";
 
 export interface ChatTurn {
   role: "user" | "assistant";
@@ -129,6 +131,7 @@ export async function aiChatComplete(
   workspace?: AiWorkspacePayload | null,
   system?: string | null,
   streamId?: string | null,
+  rulesContext?: RuleApplicationContext | null,
 ): Promise<string> {
   requireTauri();
   const resolvedModelId = resolveModelId(modelId);
@@ -137,7 +140,7 @@ export async function aiChatComplete(
       `Model "${modelId.trim()}" is not connected to a provider yet.`,
     );
   }
-  const baseSystemPrompt = system?.trim() ?? "";
+  const baseSystemPrompt = prependActiveRulesPrompt(system, rulesContext ?? undefined);
   const knowledgePrompt = buildForgeKnowledgePrompt(latestUserQuery(messages)) ?? "";
   const systemPrompt = [baseSystemPrompt, knowledgePrompt]
     .filter((part) => part.trim().length > 0)
@@ -176,9 +179,10 @@ export async function aiChatSynthesize(
   userMessage: string,
   modelResponses: ModelResponsePayload[],
   system?: string | null,
+  rulesContext?: RuleApplicationContext | null,
 ): Promise<string> {
   requireTauri();
-  const baseSystemPrompt = system?.trim() ?? "";
+  const baseSystemPrompt = prependActiveRulesPrompt(system, rulesContext ?? undefined);
   const knowledgePrompt = buildForgeKnowledgePrompt(userMessage.trim()) ?? "";
   const systemPrompt = [baseSystemPrompt, knowledgePrompt]
     .filter((part) => part.trim().length > 0)

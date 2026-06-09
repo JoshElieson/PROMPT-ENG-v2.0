@@ -209,7 +209,7 @@ export function ResizablePanels({
   onTrailingPanelCollapse,
 }: ResizablePanelsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { layoutResetNonce } = useLayout();
+  const { layoutResetNonce, layoutApplyNonce } = useLayout();
   const [gutterSnap, setGutterSnap] = useState<PanelGutterSnap>("none");
   const isControlled =
     controlledSizes != null &&
@@ -263,6 +263,18 @@ export function ResizablePanels({
       setUncontrolledSizes(enforcePanelConstraints(normalizeSizes(defaultSizes), panels)),
     );
   }, [layoutResetNonce, defaultSizes, isControlled, panels]);
+
+  useEffect(() => {
+    if (isControlled || layoutApplyNonce === 0 || !storageKey) return;
+    queueMicrotask(() =>
+      setUncontrolledSizes(
+        enforcePanelConstraints(
+          normalizeSizes(loadLayoutSizes(storageKey, defaultSizes)),
+          panels,
+        ),
+      ),
+    );
+  }, [layoutApplyNonce, storageKey, defaultSizes, isControlled, panels]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -454,6 +466,7 @@ export function ResizableSidebar({
 }: ResizableSidebarProps) {
   const {
     layoutResetNonce,
+    layoutApplyNonce,
     registerLeftSidebarExpand,
     registerLeftSidebarToggle,
     notifyLeftSidebarCollapsed,
@@ -490,6 +503,15 @@ export function ResizableSidebar({
       setSnapHighlight(false);
     });
   }, [layoutResetNonce, defaultWidth]);
+
+  useEffect(() => {
+    if (layoutApplyNonce === 0) return;
+    queueMicrotask(() => {
+      setWidth(loadLayoutPx(storageKey, defaultWidth));
+      setCollapsed(loadLayoutBool(collapsedKey, false));
+      setSnapHighlight(false);
+    });
+  }, [layoutApplyNonce, storageKey, defaultWidth, collapsedKey]);
 
   useEffect(() => {
     const expand = () => {

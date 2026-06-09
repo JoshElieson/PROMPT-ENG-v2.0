@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$version = "1.0.0-2"
+$version = "1.1.0"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $releaseDir = Join-Path $repoRoot ("release\" + $version)
 $bundleRoot = Join-Path $repoRoot "src-tauri\target\release\bundle"

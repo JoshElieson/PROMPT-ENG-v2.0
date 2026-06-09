@@ -8,21 +8,19 @@ import {
   type ReactNode,
 } from "react";
 import { getModelById } from "@/data/ai-models";
-import { normalizeTargetModelIds } from "@/lib/ai-chat";
+import {
+  APP_SETTINGS_STORAGE_KEY,
+  DEFAULT_APP_SETTINGS,
+  normalizeAppSettings,
+  readAppSettings,
+  writeAppSettings,
+  type AppSettings,
+  type AppTheme,
+} from "@/lib/app-settings-storage";
+import { isTauri } from "@/lib/tauri";
+import { setSystemTrayVisible } from "@/lib/system-tray";
 
-const STORAGE_KEY = "prompt:app-settings:v1";
-
-export type AppTheme = "system" | "dark" | "light";
-
-export interface AppSettings {
-  defaultModel: string;
-  theme: AppTheme;
-  systemNotifications: boolean;
-  warningNotifications: boolean;
-  systemTrayIcon: boolean;
-  completionSound: boolean;
-  dataSharingEnabled: boolean;
-}
+export type { AppSettings, AppTheme };
 
 export interface SettingChangeRequest {
   settingKey: string;
@@ -42,69 +40,10 @@ interface AppSettingsContextValue {
   isValidSettingKey: (key: string) => key is keyof AppSettings;
 }
 
-const DEFAULT_SETTINGS: AppSettings = {
-  defaultModel: "gpt4o",
-  theme: "dark",
-  systemNotifications: true,
-  warningNotifications: false,
-  systemTrayIcon: true,
-  completionSound: false,
-  dataSharingEnabled: true,
-};
-
 const AppSettingsContext = createContext<AppSettingsContextValue | null>(null);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function normalizeSettings(raw: unknown): AppSettings {
-  if (!isRecord(raw)) return DEFAULT_SETTINGS;
-  const defaultModel =
-    typeof raw.defaultModel === "string"
-      ? (getModelById(raw.defaultModel)?.id ??
-        normalizeTargetModelIds([raw.defaultModel])[0] ??
-        DEFAULT_SETTINGS.defaultModel)
-      : DEFAULT_SETTINGS.defaultModel;
-  const theme = raw.theme;
-  const normalizedTheme: AppTheme =
-    theme === "system" || theme === "dark" || theme === "light"
-      ? theme
-      : DEFAULT_SETTINGS.theme;
-  return {
-    defaultModel,
-    theme: normalizedTheme,
-    systemNotifications:
-      typeof raw.systemNotifications === "boolean"
-        ? raw.systemNotifications
-        : DEFAULT_SETTINGS.systemNotifications,
-    warningNotifications:
-      typeof raw.warningNotifications === "boolean"
-        ? raw.warningNotifications
-        : DEFAULT_SETTINGS.warningNotifications,
-    systemTrayIcon:
-      typeof raw.systemTrayIcon === "boolean"
-        ? raw.systemTrayIcon
-        : DEFAULT_SETTINGS.systemTrayIcon,
-    completionSound:
-      typeof raw.completionSound === "boolean"
-        ? raw.completionSound
-        : DEFAULT_SETTINGS.completionSound,
-    dataSharingEnabled:
-      typeof raw.dataSharingEnabled === "boolean"
-        ? raw.dataSharingEnabled
-        : DEFAULT_SETTINGS.dataSharingEnabled,
-  };
-}
-
 function loadSettings(): AppSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    return normalizeSettings(JSON.parse(raw));
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+  return readAppSettings();
 }
 
 function validateSettingValue(
@@ -133,10 +72,6 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  }, [settings]);
-
-  useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = settings.theme;
     if (settings.theme === "dark" || settings.theme === "system") {
@@ -146,13 +81,22 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     root.classList.remove("dark");
   }, [settings.theme]);
 
+  useEffect(() => {
+    if (!isTauri()) return;
+    void setSystemTrayVisible(settings.systemTrayIcon).catch(() => {});
+  }, [settings.systemTrayIcon]);
+
   const isValidSettingKey = useCallback((key: string): key is keyof AppSettings => {
-    return key in DEFAULT_SETTINGS;
+    return key in DEFAULT_APP_SETTINGS;
   }, []);
 
   const setSetting = useCallback(
     (key: keyof AppSettings, value: AppSettings[keyof AppSettings]) => {
-      setSettings((prev) => ({ ...prev, [key]: value }));
+      setSettings((prev) => {
+        const next = { ...prev, [key]: value };
+        writeAppSettings(next);
+        return next;
+      });
     },
     [],
   );
@@ -192,3 +136,4 @@ export function useAppSettings() {
   return ctx;
 }
 
+export { APP_SETTINGS_STORAGE_KEY, DEFAULT_APP_SETTINGS, normalizeAppSettings };

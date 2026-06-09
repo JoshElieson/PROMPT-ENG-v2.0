@@ -951,3 +951,33 @@ pub fn git_restore_paths(path: String, paths: Vec<String>) -> Result<GitCommandR
         output,
     })
 }
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHeadInfo {
+    pub head: String,
+    pub branch: Option<String>,
+}
+
+#[tauri::command]
+pub fn git_head_info(path: String) -> Result<GitHeadInfo, String> {
+    if !is_git_repo(&path) {
+        return Err("Not a git repository.".to_string());
+    }
+    let head = run_git(&path, &["rev-parse", "HEAD"])?;
+    Ok(GitHeadInfo {
+        head,
+        branch: current_branch(&path),
+    })
+}
+
+#[tauri::command]
+pub fn git_remote_origin_url(path: String) -> Result<Option<String>, String> {
+    if !is_git_repo(&path) {
+        return Ok(None);
+    }
+    match run_git(&path, &["remote", "get-url", "origin"]) {
+        Ok(url) if !url.trim().is_empty() => Ok(Some(url.trim().to_string())),
+        _ => Ok(None),
+    }
+}

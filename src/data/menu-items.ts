@@ -129,8 +129,6 @@ export const appMenuGroups: MenuGroup[] = [
         shortcut: "Ctrl+F",
         action: "edit.findInChat",
       },
-      { type: "separator" },
-      { type: "item", label: "Select All", shortcut: "Ctrl+A" },
     ],
   },
   {

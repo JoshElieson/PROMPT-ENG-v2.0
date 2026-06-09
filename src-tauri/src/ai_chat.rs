@@ -344,6 +344,14 @@ fn chat_system_prompt(user: Option<&str>) -> String {
     }
 }
 
+fn merged_workspace_system(policy: &WorkspacePolicy, user: Option<&str>) -> String {
+    let workspace = workspace_system_prompt(policy);
+    match user.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(custom) => format!("{custom}\n\n{workspace}"),
+        None => workspace,
+    }
+}
+
 fn workspace_system_prompt(policy: &WorkspacePolicy) -> String {
     let mut sections = Vec::new();
     if policy.has_file_access() {
@@ -813,6 +821,7 @@ async fn openai_agent_loop(
     api_model: &str,
     chat_messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
 ) -> Result<String, String> {
     let key = api_key(Provider::OpenAi).expect("key checked");
@@ -824,7 +833,7 @@ async fn openai_agent_loop(
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
-        "content": workspace_system_prompt(policy),
+        "content": merged_workspace_system(policy, system),
     })];
     let mut activities: Vec<ToolActivity> = Vec::new();
     for turn in chat_messages {
@@ -983,6 +992,7 @@ async fn deepseek_agent_loop(
     api_model: &str,
     chat_messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
 ) -> Result<String, String> {
     let key = api_key(Provider::DeepSeek).expect("key checked");
@@ -994,7 +1004,7 @@ async fn deepseek_agent_loop(
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
-        "content": workspace_system_prompt(policy),
+        "content": merged_workspace_system(policy, system),
     })];
     let mut activities: Vec<ToolActivity> = Vec::new();
     for turn in chat_messages {
@@ -1169,6 +1179,7 @@ async fn xai_agent_loop_once(
     api_model: &str,
     chat_messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
 ) -> Result<String, String> {
     let key = api_key(Provider::Xai).expect("key checked");
@@ -1180,7 +1191,7 @@ async fn xai_agent_loop_once(
 
     let mut api_messages: Vec<serde_json::Value> = vec![json!({
         "role": "system",
-        "content": workspace_system_prompt(policy),
+        "content": merged_workspace_system(policy, system),
     })];
     let mut activities: Vec<ToolActivity> = Vec::new();
     for turn in chat_messages {
@@ -1265,10 +1276,19 @@ async fn xai_agent_loop(
     api_model: &str,
     chat_messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
 ) -> Result<String, String> {
     let api_model = resolve_runtime_model(api_model).await;
-    match xai_agent_loop_once(&api_model, chat_messages, policy, activity_sink.clone()).await {
+    match xai_agent_loop_once(
+        &api_model,
+        chat_messages,
+        policy,
+        system,
+        activity_sink.clone(),
+    )
+    .await
+    {
         Ok(content) => Ok(content),
         Err(err) if is_model_not_found_error(&err) => {
             invalidate_cache();
@@ -1276,7 +1296,7 @@ async fn xai_agent_loop(
             if fallback == api_model {
                 return Err(err);
             }
-            xai_agent_loop_once(&fallback, chat_messages, policy, activity_sink).await
+            xai_agent_loop_once(&fallback, chat_messages, policy, system, activity_sink).await
         }
         Err(err) => Err(err),
     }
@@ -1510,6 +1530,7 @@ async fn anthropic_agent_loop(
     api_model: &str,
     chat_messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
 ) -> Result<String, String> {
     let key = api_key(Provider::Anthropic).expect("key checked");
@@ -1537,7 +1558,7 @@ async fn anthropic_agent_loop(
         let body = json!({
             "model": api_model,
             "max_tokens": 4096,
-            "system": workspace_system_prompt(policy),
+            "system": merged_workspace_system(policy, system),
             "tools": tools,
             "messages": api_messages,
         });
@@ -1838,6 +1859,7 @@ async fn gemini_agent_loop(
     api_model: &str,
     chat_messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
 ) -> Result<String, String> {
     let key = api_key(Provider::Google).expect("key checked");
@@ -1872,7 +1894,7 @@ async fn gemini_agent_loop(
         let body = json!({
             "contents": contents,
             "systemInstruction": {
-                "parts": [{ "text": workspace_system_prompt(policy) }],
+                "parts": [{ "text": merged_workspace_system(policy, system) }],
             },
             "tools": gemini_tool_declarations(policy),
         });
@@ -1971,19 +1993,28 @@ async fn complete_for_model_with_workspace(
     model_id: &str,
     messages: &[ChatTurn],
     policy: &WorkspacePolicy,
+    system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
 ) -> Result<String, String> {
     let (provider, api_model) = resolve_api_model(model_id)?;
     if !model_supports_tools(model_id) {
-        let sys = Some(workspace_system_prompt(policy));
-        return complete_for_model(model_id, messages, sys.as_deref()).await;
+        let sys = merged_workspace_system(policy, system);
+        return complete_for_model(model_id, messages, Some(sys.as_str())).await;
     }
     match provider {
-        Provider::OpenAi => openai_agent_loop(&api_model, messages, policy, activity_sink).await,
-        Provider::Anthropic => anthropic_agent_loop(&api_model, messages, policy, activity_sink).await,
-        Provider::Google => gemini_agent_loop(&api_model, messages, policy, activity_sink).await,
-        Provider::DeepSeek => deepseek_agent_loop(&api_model, messages, policy, activity_sink).await,
-        Provider::Xai => xai_agent_loop(&api_model, messages, policy, activity_sink).await,
+        Provider::OpenAi => {
+            openai_agent_loop(&api_model, messages, policy, system, activity_sink).await
+        }
+        Provider::Anthropic => {
+            anthropic_agent_loop(&api_model, messages, policy, system, activity_sink).await
+        }
+        Provider::Google => {
+            gemini_agent_loop(&api_model, messages, policy, system, activity_sink).await
+        }
+        Provider::DeepSeek => {
+            deepseek_agent_loop(&api_model, messages, policy, system, activity_sink).await
+        }
+        Provider::Xai => xai_agent_loop(&api_model, messages, policy, system, activity_sink).await,
     }
 }
 
@@ -2010,6 +2041,7 @@ pub async fn ai_chat_complete(
                 &model_id,
                 &messages,
                 &policy,
+                system.as_deref(),
                 activity_sink,
             )
             .await;

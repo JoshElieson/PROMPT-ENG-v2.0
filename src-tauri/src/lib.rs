@@ -1,4 +1,5 @@
 mod agent_notifications;
+mod system_tray;
 mod app_icon;
 mod ai_chat;
 mod ai_config;
@@ -22,8 +23,9 @@ use fs::{
 };
 use fs_watch::{sync_project_fs_watchers, FsWatchState};
 use git::{
-    git_checkout_branch, git_clone, git_commit, git_fetch, git_init, git_list_branches, git_pull,
-    git_push, git_restore_paths, git_status, git_sync, git_sync_branch,
+    git_checkout_branch, git_clone, git_commit, git_fetch, git_head_info, git_init,
+    git_list_branches, git_pull, git_push, git_remote_origin_url, git_restore_paths, git_status,
+    git_sync, git_sync_branch,
 };
 use ai_chat::{ai_chat_complete, ai_chat_synthesize};
 use embedded_browser::{
@@ -36,7 +38,11 @@ use shell_run::open_terminal_run_command;
 use terminal::{
     terminal_kill, terminal_resize, terminal_spawn, terminal_write, TerminalState,
 };
-use agent_notifications::show_agent_finish_notification;
+use agent_notifications::{
+    show_agent_finish_notification, show_automation_complete_notification,
+};
+
+use system_tray::set_system_tray_visible;
 use ai_config::{ai_connection_status, load_dotenv};
 use github_auth::{
     github_complete_device_login, github_fetch_user, github_poll_device_token,
@@ -78,6 +84,8 @@ pub fn run() {
             git_clone,
             git_commit,
             git_restore_paths,
+            git_head_info,
+            git_remote_origin_url,
             github_start_device_flow,
             github_poll_device_token,
             github_wait_for_device_token,
@@ -102,6 +110,8 @@ pub fn run() {
             browser_webview_set_visible,
             browser_webview_close,
             show_agent_finish_notification,
+            show_automation_complete_notification,
+            set_system_tray_visible,
         ])
         .setup(|app| {
             load_dotenv();

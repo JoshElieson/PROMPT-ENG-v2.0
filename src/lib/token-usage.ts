@@ -1,5 +1,6 @@
 import { isAiModelSupported } from "@/lib/ai-chat";
 import type { ChatTurn } from "@/lib/ai-chat";
+import type { UserPlan } from "@/types/user-plan";
 
 /** Approximate USD per 1M tokens (input / output). Used for estimates only. */
 export interface ModelPricing {
@@ -147,13 +148,28 @@ export function formatTokenCount(value: number): string {
 
 export const FREE_PLAN_TOKEN_LIMIT = 100_000;
 
+export function tokenLimitForPlan(plan: UserPlan): number | null {
+  return plan === "free" ? FREE_PLAN_TOKEN_LIMIT : null;
+}
+
+export function isAtTokenLimit(plan: UserPlan, usedTokens: number): boolean {
+  const limit = tokenLimitForPlan(plan);
+  if (limit == null) return false;
+  return Math.max(0, usedTokens) >= limit;
+}
+
 export function formatPlanTokenCount(value: number): string {
   return Math.max(0, Math.round(value)).toLocaleString();
 }
 
-export function freePlanUsageRatio(usedTokens: number): number {
-  if (FREE_PLAN_TOKEN_LIMIT <= 0) return 0;
-  return Math.min(Math.max(0, usedTokens) / FREE_PLAN_TOKEN_LIMIT, 1);
+export function freePlanUsageRatio(usedTokens: number, plan: UserPlan = "free"): number {
+  const limit = tokenLimitForPlan(plan);
+  if (limit == null || limit <= 0) return 0;
+  return Math.min(Math.max(0, usedTokens) / limit, 1);
+}
+
+export function buildTokenLimitMessage(resetDateLabel: string): string {
+  return `You've used all ${formatPlanTokenCount(FREE_PLAN_TOKEN_LIMIT)} free tokens this month. Wait until ${resetDateLabel} for your allowance to reset, or upgrade to Forge Premium for unlimited tokens.`;
 }
 
 export function formatCostUsd(value: number): string {

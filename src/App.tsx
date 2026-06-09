@@ -21,6 +21,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppSettingsProvider } from "@/contexts/AppSettingsContext";
 import { AiCommandBusProvider } from "@/contexts/AiCommandBusContext";
 import { AppToastProvider } from "@/contexts/AppToastContext";
+import { AutomationsProvider } from "@/contexts/AutomationsContext";
+import { RulesProvider } from "@/contexts/RulesContext";
 
 function AppShell() {
   const { sidebarView, setSidebarView, settingsOpen } = useLayout();
@@ -65,7 +67,9 @@ function App() {
                     <ApiUsageProvider>
                       <ChatsProvider>
                         <ProjectsProvider>
-                          <FocusedWorkspacePaneRoundTableProvider>
+                          <AutomationsProvider>
+                            <RulesProvider>
+                            <FocusedWorkspacePaneRoundTableProvider>
                             <AppSelectionProvider>
                               <GitProvider>
                                 <TooltipProvider delayDuration={200}>
@@ -75,6 +79,8 @@ function App() {
                               </GitProvider>
                             </AppSelectionProvider>
                           </FocusedWorkspacePaneRoundTableProvider>
+                            </RulesProvider>
+                          </AutomationsProvider>
                         </ProjectsProvider>
                       </ChatsProvider>
                     </ApiUsageProvider>

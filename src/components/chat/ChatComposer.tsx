@@ -33,6 +33,7 @@ import { useAppSelection } from "@/contexts/AppSelectionContext";
 import { useModelMode } from "@/contexts/ModelModeContext";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { useChats } from "@/contexts/ChatsContext";
+import { useApiUsage } from "@/contexts/ApiUsageContext";
 import { resolveQueuedMessageBehavior } from "@/lib/chat-behavior";
 import { useProjects } from "@/contexts/ProjectsContext";
 import {
@@ -124,6 +125,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   ) {
   const { sendMessage, activeChat, chats, responseLoading, getQueuedMessageCount } =
     useChats();
+  const {
+    isAtTokenLimit,
+    tokenLimitMessage,
+    signInRequiredMessage,
+    isSignedIn,
+  } = useApiUsage();
   const { selectWorkspaceScreen } = useAppSelection();
   const { projects, setDirectoryPermissions } = useProjects();
   const {
@@ -384,6 +391,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       setError("Enter a prompt to optimize first.");
       return;
     }
+    if (!isSignedIn) {
+      setError(
+        signInRequiredMessage ??
+          "Sign in to send messages. Your monthly token allowance is tracked per account.",
+      );
+      return;
+    }
+    if (isAtTokenLimit) {
+      setError(
+        tokenLimitMessage ??
+          "You've reached your monthly token limit. Upgrade to Forge Premium or wait until next month.",
+      );
+      return;
+    }
     if (optimizingPrompt) return;
 
     setError(null);
@@ -407,7 +428,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     } finally {
       setOptimizingPrompt(false);
     }
-  }, [input, optimizingPrompt, applyOptimizedPrompt]);
+  }, [
+    input,
+    optimizingPrompt,
+    applyOptimizedPrompt,
+    isSignedIn,
+    isAtTokenLimit,
+    tokenLimitMessage,
+    signInRequiredMessage,
+  ]);
 
   useEffect(() => {
     optimizeAbortRef.current = true;
@@ -729,6 +758,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed && attachments.length === 0) return;
+
+    if (!isSignedIn) {
+      setError(
+        signInRequiredMessage ??
+          "Sign in to send messages. Your monthly token allowance is tracked per account.",
+      );
+      return;
+    }
+
+    if (isAtTokenLimit) {
+      setError(
+        tokenLimitMessage ??
+          "You've reached your monthly token limit. Upgrade to Forge Premium or wait until next month.",
+      );
+      return;
+    }
 
     const chatGoal = composerChat?.title;
 
@@ -1126,6 +1171,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
           {error && (
             <p className="px-4 pb-2 text-xs text-red-400">{error}</p>
           )}
+          {!error && isAtTokenLimit && tokenLimitMessage ? (
+            <p className="text-amber-500 dark:text-amber-400 px-4 pb-2 text-xs leading-relaxed">
+              {tokenLimitMessage}
+            </p>
+          ) : null}
+          {!error && !isSignedIn && signInRequiredMessage ? (
+            <p className="text-muted-foreground px-4 pb-2 text-xs leading-relaxed">
+              {signInRequiredMessage}
+            </p>
+          ) : null}
           {attachmentWarning && (
             <p className="px-4 pb-2 text-xs text-amber-500 dark:text-amber-400">
               {attachmentWarning}

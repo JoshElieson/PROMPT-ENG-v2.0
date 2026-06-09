@@ -93,7 +93,9 @@ import {
   getRelevantContextForAgent,
   updateAgentSummary,
 } from "@/lib/project-memory";
-import { notifyAgentFinishedWhenBackgrounded } from "@/lib/agent-finish-notification";
+import { notifyAgentFinishedWhenBackgrounded, notifyAgentNeedsAttentionWhenBackgrounded } from "@/lib/agent-finish-notification";
+import { readAppSettings } from "@/lib/app-settings-storage";
+import { playCompletionSound } from "@/lib/completion-sound";
 import type { NodePermissions } from "@/types/project";
 import type {
   AiWorkspacePayload,
@@ -111,6 +113,7 @@ import type {
   AgentActivityType,
 } from "@/types/agent-activity";
 import { useAiCommandBus } from "@/contexts/AiCommandBusContext";
+import { useAppToast } from "@/contexts/AppToastContext";
 
 interface ChatsContextValue {
   chats: Chat[];
@@ -292,6 +295,20 @@ function findChatSnapshot(
   return chats.find((c) => c.id === chatId) ?? null;
 }
 
+function resolveAgentNotificationParams(
+  chatSnapshot: Chat,
+  threadId: string,
+): { workspaceName: string; agentName: string } {
+  const threadIndex = chatSnapshot.threads.findIndex((thread) => thread.id === threadId);
+  const thread = threadIndex >= 0 ? chatSnapshot.threads[threadIndex] : undefined;
+  return {
+    workspaceName: chatSnapshot.title?.trim() || "Workspace",
+    agentName: thread
+      ? threadDisplayTitle(thread, threadIndex)
+      : defaultThreadTitle(0),
+  };
+}
+
 function buildThreadHistory(chat: Chat, threadId: string): ChatTurn[] {
   const thread = chat.threads.find((t) => t.id === threadId);
   return (thread?.messages ?? []).map((m) => ({
@@ -414,7 +431,8 @@ function appendAssistantToThread(
 }
 
 export function ChatsProvider({ children }: { children: ReactNode }) {
-  const { addUsage } = useApiUsage();
+  const { addUsage, isAtTokenLimit, tokenLimitMessage, isSignedIn, signInRequiredMessage } =
+    useApiUsage();
   const { awardNewAgent } = useUserXp();
   const {
     requestBottomPanelTab,
@@ -422,6 +440,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     setLeftSidebarViewVisible,
   } = useLayout();
   const { enqueueCommands } = useAiCommandBus();
+  const { pushToast } = useAppToast();
   const boot = useMemo(() => {
     const loaded = loadChats();
     return partitionLoadedChats(loaded, loadActiveChatId());
@@ -1261,8 +1280,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           ? resolvedContributions
           : evenContributions(resolvedTargetModelIds);
 
-      const finish = async (content: string) => {
+      const finish = async (
+        content: string,
+        options?: { successful?: boolean },
+      ) => {
         if (responseRunRef.current !== runId) return;
+        const successful = options?.successful ?? true;
         const { visibleContent: afterTools, patches: toolPatches } =
           extractAssistantProjectTools(content);
         if (toolPatches.length > 0) {
@@ -1419,19 +1442,18 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           );
         }
         if (chatSnapshot) {
-          const threadIndex = chatSnapshot.threads.findIndex(
-            (thread) => thread.id === threadId,
-          );
-          const thread =
-            threadIndex >= 0 ? chatSnapshot.threads[threadIndex] : undefined;
-          const workspaceName = chatSnapshot.title?.trim() || "Workspace";
-          const agentName = thread
-            ? threadDisplayTitle(thread, threadIndex)
-            : defaultThreadTitle(0);
-          void notifyAgentFinishedWhenBackgrounded({
-            workspaceName,
-            agentName,
-          }).catch(() => {});
+          const params = resolveAgentNotificationParams(chatSnapshot, threadId);
+          if (successful) {
+            if (readAppSettings().completionSound) {
+              playCompletionSound();
+            }
+            void notifyAgentFinishedWhenBackgrounded(params).catch(() => {});
+            window.dispatchEvent(
+              new CustomEvent("forge:agent-complete", {
+                detail: { chatId, threadId },
+              }),
+            );
+          }
         }
         activeStreamIdByThreadRef.current.delete(threadKey);
         clearStreamingActivities(chatId, threadId);
@@ -1443,12 +1465,41 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
       const fail = async (message: string) => {
         appendAgentActivityEvent(chatId, threadId, "error", `Agent failed: ${message}`);
-        await finish(`**Could not get a response**\n\n${message}`);
+        const chatSnapshot = findChatSnapshot(
+          chatsRef.current,
+          draftChatRef.current,
+          chatId,
+        );
+        if (chatSnapshot) {
+          void notifyAgentNeedsAttentionWhenBackgrounded(
+            resolveAgentNotificationParams(chatSnapshot, threadId),
+          ).catch(() => {});
+        }
+        pushToast(`Agent failed: ${message}`, "warning");
+        await finish(`**Could not get a response**\n\n${message}`, {
+          successful: false,
+        });
       };
 
       if (!isTauri()) {
         await fail(
           "AI chat requires the desktop app. Run with `npm run tauri:dev` and configure either `FORGE_BACKEND_URL` (recommended) or provider API keys in `.env`.",
+        );
+        return;
+      }
+
+      if (!isSignedIn) {
+        await fail(
+          signInRequiredMessage ??
+            "Sign in to send messages. Your monthly token allowance is tracked per account.",
+        );
+        return;
+      }
+
+      if (isAtTokenLimit) {
+        await fail(
+          tokenLimitMessage ??
+            "You've reached your monthly token limit. Upgrade to Forge Premium or wait until next month.",
         );
         return;
       }
@@ -1537,6 +1588,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             workspace,
             systemPrompt,
             streamId,
+            { chatId, threadId },
           );
           modelOutputs = [{ modelId: resolvedTargetModelIds[0], content }];
           await finish(content);
@@ -1569,6 +1621,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             workspace,
             systemPrompt,
             streamId,
+            { chatId, threadId },
           );
           modelOutputs.push({ modelId, content });
         }
@@ -1597,6 +1650,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             content: entry.content,
           })),
           systemPrompt,
+          { chatId, threadId },
         );
 
         await finish(synthesized);
@@ -1616,13 +1670,35 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       setLeftSidebarViewVisible,
       patchWorkspaceSettings,
       enqueueCommands,
+      pushToast,
       getChatByIdSnapshot,
       pushUndoSnapshot,
+      isSignedIn,
+      isAtTokenLimit,
+      tokenLimitMessage,
+      signInRequiredMessage,
     ],
   );
 
   const startThreadAiRun = useCallback(
     (committed: CommittedSend) => {
+      if (!isSignedIn) {
+        pushToast(
+          signInRequiredMessage ??
+            "Sign in to send messages. Your monthly token allowance is tracked per account.",
+          "warning",
+        );
+        return;
+      }
+      if (isAtTokenLimit) {
+        pushToast(
+          tokenLimitMessage ??
+            "You've reached your monthly token limit. Upgrade to Forge Premium or wait until next month.",
+          "warning",
+        );
+        return;
+      }
+
       const {
         resolvedChatId,
         finalThreadId,
@@ -1678,6 +1754,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       clearStreamingActivities,
       clearAgentActivityEvents,
       appendAgentActivityEvent,
+      isSignedIn,
+      isAtTokenLimit,
+      tokenLimitMessage,
+      signInRequiredMessage,
+      pushToast,
     ],
   );
 
@@ -1732,6 +1813,24 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     (payload: SendMessagePayload) => {
       const trimmed = payload.content.trim();
       if (!trimmed && (!payload.attachments || payload.attachments.length === 0)) {
+        return;
+      }
+
+      if (!isSignedIn) {
+        pushToast(
+          signInRequiredMessage ??
+            "Sign in to send messages. Your monthly token allowance is tracked per account.",
+          "warning",
+        );
+        return;
+      }
+
+      if (isAtTokenLimit) {
+        pushToast(
+          tokenLimitMessage ??
+            "You've reached your monthly token limit. Upgrade to Forge Premium or wait until next month.",
+          "warning",
+        );
         return;
       }
 
@@ -1881,6 +1980,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       pushUndoSnapshot,
       refineWorkspaceTitle,
       startThreadAiRun,
+      isSignedIn,
+      isAtTokenLimit,
+      tokenLimitMessage,
+      signInRequiredMessage,
+      pushToast,
     ],
   );
 

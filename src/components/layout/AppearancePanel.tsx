@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check } from "lucide-react";
-import { LayoutThumbnail } from "@/components/layout/LayoutThumbnail";
+import {
+  LAYOUT_PICKER_ITEM_COUNT,
+  LayoutPicker,
+} from "@/components/layout/LayoutPicker";
 import { useLayout } from "@/contexts/LayoutContext";
 import { LAYOUT_PRESETS } from "@/lib/layout-defaults";
 import { cn } from "@/lib/utils";
@@ -17,13 +19,18 @@ interface AppearancePanelProps {
 
 export function AppearancePanel({ anchor, onClose }: AppearancePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const { activeLayoutId, applyLayoutPreset } = useLayout();
-  const [highlight, setHighlight] = useState(() =>
-    Math.max(
-      0,
-      LAYOUT_PRESETS.findIndex((preset) => preset.id === activeLayoutId),
-    ),
-  );
+  const {
+    activeLayoutId,
+    activeSavedLayoutSlot,
+    savedLayoutSlots,
+    applyLayoutPreset,
+    applySavedLayout,
+    saveCurrentLayout,
+  } = useLayout();
+  const [highlight, setHighlight] = useState(() => {
+    const presetIndex = activeSavedLayoutSlot ?? (activeLayoutId === "horizontal" ? 1 : 0);
+    return Math.max(0, Math.min(presetIndex, LAYOUT_PICKER_ITEM_COUNT - 1));
+  });
   const [position, setPosition] = useState<{ top: number; left: number }>(() => ({
     top: anchor.top,
     left: anchor.right + ANCHOR_GAP,
@@ -31,7 +38,7 @@ export function AppearancePanel({ anchor, onClose }: AppearancePanelProps) {
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
-    const height = panel?.offsetHeight ?? 160;
+    const height = panel?.offsetHeight ?? 220;
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
 
@@ -63,16 +70,6 @@ export function AppearancePanel({ anchor, onClose }: AppearancePanelProps) {
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [onClose]);
 
-  const selectPreset = useCallback(
-    (index: number) => {
-      const preset = LAYOUT_PRESETS[index];
-      if (!preset || preset.disabled) return;
-      applyLayoutPreset(preset.id);
-      onClose();
-    },
-    [applyLayoutPreset, onClose],
-  );
-
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -82,7 +79,7 @@ export function AppearancePanel({ anchor, onClose }: AppearancePanelProps) {
       }
       if (event.key === "ArrowRight") {
         event.preventDefault();
-        setHighlight((prev) => Math.min(prev + 1, LAYOUT_PRESETS.length - 1));
+        setHighlight((prev) => Math.min(prev + 1, LAYOUT_PICKER_ITEM_COUNT - 1));
         return;
       }
       if (event.key === "ArrowLeft") {
@@ -92,10 +89,32 @@ export function AppearancePanel({ anchor, onClose }: AppearancePanelProps) {
       }
       if (event.key === "Enter") {
         event.preventDefault();
-        selectPreset(highlight);
+        if (highlight < LAYOUT_PRESETS.length) {
+          const preset = LAYOUT_PRESETS[highlight];
+          if (preset && !preset.disabled) {
+            applyLayoutPreset(preset.id);
+            onClose();
+          }
+          return;
+        }
+        const slot = highlight - LAYOUT_PRESETS.length;
+        const snapshot = savedLayoutSlots[slot];
+        if (snapshot) {
+          applySavedLayout(slot);
+          onClose();
+        } else {
+          saveCurrentLayout(slot);
+        }
       }
     },
-    [highlight, onClose, selectPreset],
+    [
+      highlight,
+      onClose,
+      applyLayoutPreset,
+      applySavedLayout,
+      saveCurrentLayout,
+      savedLayoutSlots,
+    ],
   );
 
   return createPortal(
@@ -118,42 +137,14 @@ export function AppearancePanel({ anchor, onClose }: AppearancePanelProps) {
       <p className="border-b border-border-subtle px-3 py-2 text-[11px] font-medium tracking-wide text-muted">
         Layout
       </p>
-      <div className="flex gap-2 p-3">
-        {LAYOUT_PRESETS.map((preset, index) => {
-          const isActive = preset.id === activeLayoutId && !preset.disabled;
-          const highlighted = index === highlight;
-          return (
-            <button
-              key={preset.id}
-              type="button"
-              disabled={preset.disabled}
-              className={cn(
-                "group flex flex-1 cursor-pointer flex-col items-center gap-1.5 rounded-md border border-transparent p-2 text-left outline-none transition-colors duration-150",
-                highlighted && "border-border bg-menu-hover",
-                isActive && "border-accent/30 bg-panel-elevated/80",
-                preset.disabled && "cursor-default opacity-80",
-              )}
-              onMouseEnter={() => setHighlight(index)}
-              onClick={() => selectPreset(index)}
-            >
-              <LayoutThumbnail
-                presetId={preset.id}
-                active={isActive}
-                disabled={preset.disabled}
-              />
-              <span
-                className={cn(
-                  "flex w-full items-center justify-center gap-1 text-center text-[11px] leading-tight",
-                  isActive ? "text-accent" : "text-muted-foreground",
-                  highlighted && "text-foreground",
-                )}
-              >
-                {preset.label}
-                {isActive && <Check className="h-3 w-3 shrink-0" />}
-              </span>
-            </button>
-          );
-        })}
+      <div className="p-3">
+        <LayoutPicker
+          variant="panel"
+          highlight={highlight}
+          onHighlightChange={setHighlight}
+          onPresetSelect={onClose}
+          onSavedSelect={onClose}
+        />
       </div>
     </div>,
     document.body,

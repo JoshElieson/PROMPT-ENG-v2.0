@@ -6,9 +6,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useAppSettings } from "@/contexts/AppSettingsContext";
 import { cn } from "@/lib/utils";
 
-type AppToastTone = "success" | "error" | "info";
+type AppToastTone = "success" | "error" | "info" | "warning";
 
 interface AppToast {
   id: string;
@@ -23,15 +24,21 @@ interface AppToastContextValue {
 const AppToastContext = createContext<AppToastContextValue | null>(null);
 
 export function AppToastProvider({ children }: { children: ReactNode }) {
+  const { settings } = useAppSettings();
   const [toasts, setToasts] = useState<AppToast[]>([]);
 
-  const pushToast = useCallback((message: string, tone: AppToastTone = "info") => {
-    const id = crypto.randomUUID();
-    setToasts((prev) => [...prev, { id, message, tone }]);
-    window.setTimeout(() => {
-      setToasts((prev) => prev.filter((toast) => toast.id !== id));
-    }, 3200);
-  }, []);
+  const pushToast = useCallback(
+    (message: string, tone: AppToastTone = "info") => {
+      if (tone === "warning" && !settings.warningNotifications) return;
+
+      const id = crypto.randomUUID();
+      setToasts((prev) => [...prev, { id, message, tone }]);
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((toast) => toast.id !== id));
+      }, 3200);
+    },
+    [settings.warningNotifications],
+  );
 
   const value = useMemo(() => ({ pushToast }), [pushToast]);
 
@@ -48,6 +55,8 @@ export function AppToastProvider({ children }: { children: ReactNode }) {
               toast.tone === "success" &&
                 "border-emerald-400/35 bg-emerald-500/12 text-emerald-100",
               toast.tone === "error" && "border-red-400/35 bg-red-500/12 text-red-100",
+              toast.tone === "warning" &&
+                "border-amber-400/35 bg-amber-500/12 text-amber-100",
               toast.tone === "info" && "border-indigo-400/35 bg-indigo-500/12 text-indigo-100",
             )}
             role="status"
@@ -68,4 +77,3 @@ export function useAppToast() {
   }
   return ctx;
 }
-

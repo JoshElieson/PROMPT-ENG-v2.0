@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Pin, Plus, Trash2 } from "lucide-react";
+import { Pin, Plus, ScrollText, Trash2 } from "lucide-react";
 import { WorkspaceContextMenu } from "@/components/layout/WorkspaceContextMenu";
 
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,13 @@ import { SidebarPanel } from "@/components/layout/SidebarPanel";
 import { useAppSelection } from "@/contexts/AppSelectionContext";
 
 import { useChats } from "@/contexts/ChatsContext";
+import { useRules } from "@/contexts/RulesContext";
 
 import { getOutermostEnabledContextRoots } from "@/lib/project-ai-paths";
+import {
+  formatActiveRulesCount,
+  getApplicableRulesForChat,
+} from "@/lib/user-rules-prompt";
 
 import type { Chat } from "@/types/chat";
 
@@ -30,6 +35,8 @@ import { cn } from "@/lib/utils";
 function ChatListItem({
   chat,
   contextRoots,
+  activeRulesLine,
+  activeRulesTooltip,
   isOpen,
   listSelected,
   isRenaming,
@@ -40,6 +47,8 @@ function ChatListItem({
 }: {
   chat: Chat;
   contextRoots: { path: string; label: string }[];
+  activeRulesLine: string | null;
+  activeRulesTooltip: string | null;
   isOpen: boolean;
   listSelected: boolean;
   isRenaming: boolean;
@@ -61,6 +70,31 @@ function ChatListItem({
       ? contextRoots.map((r) => r.label).join(" · ")
       : null;
   const contextTooltip = contextRoots.map((r) => r.path).join("\n");
+
+  const metadataLines = (
+    <>
+      {contextLine ? (
+        <p
+          className="text-muted mb-0 block max-w-full min-w-0 truncate text-[10px] leading-snug"
+          title={contextTooltip}
+        >
+          {contextLine}
+        </p>
+      ) : null}
+      {activeRulesLine ? (
+        <p
+          className="text-red-400/55 mb-0 flex max-w-full min-w-0 items-center gap-1 text-[10px] leading-snug"
+          title={activeRulesTooltip ?? activeRulesLine}
+        >
+          <ScrollText
+            className="size-2.5 shrink-0 opacity-80"
+            aria-hidden
+          />
+          <span className="truncate">{activeRulesLine}</span>
+        </p>
+      ) : null}
+    </>
+  );
 
   const commitRename = useCallback(() => {
     const trimmed = draftTitle.trim();
@@ -155,14 +189,7 @@ function ChatListItem({
         {isRenaming ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-0.5 overflow-hidden py-2 pr-2 pl-3">
             {titleRow}
-            {contextLine ? (
-              <p
-                className="text-muted mb-0 block max-w-full min-w-0 truncate text-[10px] leading-snug"
-                title={contextTooltip}
-              >
-                {contextLine}
-              </p>
-            ) : null}
+            {metadataLines}
           </div>
         ) : (
           <button
@@ -171,14 +198,7 @@ function ChatListItem({
             className="flex min-h-0 min-w-0 flex-1 flex-col items-stretch gap-0.5 overflow-hidden py-2 pr-2 pl-3 text-left outline-none focus-visible:ring-0"
           >
             {titleRow}
-            {contextLine ? (
-              <p
-                className="text-muted mb-0 block max-w-full min-w-0 truncate text-[10px] leading-snug"
-                title={contextTooltip}
-              >
-                {contextLine}
-              </p>
-            ) : null}
+            {metadataLines}
           </button>
         )}
         <Button
@@ -222,6 +242,7 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
     renamingChatId,
     setRenamingChatId,
   } = useChats();
+  const { rules } = useRules();
 
   const { zone, chatListFocusId, selectChat } = useAppSelection();
 
@@ -252,12 +273,23 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
 
   }, [zone, chatListFocusId, visibleChats.length]);
 
-  const renderChat = (chat: Chat) => (
+  const renderChat = (chat: Chat) => {
+    const applicableRules = getApplicableRulesForChat(chat, rules);
+    const activeRulesLine = formatActiveRulesCount(applicableRules);
+    const activeRulesTooltip =
+      applicableRules.length > 0
+        ? applicableRules
+            .map((rule) => rule.title.trim() || "Untitled rule")
+            .join("\n")
+        : null;
 
+    return (
     <ChatListItem
       key={chat.id}
       chat={chat}
       contextRoots={getOutermostEnabledContextRoots(chat.permissions)}
+      activeRulesLine={activeRulesLine}
+      activeRulesTooltip={activeRulesTooltip}
 
       isOpen={chat.id === activeChatId}
 
@@ -278,8 +310,8 @@ export function ChatHistoryPanel({ active }: ChatHistoryPanelProps) {
       onFinishRename={() => setRenamingChatId(null)}
 
     />
-
-  );
+    );
+  };
 
 
 

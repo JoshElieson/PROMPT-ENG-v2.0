@@ -1,7 +1,8 @@
 import { useMemo } from "react";
-import { ExternalLink, RotateCcw, Zap } from "lucide-react";
+import { ExternalLink, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApiUsage } from "@/contexts/ApiUsageContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { getModelById } from "@/data/ai-models";
 import { openExternal } from "@/lib/open-external";
 import {
@@ -10,10 +11,12 @@ import {
   formatTokenCount,
   FREE_PLAN_TOKEN_LIMIT,
   freePlanUsageRatio,
+  tokenLimitForPlan,
   totalInputTokens,
   totalOutputTokens,
   type ModelUsageTotals,
 } from "@/lib/token-usage";
+import { USER_PLAN_LABELS } from "@/types/user-plan";
 import { cn } from "@/lib/utils";
 
 interface ModelUsageRow {
@@ -46,8 +49,31 @@ function SummaryStat({
   );
 }
 
+function PlanBadge({ plan }: { plan: "free" | "premium" }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
+        plan === "premium"
+          ? "bg-premium-gold/15 text-premium-gold"
+          : "bg-panel-elevated text-muted-foreground",
+      )}
+    >
+      {USER_PLAN_LABELS[plan]}
+    </span>
+  );
+}
+
 export function SettingsPlanUsagePanel() {
-  const { usage, resetUsage } = useApiUsage();
+  const { session } = useAuth();
+  const {
+    usage,
+    plan,
+    isSignedIn,
+    isAtTokenLimit,
+    usagePeriodResetLabel,
+    tokenLimitMessage,
+  } = useApiUsage();
 
   const modelRows = useMemo(() => {
     const rows: ModelUsageRow[] = Object.entries(usage.byModel).map(
@@ -69,8 +95,24 @@ export function SettingsPlanUsagePanel() {
   const sentTokens = totalInputTokens(usage);
   const receivedTokens = totalOutputTokens(usage);
   const usedTokens = usage.totals.tokens;
-  const planUsageRatio = freePlanUsageRatio(usedTokens);
+  const activePlan = plan ?? "free";
+  const tokenLimit = tokenLimitForPlan(activePlan);
+  const planUsageRatio = freePlanUsageRatio(usedTokens, activePlan);
   const hasUsage = usage.totals.tokens > 0 || modelRows.length > 0;
+
+  if (!isSignedIn) {
+    return (
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+        <section className="border-border-subtle bg-panel/60 rounded-xl border p-6 text-center">
+          <p className="text-sm font-medium text-foreground">Sign in to view usage</p>
+          <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+            Token usage is tracked per signed-in account. Free accounts receive{" "}
+            {formatPlanTokenCount(FREE_PLAN_TOKEN_LIMIT)} tokens each month.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
@@ -83,54 +125,62 @@ export function SettingsPlanUsagePanel() {
             <div className="mb-1 flex items-center gap-2">
               <Zap className="text-muted-foreground h-4 w-4" />
               <p className="text-sm font-medium text-foreground">Current plan</p>
+              <PlanBadge plan={activePlan} />
             </div>
             <p className="text-muted-foreground text-xs leading-relaxed">
-              Usage is tracked locally from your chat sessions. Costs are
-              estimates based on public API pricing.
+              Usage for{" "}
+              <span className="text-foreground">
+                {session?.user.name ?? session?.user.login}
+              </span>{" "}
+              is stored securely on this device and resets on{" "}
+              {usagePeriodResetLabel}. Costs are estimates based on public API
+              pricing.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0 gap-1.5"
-            disabled={!hasUsage}
-            onClick={resetUsage}
-            data-ai-target="settings.plan-usage.reset"
-          >
-            <RotateCcw className="h-3.5 w-3.5 opacity-70" />
-            Reset
-          </Button>
         </div>
-        <div className="mb-4">
-          <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px]">
-            <span className="text-muted-foreground">Free plan</span>
-            <span className="text-foreground tabular-nums">
-              {formatPlanTokenCount(usedTokens)}/
-              {formatPlanTokenCount(FREE_PLAN_TOKEN_LIMIT)} tokens used
-            </span>
-          </div>
-          <div
-            className="bg-panel-elevated/80 h-1 w-full overflow-hidden rounded-full"
-            role="progressbar"
-            aria-valuenow={Math.round(planUsageRatio * 100)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={`Free plan token usage: ${formatPlanTokenCount(usedTokens)} of ${formatPlanTokenCount(FREE_PLAN_TOKEN_LIMIT)} tokens used`}
-          >
+
+        {activePlan === "free" ? (
+          <div className="mb-4">
+            <div className="mb-1.5 flex items-center justify-between gap-3 text-[11px]">
+              <span className="text-muted-foreground">Monthly allowance</span>
+              <span className="text-foreground tabular-nums">
+                {formatPlanTokenCount(usedTokens)}/
+                {formatPlanTokenCount(FREE_PLAN_TOKEN_LIMIT)} tokens used
+              </span>
+            </div>
             <div
-              className={cn(
-                "h-full rounded-full transition-[width,background-color] duration-300 ease-out",
-                planUsageRatio >= 1
-                  ? "bg-amber-500"
-                  : planUsageRatio >= 0.9
-                    ? "bg-amber-400"
-                    : "bg-accent",
-              )}
-              style={{ width: `${planUsageRatio * 100}%` }}
-            />
+              className="bg-panel-elevated/80 h-1 w-full overflow-hidden rounded-full"
+              role="progressbar"
+              aria-valuenow={Math.round(planUsageRatio * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`Free plan token usage: ${formatPlanTokenCount(usedTokens)} of ${formatPlanTokenCount(FREE_PLAN_TOKEN_LIMIT)} tokens used`}
+            >
+              <div
+                className={cn(
+                  "h-full rounded-full transition-[width,background-color] duration-300 ease-out",
+                  planUsageRatio >= 1
+                    ? "bg-amber-500"
+                    : planUsageRatio >= 0.9
+                      ? "bg-amber-400"
+                      : "bg-accent",
+                )}
+                style={{ width: `${planUsageRatio * 100}%` }}
+              />
+            </div>
+            {isAtTokenLimit && tokenLimitMessage ? (
+              <p className="text-amber-500 dark:text-amber-400 mt-2 text-[11px] leading-relaxed">
+                {tokenLimitMessage}
+              </p>
+            ) : null}
           </div>
-        </div>
+        ) : (
+          <p className="text-muted-foreground mb-4 text-[11px] leading-relaxed">
+            Premium accounts have unlimited tokens. You&apos;ve used{" "}
+            {formatPlanTokenCount(usedTokens)} tokens this month.
+          </p>
+        )}
+
         <div className="border-border-subtle grid grid-cols-1 gap-4 border-t pt-4 sm:grid-cols-3">
           <SummaryStat
             label="Tokens sent"
@@ -148,6 +198,11 @@ export function SettingsPlanUsagePanel() {
             hint="All models combined"
           />
         </div>
+        {tokenLimit == null ? null : (
+          <p className="text-muted-foreground mt-3 text-[10px] leading-relaxed">
+            Resets on {usagePeriodResetLabel}.
+          </p>
+        )}
       </section>
 
       <section data-ai-target="settings.plan-usage.by-model">
@@ -207,9 +262,13 @@ export function SettingsPlanUsagePanel() {
             </table>
           ) : (
             <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-              <p className="text-sm font-medium text-foreground">No usage yet</p>
+              <p className="text-sm font-medium text-foreground">
+                {hasUsage ? "No per-model breakdown yet" : "No usage yet"}
+              </p>
               <p className="text-muted-foreground mt-1 max-w-xs text-xs leading-relaxed">
-                Send a message in chat to start tracking token usage per model.
+                {hasUsage
+                  ? "Send a new message to populate per-model usage."
+                  : "Send a message in chat to start tracking token usage per model."}
               </p>
             </div>
           )}
@@ -227,31 +286,36 @@ export function SettingsPlanUsagePanel() {
         ) : null}
       </section>
 
-      <section
-        className="border-border-subtle bg-panel/60 rounded-xl border p-4"
-        data-ai-target="settings.plan-usage.upgrade"
-      >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-premium-gold mb-1 text-sm font-semibold">
-              Forge Premium
-            </p>
-            <p className="text-muted-foreground text-xs leading-relaxed">
-              Unlock higher limits, priority models, and advanced agent workflows.
-            </p>
+      {activePlan === "free" ? (
+        <section
+          className="border-border-subtle bg-panel/60 rounded-xl border p-4"
+          data-ai-target="settings.plan-usage.upgrade"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-premium-gold mb-1 text-sm font-semibold">
+                Forge Premium
+              </p>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Unlock unlimited tokens, priority models, and advanced agent
+                workflows.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() =>
+                void openExternal("https://pe-web-ebon.vercel.app/pricing.html")
+              }
+            >
+              See Pricing Plans
+              <ExternalLink className="h-3.5 w-3.5 opacity-70" />
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => void openExternal("https://pe-web-ebon.vercel.app/pricing.html")}
-          >
-            See Pricing Plans
-            <ExternalLink className="h-3.5 w-3.5 opacity-70" />
-          </Button>
-        </div>
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

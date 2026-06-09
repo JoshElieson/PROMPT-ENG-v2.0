@@ -245,6 +245,9 @@ export function WorkspaceBottomPanelProvider({
   const visibleTabIdsRef = useRef(visibleTabIdsState);
   const focusKindRef = useRef<(kind: BottomPanelTabKind) => void>(() => {});
   const hideKindRef = useRef<(kind: BottomPanelTabKind) => void>(() => {});
+  const restoreKindsRef = useRef<
+    (visible: { terminal: boolean; browser: boolean }) => void
+  >(() => {});
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -455,10 +458,51 @@ export function WorkspaceBottomPanelProvider({
     [activeTabId, onClose],
   );
 
+  const restoreKinds = useCallback(
+    (visible: { terminal: boolean; browser: boolean }) => {
+      const kinds: BottomPanelTabKind[] = [];
+      if (visible.terminal) kinds.push("terminal");
+      if (visible.browser) kinds.push("browser");
+
+      if (kinds.length === 0) {
+        onClose();
+        return;
+      }
+
+      setAutoPairSuppressed(false);
+      setTabs((prev) => {
+        let next = [...prev];
+        for (const kind of kinds) {
+          if (!next.some((tab) => tab.kind === kind)) {
+            if (kind === "terminal") {
+              const nextIndex = terminalCounterRef.current + 1;
+              terminalCounterRef.current = nextIndex;
+              next = [...next, createTab("terminal", nextIndex)];
+            } else {
+              const nextIndex = browserCounterRef.current + 1;
+              browserCounterRef.current = nextIndex;
+              next = [...next, createTab("browser", nextIndex)];
+            }
+          }
+        }
+        const visibleIds = kinds
+          .map((kind) => next.find((tab) => tab.kind === kind)?.id)
+          .filter((id): id is string => Boolean(id));
+        const focusId = visibleIds[visibleIds.length - 1] ?? "";
+        setVisibleTabIdsRaw(visibleIds);
+        if (focusId) setActiveTabId(focusId);
+        return next;
+      });
+      selectBottomPanel();
+    },
+    [onClose, selectBottomPanel],
+  );
+
   useEffect(() => {
     focusKindRef.current = focusKind;
     hideKindRef.current = hideKind;
-  }, [focusKind, hideKind]);
+    restoreKindsRef.current = restoreKinds;
+  }, [focusKind, hideKind, restoreKinds]);
 
   useEffect(() => {
     if (!workspaceBottomPanelOpen) {
@@ -481,6 +525,7 @@ export function WorkspaceBottomPanelProvider({
         kindsVisibleFromState(tabsRef.current, visibleTabIdsRef.current)[kind],
       focusKind: (kind) => focusKindRef.current(kind),
       hideKind: (kind) => hideKindRef.current(kind),
+      restoreKinds: (visible) => restoreKindsRef.current(visible),
     });
   }, [registerBottomPanelControl]);
 

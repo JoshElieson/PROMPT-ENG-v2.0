@@ -143,3 +143,20 @@ export async function gitSyncBranch(
     githubToken: githubToken ?? null,
   });
 }
+
+export interface GitHeadInfo {
+  head: string;
+  branch: string | null;
+}
+
+export async function gitHeadInfo(path: string): Promise<GitHeadInfo> {
+  requireTauri();
+  return invoke<GitHeadInfo>("git_head_info", { path });
+}
+
+export async function gitRemoteOriginUrl(
+  path: string,
+): Promise<string | null> {
+  requireTauri();
+  return invoke<string | null>("git_remote_origin_url", { path });
+}

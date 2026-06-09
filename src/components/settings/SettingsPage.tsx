@@ -3,13 +3,23 @@ import {
   ArrowLeft,
   Brain,
   ExternalLink,
+  LayoutGrid,
   Palette,
   Search,
   Settings,
   X,
 } from "lucide-react";
+import { LayoutPicker } from "@/components/layout/LayoutPicker";
+import { SettingsAgentsPanel } from "@/components/settings/SettingsAgentsPanel";
+import { SettingsAutomationPanel } from "@/components/settings/SettingsAutomationPanel";
+import { SettingsDocsPanel } from "@/components/settings/SettingsDocsPanel";
 import { SettingsGeneralPanel } from "@/components/settings/SettingsGeneralPanel";
+import {
+  PLUGIN_SEARCH_TERMS,
+  SettingsPluginsPanel,
+} from "@/components/settings/SettingsPluginsPanel";
 import { SettingsPlanUsagePanel } from "@/components/settings/SettingsPlanUsagePanel";
+import { SettingsRulesPanel } from "@/components/settings/SettingsRulesPanel";
 import {
   SETTINGS_NAV_GROUPS,
   SETTINGS_SECTION_LABELS,
@@ -29,6 +39,46 @@ interface SettingsSearchResult {
   keywords: string;
   sectionLabel: string;
 }
+
+const RULES_SEARCH_TERMS: Array<{
+  label: string;
+  keywords: string;
+}> = [
+  {
+    label: "New rule",
+    keywords: "rules create tone style language response instructions",
+  },
+  {
+    label: "User rules",
+    keywords: "rules preferences instructions persistent agent behavior",
+  },
+];
+
+const AUTOMATION_SEARCH_TERMS: Array<{
+  label: string;
+  keywords: string;
+}> = [
+  {
+    label: "New automation",
+    keywords: "automation create schedule trigger agent task",
+  },
+  {
+    label: "Time based trigger",
+    keywords: "automation schedule daily weekly hourly time cron",
+  },
+  {
+    label: "Agent completion trigger",
+    keywords: "automation agent complete finish project watch",
+  },
+  {
+    label: "Event based trigger",
+    keywords: "automation event git commit file change branch pull request",
+  },
+  {
+    label: "Agent task",
+    keywords: "automation task instructions prompt agent run",
+  },
+];
 
 const PLAN_USAGE_SEARCH_TERMS: Array<{
   label: string;
@@ -52,6 +102,34 @@ const PLAN_USAGE_SEARCH_TERMS: Array<{
   },
 ];
 
+const APPEARANCE_SETTING_SEARCH_TERMS: Array<{
+  label: string;
+  keywords: string;
+}> = [
+  {
+    label: "Theme",
+    keywords: "theme dark light system appearance color",
+  },
+  {
+    label: "Vertical Default",
+    keywords: "layout vertical default workspace panels appearance",
+  },
+  {
+    label: "Horizontal Default",
+    keywords: "layout horizontal default workspace panels appearance",
+  },
+];
+
+const DOCS_SEARCH_TERMS: Array<{
+  label: string;
+  keywords: string;
+}> = [
+  {
+    label: "View Full Documentation",
+    keywords: "docs documentation guides help reference forge",
+  },
+];
+
 const GENERAL_SETTING_SEARCH_TERMS: Array<{
   label: string;
   keywords: string;
@@ -63,6 +141,10 @@ const GENERAL_SETTING_SEARCH_TERMS: Array<{
   {
     label: "System Notifications",
     keywords: "notifications system agent complete attention",
+  },
+  {
+    label: "Automation Notifications",
+    keywords: "notifications automation complete finished background task",
   },
   {
     label: "Warning Notifications",
@@ -111,6 +193,41 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchResult[] = [
     label: item.label,
     keywords: item.keywords.toLowerCase(),
     sectionLabel: SETTINGS_SECTION_LABELS["plan-usage"],
+  })),
+  ...AUTOMATION_SEARCH_TERMS.map((item, index) => ({
+    id: `automation-setting-${index}`,
+    sectionId: "automation" as const,
+    label: item.label,
+    keywords: item.keywords.toLowerCase(),
+    sectionLabel: SETTINGS_SECTION_LABELS.automation,
+  })),
+  ...RULES_SEARCH_TERMS.map((item, index) => ({
+    id: `rules-setting-${index}`,
+    sectionId: "rules" as const,
+    label: item.label,
+    keywords: item.keywords.toLowerCase(),
+    sectionLabel: SETTINGS_SECTION_LABELS.rules,
+  })),
+  ...APPEARANCE_SETTING_SEARCH_TERMS.map((item, index) => ({
+    id: `appearance-setting-${index}`,
+    sectionId: "appearance" as const,
+    label: item.label,
+    keywords: item.keywords.toLowerCase(),
+    sectionLabel: SETTINGS_SECTION_LABELS.appearance,
+  })),
+  ...DOCS_SEARCH_TERMS.map((item, index) => ({
+    id: `docs-setting-${index}`,
+    sectionId: "docs" as const,
+    label: item.label,
+    keywords: item.keywords.toLowerCase(),
+    sectionLabel: SETTINGS_SECTION_LABELS.docs,
+  })),
+  ...PLUGIN_SEARCH_TERMS.map((item, index) => ({
+    id: `plugins-setting-${index}`,
+    sectionId: "plugins" as const,
+    label: item.label,
+    keywords: item.keywords,
+    sectionLabel: SETTINGS_SECTION_LABELS.plugins,
   })),
 ];
 
@@ -168,6 +285,7 @@ function SettingsModelsPanel() {
 
 function SettingsAppearancePanel() {
   const { settings, setSetting } = useAppSettings();
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
       <section
@@ -193,6 +311,20 @@ function SettingsAppearancePanel() {
           <option value="light">Light</option>
         </select>
       </section>
+
+      <section
+        className="border-border-subtle bg-panel/60 rounded-xl border p-4"
+        data-ai-target="settings.appearance.layout"
+      >
+        <div className="mb-2 flex items-center gap-2">
+          <LayoutGrid className="text-muted-foreground h-4 w-4" />
+          <p className="text-sm font-medium text-foreground">Layout</p>
+        </div>
+        <p className="text-muted-foreground mb-3 text-xs leading-relaxed">
+          Choose how workspace panels are arranged, or save up to two custom layouts.
+        </p>
+        <LayoutPicker variant="settings" />
+      </section>
     </div>
   );
 }
@@ -209,10 +341,20 @@ function SettingsContent({ sectionId }: { sectionId: SettingsSectionId }) {
       {sectionId === "models" && <SettingsModelsPanel />}
       {sectionId === "appearance" && <SettingsAppearancePanel />}
       {sectionId === "plan-usage" && <SettingsPlanUsagePanel />}
+      {sectionId === "automation" && <SettingsAutomationPanel />}
+      {sectionId === "agents" && <SettingsAgentsPanel />}
+      {sectionId === "docs" && <SettingsDocsPanel />}
+      {sectionId === "plugins" && <SettingsPluginsPanel />}
+      {sectionId === "rules" && <SettingsRulesPanel />}
       {sectionId !== "general" &&
         sectionId !== "models" &&
         sectionId !== "appearance" &&
-        sectionId !== "plan-usage" && (
+        sectionId !== "plan-usage" &&
+        sectionId !== "automation" &&
+        sectionId !== "agents" &&
+        sectionId !== "docs" &&
+        sectionId !== "plugins" &&
+        sectionId !== "rules" && (
           <SettingsPlaceholderPanel sectionId={sectionId} />
         )}
     </div>
@@ -366,14 +508,9 @@ function SettingsNav({
         ) : null}
         {SETTINGS_NAV_GROUPS.map((group, groupIndex) => (
           <div
-            key={group.label ?? `group-${groupIndex}`}
-            className={cn(groupIndex > 0 && "mt-4")}
+            key={`group-${groupIndex}`}
+            className={cn(groupIndex > 0 && "mt-6")}
           >
-            {group.label ? (
-              <p className="text-muted-foreground/80 mb-1 px-2 text-[10px] font-medium tracking-wider uppercase">
-                {group.label}
-              </p>
-            ) : null}
             <ul className="flex flex-col gap-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;

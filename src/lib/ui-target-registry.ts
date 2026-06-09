@@ -10,6 +10,11 @@ export const aiTargets: Record<string, AiTargetMeta> = {
     route: "/settings/general",
     settingKey: "systemNotifications",
   },
+  "settings.general.automation-notifications": {
+    label: "Automation Notifications",
+    route: "/settings/general",
+    settingKey: "automationNotifications",
+  },
   "settings.general.warning-notifications": {
     label: "Warning Notifications",
     route: "/settings/general",
@@ -40,6 +45,10 @@ export const aiTargets: Record<string, AiTargetMeta> = {
     route: "/settings/appearance",
     settingKey: "theme",
   },
+  "settings.appearance.layout": {
+    label: "Layout",
+    route: "/settings/appearance",
+  },
   "settings.plan-usage.summary": {
     label: "Usage Summary",
     route: "/settings/plan-usage",
@@ -51,6 +60,14 @@ export const aiTargets: Record<string, AiTargetMeta> = {
   "settings.plan-usage.upgrade": {
     label: "See Pricing Plans",
     route: "/settings/plan-usage",
+  },
+  "settings.rules.new-button": {
+    label: "New Rule",
+    route: "/settings/rules",
+  },
+  "settings.rules.empty": {
+    label: "Rules Empty State",
+    route: "/settings/rules",
   },
   "chat.settings.button": { label: "Chat Settings" },
   "chat.model-selector": { label: "Model Selector" },

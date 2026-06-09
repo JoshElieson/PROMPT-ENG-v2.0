@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ExternalLink } from "lucide-react";
+import { Check, ExternalLink } from "lucide-react";
 import type { HTMLAttributes } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -65,6 +65,9 @@ function SettingsCard({
   );
 }
 
+const SETTINGS_SELECT_CLASS =
+  "border-border-subtle bg-panel-elevated/80 text-foreground focus:border-[#6366f1]/60 h-9 w-full rounded-md border px-2 text-xs outline-none";
+
 export function SettingsGeneralPanel() {
   const { settings, setSetting } = useAppSettings();
 
@@ -98,6 +101,15 @@ export function SettingsGeneralPanel() {
             targetId="settings.general.system-notifications"
           />
           <SettingsToggleRow
+            title="Automation Notifications"
+            description="Show system notifications when an automation completes"
+            checked={settings.automationNotifications}
+            onCheckedChange={(checked) =>
+              setSetting("automationNotifications", checked)
+            }
+            targetId="settings.general.automation-notifications"
+          />
+          <SettingsToggleRow
             title="Warning Notifications"
             description="Show warning-level in-app toasts"
             checked={settings.warningNotifications}
@@ -124,41 +136,34 @@ export function SettingsGeneralPanel() {
       <div>
         <SettingsSectionLabel>Privacy</SettingsSectionLabel>
         <SettingsCard data-ai-target="settings.general.data-sharing">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-2">
+            <Check
+              className={cn(
+                "mt-0.5 h-4 w-4 shrink-0",
+                settings.dataSharingEnabled
+                  ? "text-emerald-400"
+                  : "text-muted-foreground",
+              )}
+            />
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <Check
-                  className={cn(
-                    "h-4 w-4 shrink-0",
-                    settings.dataSharingEnabled
-                      ? "text-emerald-400"
-                      : "text-muted-foreground",
-                  )}
-                />
-                <p className="text-sm font-medium text-foreground">
-                  {settings.dataSharingEnabled
-                    ? "Data Sharing Enabled"
-                    : "Data Sharing Disabled"}
-                </p>
-              </div>
+              <p className="text-sm font-medium text-foreground">Data Sharing</p>
               <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
                 Your prompts, edits, and usage data may be stored and used to
                 improve Forge models and product experience. You can change this
                 anytime.
               </p>
+              <select
+                value={settings.dataSharingEnabled ? "enabled" : "disabled"}
+                onChange={(event) =>
+                  setSetting("dataSharingEnabled", event.target.value === "enabled")
+                }
+                className={cn(SETTINGS_SELECT_CLASS, "mt-3 max-w-sm")}
+                aria-label="Data sharing preference"
+              >
+                <option value="enabled">Share data to improve Forge</option>
+                <option value="disabled">Don't share my data</option>
+              </select>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0 gap-1.5"
-              onClick={() =>
-                setSetting("dataSharingEnabled", !settings.dataSharingEnabled)
-              }
-            >
-              {settings.dataSharingEnabled ? "Disable Sharing" : "Share Data"}
-              <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-            </Button>
           </div>
         </SettingsCard>
       </div>

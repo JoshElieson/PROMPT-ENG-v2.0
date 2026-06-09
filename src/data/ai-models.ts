@@ -239,6 +239,8 @@ export const popularAiModels: AiModel[] = [
 
 export type ModelOrgGroup = { org: ModelOrg; models: AiModel[] };
 
+const MODEL_CART_EXCLUDED_ORG_IDS = new Set(["meta", "mistral"]);
+
 export function getModelsGroupedByOrg(): ModelOrgGroup[] {
   return modelOrgs
     .map((org) => ({
@@ -246,6 +248,13 @@ export function getModelsGroupedByOrg(): ModelOrgGroup[] {
       models: popularAiModels.filter((m) => m.orgId === org.id),
     }))
     .filter((group) => group.models.length > 0);
+}
+
+/** Model Cart providers (excludes orgs not yet available in the cart UI). */
+export function getCartModelsGroupedByOrg(): ModelOrgGroup[] {
+  return getModelsGroupedByOrg().filter(
+    (group) => !MODEL_CART_EXCLUDED_ORG_IDS.has(group.org.id),
+  );
 }
 
 function modelMatchesQuery(model: AiModel, query: string): boolean {

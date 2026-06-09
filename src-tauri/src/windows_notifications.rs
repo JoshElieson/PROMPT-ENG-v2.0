@@ -27,14 +27,56 @@ pub fn init(app: &AppHandle) {
     }
 }
 
-pub fn show_agent_finished(workspace: &str, agent: &str) -> Result<(), String> {
+pub fn show_automation_notification(automation_name: &str) -> Result<(), String> {
+    if let Some(icon_path) = TOAST_ICON.get() {
+        let _ = register_app_user_model_id(icon_path);
+    }
+
+    let automation_name = normalize_label(automation_name, "Untitled automation");
+
+    let icon_xml = TOAST_ICON
+        .get()
+        .map(|icon| {
+            format!(
+                r#"<image placement="appLogoOverride" hint-crop="circle" src="{}" alt="{APP_DISPLAY_NAME}"/>"#,
+                format_file_uri(icon)
+            )
+        })
+        .unwrap_or_default();
+
+    let xml = format!(
+        r#"<toast>
+            <visual>
+                <binding template="ToastGeneric">
+                    {icon_xml}
+                    <text hint-style="title" hint-weight="bold">Automation Complete</text>
+                    <text hint-style="subtitle">{automation_name}</text>
+                </binding>
+            </visual>
+        </toast>"#,
+        automation_name = escape_xml(&automation_name),
+        icon_xml = icon_xml,
+    );
+
+    show_toast_xml(&xml)
+}
+
+pub fn show_agent_notification(
+    workspace: &str,
+    agent: &str,
+    needs_attention: bool,
+) -> Result<(), String> {
     if let Some(icon_path) = TOAST_ICON.get() {
         let _ = register_app_user_model_id(icon_path);
     }
 
     let workspace = normalize_label(workspace, "Workspace");
     let agent = normalize_label(agent, "Agent");
-    let detail = format!("{agent} finished task");
+    let detail = if needs_attention {
+        format!("{agent} needs attention")
+    } else {
+        format!("{agent} finished task")
+    };
 
     let icon_xml = TOAST_ICON
         .get()
