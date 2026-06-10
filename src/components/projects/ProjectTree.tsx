@@ -40,7 +40,7 @@ import { isTauri } from "@/lib/tauri";
 import { pathsEqual, pathsToExpandToReveal } from "@/lib/project-paths";
 import { useAppSelection } from "@/contexts/AppSelectionContext";
 import { useProjects } from "@/contexts/ProjectsContext";
-import { AccessCheckbox } from "@/components/projects/PermissionToggles";
+import { AccessIndicator } from "@/components/projects/PermissionToggles";
 import { ProjectFolderContextMenu } from "@/components/projects/ProjectFolderContextMenu";
 import { PanelTitleInfo } from "@/components/layout/PanelTitleInfo";
 import type { FsEntry, Project } from "@/types/project";
@@ -682,13 +682,24 @@ export function ProjectTree({
   const onRowBackgroundPointerDown = useCallback(
     (path: string, isProjectRoot: boolean, e: MouseEvent) => {
       const t = e.target as HTMLElement;
-      if (t.closest("button, input, label")) return;
+      if (t.closest("button, input")) return;
       if (!isProjectRoot) return;
       selectProject(path);
       setFocusedPath(path);
       focusTree();
     },
     [focusTree, selectProject],
+  );
+
+  const onRowClick = useCallback(
+    (row: VisibleRow, e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest("button, input")) return;
+      if (!row.isProjectRoot) return;
+      if (editingProjects) return;
+      void toggleRowAccess(row);
+    },
+    [editingProjects, toggleRowAccess],
   );
 
   if (projects.length === 0) {
@@ -743,6 +754,7 @@ export function ProjectTree({
               row.isProjectRoot && row.path === projectFocusRootPath
             }
             onRowBackgroundPointerDown={onRowBackgroundPointerDown}
+            onRowClick={onRowClick}
             onToggleDirectory={() => {
               setFocusedPath(row.path);
               if (row.isProjectRoot) selectProject(row.path);
@@ -777,6 +789,7 @@ function ProjectTreeRow({
   isAccessToggling,
   isAppProjectSelected,
   onRowBackgroundPointerDown,
+  onRowClick,
   onToggleDirectory,
   onFsChange,
   isRenaming,
@@ -800,6 +813,7 @@ function ProjectTreeRow({
     isProjectRoot: boolean,
     e: MouseEvent,
   ) => void;
+  onRowClick: (row: VisibleRow, e: MouseEvent) => void;
   onToggleDirectory: () => void;
   onFsChange: () => void | Promise<void>;
   isRenaming: boolean;
@@ -807,8 +821,7 @@ function ProjectTreeRow({
   onFinishRename: () => void;
   onEntryRenamed: (oldPath: string, newPath: string) => void;
 }) {
-  const { getPermissions, setDirectoryPermissions, removeProject, setError } =
-    useProjects();
+  const { getPermissions, removeProject, setError } = useProjects();
   const permissions = getPermissions(row.path);
   const [draftName, setDraftName] = useState(row.name);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -865,12 +878,6 @@ function ProjectTreeRow({
     skipCommitOnBlurRef.current = true;
     onFinishRename();
   }, [onFinishRename]);
-
-  const handleAccessChange = async (enabled: boolean) => {
-    if (isAccessToggling) return;
-    if (!row.isDirectory) return;
-    await setDirectoryPermissions(row.path, { enabled });
-  };
 
   const handleChevronClick = (e: MouseEvent) => {
     e.stopPropagation();
@@ -932,6 +939,15 @@ function ProjectTreeRow({
         onPointerDown={(e) =>
           onRowBackgroundPointerDown(row.path, row.isProjectRoot, e)
         }
+        onClick={(e) => onRowClick(row, e)}
+        title={
+          row.isProjectRoot && !editingProjects
+            ? "Give AI full access — context, read & write"
+            : undefined
+        }
+        {...(row.isProjectRoot && !editingProjects
+          ? { "data-ai-target": "chat.settings.file-access" }
+          : {})}
         className={cn(
           "cursor-pointer",
           "group flex items-center gap-0.5 rounded-md py-0.5 pr-1 text-sm text-muted-foreground hover:bg-panel-elevated hover:text-foreground",
@@ -1034,10 +1050,9 @@ function ProjectTreeRow({
             <Minus className="size-3" strokeWidth={2.5} />
           </button>
         ) : row.isProjectRoot ? (
-          <AccessCheckbox
+          <AccessIndicator
             enabled={permissions.enabled}
-            disabled={isAccessToggling}
-            onChange={(enabled) => void handleAccessChange(enabled)}
+            toggling={isAccessToggling}
           />
         ) : null}
       </div>

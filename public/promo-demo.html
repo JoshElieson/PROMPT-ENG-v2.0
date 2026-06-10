@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920, height=1080" />
+  <title>FORGE Promo — Light</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root[data-theme="light"] {
+      --bg-primary: #f7f5f1;
+      --bg-secondary: #efeee9;
+      --bg-panel: #ffffff;
+      --bg-elevated: #fafaf8;
+      --bg-composer: #ffffff;
+      --bg-terminal: #1a1a1a;
+      --bg-message-sent: rgb(99 102 241 / 0.08);
+      --border-subtle: rgb(24 24 27 / 0.1);
+      --border-strong: rgb(24 24 27 / 0.16);
+      --border-message-sent: rgb(99 102 241 / 0.22);
+      --text-primary: #18181b;
+      --text-secondary: #52525b;
+      --text-muted: #71717a;
+      --accent: #6366f1;
+      --accent-soft: rgb(99 102 241 / 0.12);
+      --accent-bright: #6366f1;
+      --accent-text: #4338ca;
+      --success: #16a34a;
+      --shadow-soft: 0 8px 30px rgb(24 24 27 / 0.08);
+      --shadow-message-sent: 0 8px 20px rgb(24 24 27 / 0.06);
+      --shadow-dock: 0 10px 28px rgb(24 24 27 / 0.08);
+      --body-gradient:
+        radial-gradient(circle at 12% -10%, rgb(99 102 241 / 0.06), transparent 46%),
+        radial-gradient(circle at 86% 0%, rgb(79 70 229 / 0.04), transparent 44%),
+        radial-gradient(circle at 55% 100%, rgb(99 102 241 / 0.03), transparent 42%),
+        var(--bg-primary);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      background: var(--body-gradient);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button { font: inherit; background: none; border: none; cursor: default; }
+
+    .app {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-rows: 32px 1fr 28px;
+      opacity: 0;
+      animation: app-in 0.7s ease-out 0.2s forwards;
+    }
+
+    /* Title bar */
+    .titlebar {
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgb(239 238 233 / 0.95);
+      backdrop-filter: blur(8px);
+    }
+
+    .titlebar-drag {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .wordmark {
+      margin-left: 10px;
+      height: 12px;
+      width: calc(12px * 374 / 88);
+      background: var(--accent-bright);
+      -webkit-mask: url(/promo-assets/forge-wordmark-mask.png) center/contain no-repeat;
+      mask: url(/promo-assets/forge-wordmark-mask.png) center/contain no-repeat;
+    }
+
+    .menubar {
+      display: flex;
+      gap: 2px;
+      margin-left: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .menubar span { padding: 4px 8px; }
+
+    .titlebar-tools {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding-right: 4px;
+    }
+
+    .icon-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      color: var(--text-muted);
+    }
+
+    .window-controls {
+      display: flex;
+      align-items: stretch;
+    }
+
+    .win-btn {
+      width: 44px;
+      display: grid;
+      place-items: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    /* Body */
+    .body {
+      display: grid;
+      grid-template-columns: 48px 300px 1fr;
+      min-height: 0;
+    }
+
+    /* Activity bar */
+    .activity-bar {
+      background: rgb(239 238 233 / 0.9);
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px 0;
+      gap: 6px;
+      backdrop-filter: blur(8px);
+    }
+
+    .activity-btn {
+      position: relative;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      display: grid;
+      place-items: center;
+      color: var(--text-muted);
+    }
+
+    .activity-btn.active {
+      border-color: rgb(99 102 241 / 0.28);
+      background: rgb(99 102 241 / 0.12);
+      color: var(--text-primary);
+      box-shadow: inset 0 0 0 1px rgb(99 102 241 / 0.16);
+    }
+
+    .activity-btn.active::before {
+      content: "";
+      position: absolute;
+      top: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 12px;
+      height: 2px;
+      border-radius: 999px;
+      background: rgb(99 102 241 / 0.75);
+    }
+
+    .activity-btn svg { width: 16px; height: 16px; }
+
+    .activity-spacer { flex: 1; }
+
+    .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #a78bfa, #6366f1);
+      border: 2px solid var(--bg-panel);
+      box-shadow: 0 0 0 1px var(--border-subtle);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .panel-header {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgb(255 255 255 / 0.85);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .panel-header button {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-secondary);
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+    }
+
+    .projects-body { padding: 10px; border-bottom: 1px solid var(--border-subtle); }
+
+    .project-card {
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+      padding: 10px 12px;
+    }
+
+    .project-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .project-card p { font-size: 11px; color: var(--text-muted); }
+    .project-card .rule {
+      display: inline-block;
+      margin-top: 6px;
+      font-size: 10px;
+      color: #e11d48;
+      background: rgb(225 29 72 / 0.08);
+      border: 1px solid rgb(225 29 72 / 0.15);
+      border-radius: 6px;
+      padding: 2px 6px;
+    }
+
+    .files-body {
+      flex: 1;
+      padding: 8px 6px;
+      overflow: hidden;
+    }
+
+    .tree-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      border-radius: 6px;
+    }
+
+    .tree-row.nested { padding-left: 22px; }
+    .tree-row.nested-2 { padding-left: 36px; }
+    .tree-row svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--text-muted); }
+    .tree-row .check { color: var(--success); margin-left: auto; font-size: 11px; }
+
+    /* Workspace */
+    .workspace {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--bg-primary);
+    }
+
+    .workspace-header {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 10px;
+      border-bottom: 1px solid rgb(99 102 241 / 0.2);
+      background: rgb(255 255 255 / 0.85);
+    }
+
+    .agent-tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 12px;
+      border-radius: 8px;
+      border: 1px solid rgb(99 102 241 / 0.28);
+      background: rgb(99 102 241 / 0.08);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .agent-tab .plus {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      display: grid;
+      place-items: center;
+      color: var(--text-muted);
+      margin-left: 4px;
+    }
+
+    .chat-scroll {
+      flex: 1;
+      overflow: hidden;
+      padding: 24px 28px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .user-msg {
+      align-self: flex-end;
+      max-width: 520px;
+      padding: 12px 16px;
+      border-radius: 16px;
+      border: 1px solid var(--border-message-sent);
+      background: var(--bg-message-sent);
+      box-shadow: var(--shadow-message-sent);
+      font-size: 14px;
+      line-height: 1.5;
+      opacity: 0;
+      transform: translateY(8px);
+    }
+
+    .user-msg.show {
+      animation: msg-in 0.45s ease-out forwards;
+    }
+
+    .round-table { max-width: 720px; opacity: 0; }
+    .round-table.show { animation: msg-in 0.45s ease-out forwards; }
+
+    .round-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .round-flow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .round-flow .arrow {
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0.3;
+      transition: opacity 0.3s;
+    }
+
+    .round-flow .arrow.lit { opacity: 1; }
+
+    .model-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      font-size: 10px;
+      color: var(--text-primary);
+      transition: all 0.35s ease;
+      opacity: 0.4;
+    }
+
+    .model-chip.active {
+      opacity: 1;
+      border-color: rgb(99 102 241 / 0.3);
+      background: rgb(99 102 241 / 0.12);
+    }
+
+    .model-chip.done {
+      opacity: 0.6;
+      border-color: var(--border-subtle);
+      background: transparent;
+    }
+
+    .model-logo {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      background: var(--bg-terminal);
+      box-shadow: inset 0 0 0 1px var(--border-subtle);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .model-logo img { width: 12px; height: 12px; object-fit: contain; }
+    .model-logo.muted { opacity: 0.5; filter: grayscale(1); }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-bright);
+      animation: pulse-dot 1s ease-in-out infinite;
+    }
+
+    .ai-activity {
+      max-width: 720px;
+      border: 1px solid rgb(24 24 27 / 0.1);
+      border-radius: 10px;
+      background: rgb(255 255 255 / 0.3);
+      padding: 10px 12px;
+      opacity: 0;
+    }
+
+    .ai-activity.show { animation: msg-in 0.45s ease-out forwards; }
+
+    .ai-activity header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .activity-row {
+      background: rgb(247 245 241 / 0.35);
+      border-radius: 6px;
+      padding: 8px;
+    }
+
+    .activity-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 4px;
+    }
+
+    .activity-type {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #0891b2;
+    }
+
+    .activity-time { font-size: 10px; color: var(--text-muted); }
+    .activity-msg { font-size: 12px; color: var(--text-primary); line-height: 1.45; }
+
+    .assistant-msg {
+      max-width: 720px;
+      padding: 14px 16px;
+      border-radius: 4px 16px 16px 16px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-panel);
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      opacity: 0;
+    }
+
+    .assistant-msg.show { animation: msg-in 0.55s ease-out forwards; }
+
+    .assistant-msg strong { color: var(--accent-text); font-weight: 600; }
+
+    .typing-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-subtle);
+      max-width: 720px;
+      opacity: 0;
+    }
+
+    .typing-row.show { animation: msg-in 0.35s ease-out forwards; }
+
+    .typing-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      animation: bounce 0.9s ease-in-out infinite;
+    }
+
+    .typing-dot:nth-child(2) { animation-delay: 0.12s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.24s; }
+
+    /* Composer area */
+    .composer-wrap {
+      padding: 8px 20px 16px;
+      display: flex;
+      align-items: stretch;
+      gap: 6px;
+      max-width: 920px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .utility-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 2px;
+    }
+
+    .dock-shell, .settings-btn {
+      width: 40px;
+      height: 32px;
+      border-radius: 12px;
+      border: 1px solid rgb(24 24 27 / 0.1);
+      background: rgb(255 255 255 / 0.72);
+      box-shadow: var(--shadow-dock);
+      backdrop-filter: blur(12px);
+      display: grid;
+      place-items: center;
+      color: var(--text-muted);
+    }
+
+    .dock-col {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 6px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      background: rgb(255 255 255 / 0.72);
+      box-shadow: var(--shadow-dock);
+      backdrop-filter: blur(12px);
+    }
+
+    .dock-item {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      border: 1px solid transparent;
+      transition: all 0.3s ease;
+    }
+
+    .dock-item.active {
+      border-color: rgb(99 102 241 / 0.35);
+      background: rgb(99 102 241 / 0.12);
+      transform: scale(1.05);
+    }
+
+    .dock-item img { width: 16px; height: 16px; object-fit: contain; }
+
+    .composer {
+      flex: 1;
+      border-radius: 16px;
+      border: 1px solid var(--border-strong);
+      background: rgb(255 255 255 / 0.95);
+      box-shadow: var(--shadow-soft);
+      overflow: hidden;
+    }
+
+    .composer-inner {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: end;
+      gap: 8px;
+      padding: 12px 12px 12px 16px;
+    }
+
+    .composer textarea {
+      border: none;
+      outline: none;
+      resize: none;
+      background: transparent;
+      font: 14px/1.5 Inter, sans-serif;
+      color: var(--text-primary);
+      min-height: 24px;
+    }
+
+    .composer textarea::placeholder { color: var(--text-muted); }
+
+    .composer-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--text-muted);
+    }
+
+    .send-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #6366f1, #818cf8);
+      color: white;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 8px 18px rgb(99 102 241 / 0.22);
+    }
+
+    /* Status bar */
+    .statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--bg-secondary);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .status-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .signed-in {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-primary);
+    }
+
+    .signed-in .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      position: relative;
+    }
+
+    .signed-in .dot::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: var(--success);
+      animation: ping 1.5s ease-out infinite;
+      opacity: 0.4;
+    }
+
+    .gh-avatar {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6b7280, #374151);
+    }
+
+    .ops {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+    }
+
+    .ops .green { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+    kbd { font: inherit; color: var(--text-muted); }
+
+    /* Outro */
+    .outro {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      background: rgb(247 245 241 / 0.88);
+      backdrop-filter: blur(10px);
+      opacity: 0;
+      pointer-events: none;
+      animation: outro-in 0.8s ease-out 14.8s forwards;
+    }
+
+    .outro .wordmark-lg {
+      height: 28px;
+      width: calc(28px * 374 / 88);
+      background: var(--accent-bright);
+      -webkit-mask: url(/promo-assets/forge-wordmark-mask.png) center/contain no-repeat;
+      mask: url(/promo-assets/forge-wordmark-mask.png) center/contain no-repeat;
+    }
+
+    .outro p {
+      font-size: 18px;
+      color: var(--text-secondary);
+    }
+
+    .outro-models {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .outro-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-panel);
+      font-size: 12px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    @keyframes app-in {
+      from { opacity: 0; transform: scale(0.985); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes msg-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.35); opacity: 0.55; }
+    }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-4px); }
+    }
+
+    @keyframes ping {
+      0% { transform: scale(1); opacity: 0.4; }
+      100% { transform: scale(2); opacity: 0; }
+    }
+
+    @keyframes outro-in { to { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="titlebar">
+      <div class="titlebar-drag">
+        <span class="wordmark" role="img" aria-label="FORGE"></span>
+        <nav class="menubar" aria-label="Application menu">
+          <span>File</span><span>Edit</span><span>View</span><span>Go</span>
+        </nav>
+      </div>
+      <div class="titlebar-tools">
+        <button class="icon-btn" aria-label="Terminal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        </button>
+        <button class="icon-btn" aria-label="Browser">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        </button>
+        <button class="icon-btn" aria-label="Layout">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        </button>
+      </div>
+      <div class="window-controls">
+        <button class="win-btn">&#8722;</button>
+        <button class="win-btn">&#9633;</button>
+        <button class="win-btn">&#10005;</button>
+      </div>
+    </header>
+
+    <div class="body">
+      <aside class="activity-bar">
+        <button class="activity-btn" title="Model Cart">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M12 14v4"/></svg>
+        </button>
+        <button class="activity-btn active" title="Chats">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button class="activity-btn" title="Source Control">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8"/><path d="M8 6h5a4 4 0 0 1 4 4v2"/></svg>
+        </button>
+        <div class="activity-spacer"></div>
+        <button class="activity-btn" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+        <div class="avatar" title="Account"></div>
+      </aside>
+
+      <aside class="sidebar">
+        <div class="panel-header">
+          <span>Projects</span>
+          <button>+ New</button>
+        </div>
+        <div class="projects-body">
+          <div class="project-card">
+            <h4>Demo</h4>
+            <p>test01</p>
+            <span class="rule">1 active rule</span>
+          </div>
+        </div>
+        <div class="panel-header">
+          <span>Files</span>
+          <span style="display:flex;gap:6px">
+            <button>Edit</button>
+            <button>+</button>
+          </span>
+        </div>
+        <div class="files-body">
+          <div class="tree-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            PROMPT ENG v2.0
+          </div>
+          <div class="tree-row nested">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            pe-web
+          </div>
+          <div class="tree-row nested">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            test01
+            <span class="check">✓</span>
+          </div>
+          <div class="tree-row nested-2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            my-website-v2.0
+          </div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <div class="workspace-header">
+          <div class="agent-tab">Agent 1</div>
+          <button class="agent-tab plus" aria-label="New agent">+</button>
+        </div>
+
+        <div class="chat-scroll">
+          <div class="user-msg" id="user-msg">Build a secure REST API with JWT authentication</div>
+
+          <div class="round-table" id="round-table">
+            <p class="round-label" id="round-label">Round Table — models are discussing</p>
+            <div class="round-flow">
+              <span class="model-chip active" id="chip-gpt">
+                <span class="model-logo"><img src="/promo-assets/openai.svg" alt="" /></span>
+                GPT-4o <span class="pulse-dot" id="pulse-gpt"></span>
+              </span>
+              <span class="arrow" id="arrow-1">→</span>
+              <span class="model-chip" id="chip-claude">
+                <span class="model-logo muted"><img src="/promo-assets/anthropic.svg" alt="" /></span>
+                Claude 3.5 Sonnet
+              </span>
+              <span class="arrow" id="arrow-2">→</span>
+              <span class="model-chip" id="chip-gemini">
+                <span class="model-logo muted"><img src="/promo-assets/google.svg" alt="" /></span>
+                Gemini 2.5 Flash
+              </span>
+            </div>
+          </div>
+
+          <div class="ai-activity" id="ai-activity">
+            <header>
+              <span>AI Activity</span>
+              <span id="event-count">1 event</span>
+            </header>
+            <div class="activity-row">
+              <div class="activity-meta">
+                <span class="activity-type">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <span id="activity-type">Checking</span>
+                </span>
+                <time class="activity-time" id="activity-time">10:26:15 PM</time>
+              </div>
+              <p class="activity-msg" id="activity-msg">Checking model GPT-4o</p>
+            </div>
+          </div>
+
+          <div class="typing-row" id="typing-row">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+          </div>
+
+          <div class="assistant-msg" id="assistant-msg">
+            <strong>Synthesized answer</strong><br><br>
+            Use Express with bcrypt + refresh-token rotation. GPT mapped the routes, Claude hardened the auth middleware, and Gemini added rate limiting, CORS, and OpenAPI docs — combined into one production-ready stack.
+          </div>
+        </div>
+
+        <div class="composer-wrap">
+          <div class="utility-bar">
+            <div class="dock-col" id="dock">
+              <div class="dock-item active" data-dock="gpt"><img src="/promo-assets/openai.svg" alt="" /></div>
+              <div class="dock-item active" data-dock="claude"><img src="/promo-assets/anthropic.svg" alt="" /></div>
+              <div class="dock-item active" data-dock="gemini"><img src="/promo-assets/google.svg" alt="" /></div>
+            </div>
+            <button class="settings-btn" aria-label="Chat settings">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
+            </button>
+          </div>
+          <div class="composer">
+            <div class="composer-inner">
+              <textarea id="composer" rows="1" placeholder="Plan, Build, / for commands, @ for context"></textarea>
+              <button class="composer-icon" aria-label="Attach">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <button class="composer-icon" aria-label="Optimize">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8H20l-4.8 3.5 1.8 5.7L12 14.8 7 18l1.8-5.7L4 8.8h6.1z"/></svg>
+              </button>
+              <button class="send-btn" aria-label="Send">↑</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <footer class="statusbar">
+      <span><kbd>/</kbd> for commands <span style="opacity:.5">·</span> <kbd>@</kbd> to add context</span>
+      <div class="status-right">
+        <span class="signed-in">
+          <span class="dot"></span>
+          <span class="gh-avatar"></span>
+          <span><span style="color:var(--success)">Signed in</span> · GitHub · @JoshElieson</span>
+        </span>
+        <span class="ops"><span class="green"></span> All systems operational</span>
+      </div>
+    </footer>
+  </div>
+
+  <div class="outro">
+    <span class="wordmark-lg" role="img" aria-label="FORGE"></span>
+    <p>Every model. One answer.</p>
+    <div class="outro-models">
+      <span class="outro-badge"><img src="/promo-assets/openai.svg" width="14" height="14" alt="" /> GPT-4o</span>
+      <span class="outro-badge"><img src="/promo-assets/anthropic.svg" width="14" height="14" alt="" /> Claude 3.5 Sonnet</span>
+      <span class="outro-badge"><img src="/promo-assets/google.svg" width="14" height="14" alt="" /> Gemini 2.5 Flash</span>
+    </div>
+  </div>
+
+  <script>
+    const prompt = "Build a secure REST API with JWT authentication";
+    const models = [
+      { id: "gpt", name: "GPT-4o", chip: "chip-gpt", pulse: "pulse-gpt", dock: "gpt" },
+      { id: "claude", name: "Claude 3.5 Sonnet", chip: "chip-claude", pulse: null, dock: "claude" },
+      { id: "gemini", name: "Gemini 2.5 Flash", chip: "chip-gemini", pulse: null, dock: "gemini" },
+    ];
+
+    const composer = document.getElementById("composer");
+    const userMsg = document.getElementById("user-msg");
+    const roundTable = document.getElementById("round-table");
+    const aiActivity = document.getElementById("ai-activity");
+    const typingRow = document.getElementById("typing-row");
+    const assistantMsg = document.getElementById("assistant-msg");
+    const roundLabel = document.getElementById("round-label");
+    const activityMsg = document.getElementById("activity-msg");
+    const activityType = document.getElementById("activity-type");
+    const dock = document.getElementById("dock");
+
+    function delay(ms) {
+      return new Promise((r) => setTimeout(r, ms));
+    }
+
+    function setActiveModel(index) {
+      models.forEach((m, i) => {
+        const chip = document.getElementById(m.chip);
+        const logo = chip.querySelector(".model-logo");
+        const existingPulse = chip.querySelector(".pulse-dot");
+
+        chip.classList.remove("active", "done");
+        logo.classList.toggle("muted", i !== index);
+
+        if (i < index) chip.classList.add("done");
+        else if (i === index) chip.classList.add("active");
+
+        if (existingPulse) existingPulse.remove();
+        if (i === index) {
+          const dot = document.createElement("span");
+          dot.className = "pulse-dot";
+          chip.appendChild(dot);
+        }
+
+        dock.querySelectorAll(".dock-item").forEach((el) => {
+          el.classList.toggle("active", el.dataset.dock === m.dock && i === index);
+        });
+      });
+
+      if (index > 0) document.getElementById(`arrow-${index}`).classList.add("lit");
+
+      const model = models[index];
+      activityMsg.textContent = `Checking model ${model.name}`;
+      activityType.textContent = "Checking";
+    }
+
+    async function run() {
+      await delay(1200);
+
+      composer.focus();
+      for (let i = 0; i < prompt.length; i++) {
+        composer.value = prompt.slice(0, i + 1);
+        await delay(36);
+      }
+
+      await delay(350);
+      composer.value = "";
+      composer.placeholder = "Plan, Build, / for commands, @ for context";
+
+      userMsg.classList.add("show");
+      await delay(900);
+
+      roundTable.classList.add("show");
+      aiActivity.classList.add("show");
+      typingRow.classList.add("show");
+
+      for (let i = 0; i < models.length; i++) {
+        setActiveModel(i);
+        await delay(1300);
+      }
+
+      roundLabel.textContent = "Synthesizing a combined answer…";
+      activityMsg.textContent = "Combining model perspectives into one response";
+      activityType.textContent = "Analyzing";
+      document.getElementById("event-count").textContent = "4 events";
+
+      models.forEach((m) => {
+        const chip = document.getElementById(m.chip);
+        chip.classList.remove("active");
+        chip.classList.add("done");
+        chip.querySelector(".pulse-dot")?.remove();
+      });
+
+      await delay(1400);
+
+      typingRow.style.opacity = "0";
+      roundTable.style.opacity = "0.55";
+      assistantMsg.classList.add("show");
+    }
+
+    run();
+  </script>
+</body>
+</html>

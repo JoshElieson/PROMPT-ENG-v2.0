@@ -73,7 +73,7 @@ export function RoundTableDiscussion({
                   />
                   <span className="max-w-[5rem] truncate">{model.name}</span>
                   {isSpeaking && (
-                    <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[#a5b4fc]" />
+                    <span className="bg-accent-bright h-1.5 w-1.5 shrink-0 animate-pulse rounded-full" />
                   )}
                 </span>
               </span>

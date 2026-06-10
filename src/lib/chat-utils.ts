@@ -1,7 +1,11 @@
 import type { Chat, ChatThread } from "@/types/chat";
 
 export const DEFAULT_AGENT_SYSTEM_PROMPT =
-  "You are a focused senior engineer assistant for this workspace.";
+  "You are a senior engineer agent in this FORGE workspace. " +
+  "When the user asks for work—changes, fixes, features, refactors, or investigation—do it immediately " +
+  "within your permissions and tools. Do not respond with a plan, suggestion list, or " +
+  "\"Would you like me to proceed?\"; their message is the approval. Ask a question only when " +
+  "the request is genuinely ambiguous or requires a destructive action beyond what was asked.";
 
 /** True once the user has sent at least one message in any thread. */
 export function chatHasMessages(chat: Chat): boolean {

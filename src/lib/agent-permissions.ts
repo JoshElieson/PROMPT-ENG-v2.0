@@ -74,7 +74,8 @@ export function buildAgentPermissionsSystemNote(
 
   if (denied.length === 0) return null;
   return (
-    "Agent permissions (do not use disabled capabilities): " +
-    `the user disabled ${denied.join(", ")} for this agent.`
+    "Agent permissions (honor these limits; do not ask the user to enable what is disabled):\n" +
+    `Disabled for this agent: ${denied.join(", ")}. ` +
+    "If the user requests a disabled capability, say it is off for this agent and offer the best alternative you can within allowed permissions."
   );
 }

@@ -10,13 +10,73 @@ export interface ModelPricing {
 
 const MODEL_PRICING: Record<string, ModelPricing> = {
   gpt4o: { inputPerMillion: 2.5, outputPerMillion: 10 },
+  "gpt-4o": { inputPerMillion: 2.5, outputPerMillion: 10 },
+  "gpt-4o-mini": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
   "gpt4-turbo": { inputPerMillion: 10, outputPerMillion: 30 },
+  "gpt-4-turbo": { inputPerMillion: 10, outputPerMillion: 30 },
+  "gpt-4.1": { inputPerMillion: 2, outputPerMillion: 8 },
+  "gpt-4.1-mini": { inputPerMillion: 0.4, outputPerMillion: 1.6 },
+  "gpt-4.1-nano": { inputPerMillion: 0.1, outputPerMillion: 0.4 },
+  "gpt-5": { inputPerMillion: 5, outputPerMillion: 15 },
+  "gpt-5-mini": { inputPerMillion: 1, outputPerMillion: 4 },
+  "gpt-5-nano": { inputPerMillion: 0.25, outputPerMillion: 1 },
+  "gpt-5.1": { inputPerMillion: 5, outputPerMillion: 15 },
+  "gpt-5.2": { inputPerMillion: 5, outputPerMillion: 15 },
+  "gpt-5.4": { inputPerMillion: 5, outputPerMillion: 15 },
+  "gpt-5.4-mini": { inputPerMillion: 1, outputPerMillion: 4 },
+  "gpt-5.4-nano": { inputPerMillion: 0.25, outputPerMillion: 1 },
+  "gpt-5.2-pro": { inputPerMillion: 8, outputPerMillion: 24 },
+  "gpt-5.1-codex": { inputPerMillion: 5, outputPerMillion: 15 },
+  "gpt-5.1-mini": { inputPerMillion: 1, outputPerMillion: 4 },
+  "chatgpt-4o-latest": { inputPerMillion: 2.5, outputPerMillion: 10 },
   o1: { inputPerMillion: 15, outputPerMillion: 60 },
+  "o1-mini": { inputPerMillion: 3, outputPerMillion: 12 },
+  o3: { inputPerMillion: 10, outputPerMillion: 40 },
+  "o3-mini": { inputPerMillion: 1.1, outputPerMillion: 4.4 },
+  "o4-mini": { inputPerMillion: 1.1, outputPerMillion: 4.4 },
   claude: { inputPerMillion: 3, outputPerMillion: 15 },
-  "claude-opus": { inputPerMillion: 15, outputPerMillion: 75 },
+  "claude-opus": { inputPerMillion: 5, outputPerMillion: 25 },
+  "claude-fable-5": { inputPerMillion: 10, outputPerMillion: 50 },
+  "claude-opus-4-8": { inputPerMillion: 5, outputPerMillion: 25 },
+  "claude-opus-4-7": { inputPerMillion: 5, outputPerMillion: 25 },
+  "claude-opus-4-6": { inputPerMillion: 5, outputPerMillion: 25 },
+  "claude-opus-4-5": { inputPerMillion: 5, outputPerMillion: 25 },
+  "claude-sonnet-4-6": { inputPerMillion: 3, outputPerMillion: 15 },
+  "claude-sonnet-4-5": { inputPerMillion: 3, outputPerMillion: 15 },
+  "claude-haiku-4-5": { inputPerMillion: 1, outputPerMillion: 5 },
   gemini: { inputPerMillion: 1.25, outputPerMillion: 5 },
   "gemini-flash": { inputPerMillion: 0.1, outputPerMillion: 0.4 },
+  "gemini-2.5-flash": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
+  "gemini-2.5-pro": { inputPerMillion: 1.25, outputPerMillion: 5 },
+  "gemini-2.5-flash-lite": { inputPerMillion: 0.075, outputPerMillion: 0.3 },
+  "gemini-3.5-flash": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
+  "gemini-3.1-pro-preview": { inputPerMillion: 1.25, outputPerMillion: 5 },
+  "gemini-3.1-flash-lite": { inputPerMillion: 0.075, outputPerMillion: 0.3 },
+  "gemini-3-flash-preview": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
+  "gemini-3-pro-preview": { inputPerMillion: 1.25, outputPerMillion: 5 },
+  "gemini-2.0-flash": { inputPerMillion: 0.1, outputPerMillion: 0.4 },
+  "gemini-2.0-flash-lite": { inputPerMillion: 0.075, outputPerMillion: 0.3 },
+  "deepseek-v4-pro": { inputPerMillion: 0.55, outputPerMillion: 2.19 },
+  "deepseek-v4-flash": { inputPerMillion: 0.14, outputPerMillion: 0.28 },
+  "deepseek-chat": { inputPerMillion: 0.14, outputPerMillion: 0.28 },
+  "deepseek-reasoner": { inputPerMillion: 0.14, outputPerMillion: 0.28 },
+  deepseek: { inputPerMillion: 0.14, outputPerMillion: 0.28 },
+  grok: { inputPerMillion: 3, outputPerMillion: 15 },
+  "grok-4.3": { inputPerMillion: 3, outputPerMillion: 15 },
+  "grok-fast": { inputPerMillion: 2, outputPerMillion: 10 },
+  "grok-4.20-0309-non-reasoning": { inputPerMillion: 2, outputPerMillion: 10 },
+  "grok-reasoning": { inputPerMillion: 3, outputPerMillion: 15 },
+  "grok-4.20-0309-reasoning": { inputPerMillion: 3, outputPerMillion: 15 },
+  "grok-code": { inputPerMillion: 2, outputPerMillion: 10 },
+  "grok-build-0.1": { inputPerMillion: 2, outputPerMillion: 10 },
+  "grok-4.20-multi-agent-0309": { inputPerMillion: 3, outputPerMillion: 15 },
+  "grok-multi": { inputPerMillion: 3, outputPerMillion: 15 },
 };
+
+export type ModelCostTier = 1 | 2 | 3;
+
+const COST_TIER_LOW_MAX = 1.5;
+const COST_TIER_MID_MAX = 8;
 
 const DEFAULT_PRICING: ModelPricing = {
   inputPerMillion: 3,
@@ -73,6 +133,18 @@ export function estimateTurnsTokens(turns: ChatTurn[]): number {
 
 function pricingForModel(modelId: string): ModelPricing {
   return MODEL_PRICING[modelId] ?? DEFAULT_PRICING;
+}
+
+function blendedPricePerMillion(pricing: ModelPricing): number {
+  return (pricing.inputPerMillion + pricing.outputPerMillion) / 2;
+}
+
+/** Relative cost tier for Model Cart ($ / $$ / $$$). */
+export function getModelCostTier(modelId: string): ModelCostTier {
+  const blended = blendedPricePerMillion(pricingForModel(modelId));
+  if (blended <= COST_TIER_LOW_MAX) return 1;
+  if (blended <= COST_TIER_MID_MAX) return 2;
+  return 3;
 }
 
 export function costForTokens(

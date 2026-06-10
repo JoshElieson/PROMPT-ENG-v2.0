@@ -81,3 +81,77 @@
 .code-snippet .hljs-strong {
   font-weight: bold;
 }
+
+/**
+ * VS Code Light+ token colors for light theme.
+ * @see https://github.com/microsoft/vscode/blob/main/extensions/theme-defaults/themes/light_plus.json
+ */
+:root[data-theme="light"] .code-snippet.hljs,
+:root[data-theme="light"] .code-snippet .hljs {
+  color: #1e1e1e;
+}
+
+:root[data-theme="light"] .code-snippet .hljs-keyword,
+:root[data-theme="light"] .code-snippet .hljs-selector-tag,
+:root[data-theme="light"] .code-snippet .hljs-literal,
+:root[data-theme="light"] .code-snippet .hljs-section,
+:root[data-theme="light"] .code-snippet .hljs-link {
+  color: #0000ff;
+}
+
+:root[data-theme="light"] .code-snippet .hljs-string,
+:root[data-theme="light"] .code-snippet .hljs-regexp,
+:root[data-theme="light"] .code-snippet .hljs-addition,
+:root[data-theme="light"] .code-snippet .hljs-attribute,
+:root[data-theme="light"] .code-snippet .hljs-meta .hljs-string {
+  color: #a31515;
+}
+
+:root[data-theme="light"] .code-snippet .hljs-comment,
+:root[data-theme="light"] .code-snippet .hljs-quote,
+:root[data-theme="light"] .code-snippet .hljs-deletion {
+  color: #008000;
+}
+
+:root[data-theme="light"] .code-snippet .hljs-number,
+:root[data-theme="light"] .code-snippet .hljs-meta .hljs-number {
+  color: #098658;
+}
+
+:root[data-theme="light"] .code-snippet .hljs-title,
+:root[data-theme="light"] .code-snippet .hljs-title.function_,
+:root[data-theme="light"] .code-snippet .hljs-title.class_,
+:root[data-theme="light"] .code-snippet .hljs-title.class_.inherited__,
+:root[data-theme="light"] .code-snippet .hljs-function .hljs-title,
+:root[data-theme="light"] .code-snippet .hljs-built_in,
+:root[data-theme="light"] .code-snippet .hljs-builtin-name {
+  color: #795e26;
+}
+
+:root[data-theme="light"] .code-snippet .hljs-type,
+:root[data-theme="light"] .code-snippet .hljs-class .hljs-title,
+:root[data-theme="light"] .code-snippet .hljs-name,
+:root[data-theme="light"] .code-snippet .hljs-tag {
+  color: #267f99;
+}
+
+:root[data-theme="light"] .code-snippet .hljs-variable,
+:root[data-theme="light"] .code-snippet .hljs-template-variable,
+:root[data-theme="light"] .code-snippet .hljs-params,
+:root[data-theme="light"] .code-snippet .hljs-subst,
+:root[data-theme="light"] .code-snippet .hljs-attr,
+:root[data-theme="light"] .code-snippet .hljs-property {
+  color: #001080;
+}
+
+:root[data-theme="light"] .code-snippet .hljs-symbol,
+:root[data-theme="light"] .code-snippet .hljs-bullet,
+:root[data-theme="light"] .code-snippet .hljs-selector-id,
+:root[data-theme="light"] .code-snippet .hljs-selector-class {
+  color: #795e26;
+}
+
+:root[data-theme="light"] .code-snippet .hljs-meta,
+:root[data-theme="light"] .code-snippet .hljs-meta .hljs-keyword {
+  color: #001080;
+}

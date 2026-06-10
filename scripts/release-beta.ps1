@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$version = "1.1.0"
+$version = "1.1.1"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $releaseDir = Join-Path $repoRoot ("release\" + $version)
 $bundleRoot = Join-Path $repoRoot "src-tauri\target\release\bundle"
@@ -88,7 +88,8 @@ if (-not (Test-Path $bundleRoot)) {
 
 $allowedExtensions = @(".msi", ".exe", ".zip", ".dmg", ".deb", ".rpm", ".AppImage")
 $artifacts = Get-ChildItem -Path $bundleRoot -File -Recurse | Where-Object {
-  $allowedExtensions -contains $_.Extension -or $_.Name -like "*.AppImage"
+  ($allowedExtensions -contains $_.Extension -or $_.Name -like "*.AppImage") -and
+  $_.Name -like "*${version}*"
 }
 
 if ($artifacts.Count -eq 0) {

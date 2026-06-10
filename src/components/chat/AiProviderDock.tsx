@@ -26,19 +26,19 @@ const DOCK_ICON_ROW = "h-8 w-8";
 /** Matches chat settings button chrome in `ChatUtilityBar`. */
 const DOCK_TOGGLE_CHROME = cn(
   "ai-dock-shell group/dock flex h-8 w-10 shrink-0 select-none items-center justify-center rounded-xl border border-border/35",
-  "bg-panel/72 text-muted-foreground shadow-[0_10px_28px_rgba(2,6,23,0.38)] backdrop-blur-md transition-all duration-150",
-  "hover:border-border-subtle hover:bg-white/[0.06] hover:text-foreground",
-  "hover:shadow-[0_12px_32px_rgba(2,6,23,0.42),0_0_0_1px_rgba(99,102,241,0.14)]",
+  "bg-panel/72 text-muted-foreground shadow-dock backdrop-blur-md transition-all duration-150",
+  "hover:border-border-subtle hover:bg-hover-surface hover:text-foreground",
+  "hover:shadow-dock-hover",
 );
 
 const DOCK_CONNECTED_SHELL = cn(
   "ai-dock-shell pointer-events-auto absolute bottom-0 left-0 z-20 flex w-10 flex-col overflow-hidden rounded-xl",
-  "border border-border-subtle bg-panel/72 text-foreground shadow-[0_14px_36px_rgba(2,6,23,0.45)] backdrop-blur-md",
+  "border border-border-subtle bg-panel/72 text-foreground shadow-dock-active backdrop-blur-md",
 );
 
 const DOCK_EXPANDED_TOGGLE = cn(
   "flex h-8 w-full shrink-0 select-none items-center justify-center border-t border-border/25 transition-colors",
-  "hover:bg-white/[0.06]",
+  "hover:bg-hover-surface",
 );
 
 type AiProviderDockProps = {
@@ -69,7 +69,7 @@ function DockAddModelButton({
             DOCK_ICON_ROW,
             "relative flex shrink-0 select-none items-center justify-center rounded-lg border border-dashed border-border/70",
             "bg-transparent text-muted-foreground transition-colors duration-200",
-            "hover:border-[#6366f1]/45 hover:bg-white/[0.04] hover:text-[#c7d2fe]",
+            "hover:border-accent/45 hover:bg-hover-surface-subtle hover:text-accent-soft",
             animateIn && "ai-dock-item-in",
           )}
           style={animateIn ? { animationDelay: "0ms" } : undefined}
@@ -114,9 +114,9 @@ function DockProviderIcon({
           className={cn(
             DOCK_ICON_ROW,
             "relative flex shrink-0 select-none items-center justify-center rounded-lg border border-transparent transition-colors duration-200",
-            "hover:border-border-subtle hover:bg-white/[0.06] hover:shadow-[0_0_0_1px_rgba(99,102,241,0.14)]",
+            "hover:border-border-subtle hover:bg-hover-surface hover:shadow-[0_0_0_1px_rgb(99_102_241_/_0.14)]",
             selected &&
-              "border-border-subtle bg-white/[0.06] shadow-[0_0_0_1px_rgba(99,102,241,0.14)]",
+              "border-border-subtle bg-hover-surface shadow-[0_0_0_1px_rgb(99_102_241_/_0.14)]",
             animateIn && "ai-dock-item-in",
           )}
           style={
@@ -151,7 +151,7 @@ function DockModelDropIndicator({ side }: { side: DropSide }) {
   return (
     <span
       className={cn(
-        "pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-[#818cf8]",
+        "pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-accent-bright",
         side === "before" ? "-top-0.5" : "-bottom-0.5",
       )}
       aria-hidden

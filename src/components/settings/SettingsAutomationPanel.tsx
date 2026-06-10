@@ -241,7 +241,7 @@ function TriggerTypeSelector({
             <Icon
               className={cn(
                 "h-4 w-4",
-                active ? "text-[#818cf8]" : "text-muted-foreground",
+                active ? "text-accent-bright" : "text-muted-foreground",
               )}
             />
             <div>
@@ -557,7 +557,7 @@ function EventTriggerFields({
                 <Icon
                   className={cn(
                     "mt-0.5 h-3.5 w-3.5 shrink-0",
-                    active ? "text-[#818cf8]" : "text-muted-foreground",
+                    active ? "text-accent-bright" : "text-muted-foreground",
                   )}
                 />
                 <span>

@@ -54,7 +54,12 @@ const AGENT_TOOL_REGISTRY = [
   {
     id: "write_file",
     description:
-      "Overwrite/create UTF-8 files inside AI-enabled paths. Use to apply user-requested edits.",
+      "Overwrite/create UTF-8 files inside AI-enabled paths. Requires the full file body; truncated overwrites of large files are refused.",
+  },
+  {
+    id: "search_replace",
+    description:
+      "Replace an exact substring in an existing UTF-8 file. Prefer for partial edits to large files instead of write_file.",
   },
   {
     id: "list_directory",
@@ -268,7 +273,7 @@ function buildStaticFeatures(): FeatureReference[] {
       featureId: "agent-tools.workspace-files",
       featureName: "Agent File Tools",
       description:
-        "When workspace permissions are enabled, models can use file tools: read_file, write_file, list_directory, remove_path, clear_directory.",
+        "When workspace permissions are enabled, models can use file tools: read_file, write_file, search_replace, list_directory, remove_path, clear_directory.",
       uiLocation: "Chat agent runtime",
       actions: ["Read source files", "Write changes", "List folders", "Delete paths", "Clear folder"],
       shortcuts: [],
@@ -509,7 +514,10 @@ export function buildForgeKnowledgePrompt(query: string): string | null {
   const lines: string[] = [];
   lines.push("FORGE App Knowledge (canonical UI reference):");
   lines.push(
-    "- Use this retrieved FORGE documentation as source-of-truth for UI/layout/navigation/tool guidance.",
+    "- Use this retrieved FORGE documentation as source-of-truth for UI, layout, navigation, and agent capability questions.",
+  );
+  lines.push(
+    "- When the user asks how to do something in FORGE, answer concretely and prefer in-app UI commands to show them—not long manual walkthroughs alone.",
   );
   lines.push("- If details are missing, say so instead of guessing.");
   lines.push("- Retrieved snippets:");

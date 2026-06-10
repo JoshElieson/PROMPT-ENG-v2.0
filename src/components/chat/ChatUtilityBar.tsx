@@ -129,11 +129,11 @@ export function ChatUtilityBar({
           data-ai-target="chat.settings.button"
           className={cn(
             "flex h-8 w-full items-center justify-center rounded-xl border border-border/35",
-            "bg-panel/72 text-muted-foreground shadow-[0_10px_28px_rgba(2,6,23,0.38)] backdrop-blur-md",
-            "transition-all duration-150 hover:border-border-subtle hover:bg-white/[0.06] hover:text-foreground",
-            "hover:shadow-[0_12px_32px_rgba(2,6,23,0.42),0_0_0_1px_rgba(99,102,241,0.14)]",
+            "bg-panel/72 text-muted-foreground shadow-dock backdrop-blur-md",
+            "transition-all duration-150 hover:border-border-subtle hover:bg-hover-surface hover:text-foreground",
+            "hover:shadow-dock-hover",
             settingsOpen &&
-              "border-border-subtle text-foreground shadow-[0_14px_36px_rgba(2,6,23,0.45)]",
+              "border-border-subtle text-foreground shadow-dock-active",
           )}
           aria-expanded={settingsOpen}
           aria-label="Chat settings"

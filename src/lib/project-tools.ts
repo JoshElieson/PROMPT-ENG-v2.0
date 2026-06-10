@@ -63,8 +63,8 @@ export function applyProjectToolsPatches(
 
 export function formatProjectToolsPrompt(tools: string[]): string | null {
   if (tools.length === 0) return null;
-  return `Project tools (prefer these when building): ${tools.join(", ")}`;
+  return `Project stack (prefer these technologies when building or recommending solutions): ${tools.join(", ")}`;
 }
 
 export const PROJECT_TOOLS_UPDATE_GUIDANCE =
-  'When you adopt or remove a technology from the stack, include a directive on its own line: [[FORGE_PROJECT_TOOLS add="Tool1,Tool2" remove="OldTool"]]. Use add/remove with comma-separated names; use set="A,B" only to replace the full list.';
+  'When you adopt or remove a technology from the stack during implementation, emit a directive on its own line: [[FORGE_PROJECT_TOOLS add="Tool1,Tool2" remove="OldTool"]]. Use add/remove with comma-separated names; use set="A,B" only to replace the full list. Do this as part of completing the work—not as a separate proposal step.';

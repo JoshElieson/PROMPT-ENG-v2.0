@@ -291,7 +291,7 @@ export function GitPanel({ active }: GitPanelProps) {
                     type="button"
                     className={cn(
                       "flex h-8 w-full items-center justify-between gap-1.5 rounded-lg border border-border/60",
-                      "bg-panel-elevated/80 px-2.5 text-xs shadow-[0_4px_14px_rgba(2,6,23,0.18)]",
+                      "bg-panel-elevated/80 px-2.5 text-xs shadow-elevated-sm",
                       "outline-none transition-colors hover:border-border-subtle",
                       "focus-visible:border-[#6366f1]/60 focus-visible:ring-1 focus-visible:ring-[#6366f1]/25",
                       "data-[state=open]:border-[#6366f1]/50 data-[state=open]:ring-1 data-[state=open]:ring-[#6366f1]/20",
@@ -347,7 +347,7 @@ export function GitPanel({ active }: GitPanelProps) {
               <div className="border-border-subtle shrink-0 border-b px-3 pt-2 pb-2">
                 <div
                   className={cn(
-                    "border-border-subtle relative rounded-2xl border bg-[#1e1e1e] shadow-[0_10px_24px_rgba(2,6,23,0.3)] transition-[border-color,box-shadow] duration-150",
+                    "border-border-subtle relative rounded-2xl border bg-code-surface shadow-soft transition-[border-color,box-shadow] duration-150",
                     "focus-within:border-[#6366f1]/35 focus-within:ring-1 focus-within:ring-[#6366f1]/28",
                     commitHighlight.visible && "ai-loading-rainbow",
                     commitHighlight.exiting && "ai-loading-rainbow--exiting",
@@ -480,7 +480,7 @@ export function GitPanel({ active }: GitPanelProps) {
                 <button
                   type="button"
                   onClick={clearMessage}
-                  className="shrink-0 rounded p-0.5 hover:bg-white/10"
+                  className="hover:bg-hover-surface shrink-0 rounded p-0.5"
                   aria-label="Dismiss"
                 >
                   <X className="h-3 w-3" />

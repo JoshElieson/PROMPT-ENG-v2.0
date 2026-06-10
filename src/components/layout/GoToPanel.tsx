@@ -275,7 +275,7 @@ export function GoToPanel({ kind, anchor, onClose }: GoToPanelProps) {
       data-go-to-panel=""
       aria-label={kind === "agent" ? "Go to Agent" : "Go to Project"}
       className={cn(
-        "fixed z-[60] flex flex-col overflow-hidden rounded-lg border border-border bg-panel/95 text-foreground shadow-[0_8px_24px_rgba(2,6,23,0.34)] backdrop-blur-md",
+        "fixed z-[60] flex flex-col overflow-hidden rounded-lg border border-border bg-panel/95 text-foreground shadow-elevated backdrop-blur-md",
         "animate-in fade-in-0 zoom-in-95 duration-150",
       )}
       style={{

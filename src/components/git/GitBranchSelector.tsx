@@ -93,7 +93,7 @@ export function GitBranchSelector({ disabled }: GitBranchSelectorProps) {
               disabled={busy}
               className={cn(
                 "flex h-8 min-w-0 flex-1 items-center justify-between gap-1.5 rounded-lg border border-border/60",
-                "bg-panel-elevated/80 px-2.5 text-xs shadow-[0_4px_14px_rgba(2,6,23,0.18)]",
+                "bg-panel-elevated/80 px-2.5 text-xs shadow-elevated-sm",
                 "outline-none transition-colors hover:border-border-subtle",
                 "focus-visible:border-[#6366f1]/60 focus-visible:ring-1 focus-visible:ring-[#6366f1]/25",
                 "data-[state=open]:border-[#6366f1]/50 data-[state=open]:ring-1 data-[state=open]:ring-[#6366f1]/20",

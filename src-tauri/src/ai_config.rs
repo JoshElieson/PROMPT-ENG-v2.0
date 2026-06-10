@@ -151,6 +151,14 @@ fn managed_backend_url_for_provider(provider: Provider) -> Option<String> {
 }
 
 pub fn load_dotenv() {
+    // Release builds embed the Render URL at compile time — never overlay a stray .env.
+    if option_env!("FORGE_BACKEND_URL").is_some() {
+        return;
+    }
+    // Managed backend already configured via process env — skip .env so local provider keys cannot override.
+    if read_managed_backend_url_unnormalized().is_some() {
+        return;
+    }
     for path in env_candidates() {
         if path.is_file() {
             let _ = dotenvy::from_path(&path);
@@ -163,18 +171,35 @@ pub fn provider_for_model(model_id: &str) -> Option<Provider> {
     if model_id.starts_with("gemini") {
         return Some(Provider::Google);
     }
+    if model_id.starts_with("claude") {
+        return Some(Provider::Anthropic);
+    }
+    if model_id.starts_with("gpt-") || model_id.starts_with("chatgpt-") {
+        return Some(Provider::OpenAi);
+    }
+    if model_id.starts_with("o1") || model_id.starts_with("o3") || model_id.starts_with("o4") {
+        return Some(Provider::OpenAi);
+    }
+    if model_id.starts_with("deepseek") {
+        return Some(Provider::DeepSeek);
+    }
+    if model_id.starts_with("grok") {
+        return Some(Provider::Xai);
+    }
     match model_id {
         "gpt4o" | "gpt4-turbo" | "o1" => Some(Provider::OpenAi),
-        "claude" | "claude-opus" => Some(Provider::Anthropic),
         "deepseek" => Some(Provider::DeepSeek),
-        "grok" | "grok-fast" | "grok-reasoning" | "grok-multi" | "grok-code" => {
-            Some(Provider::Xai)
-        }
         _ => None,
     }
 }
 
 pub fn api_key(provider: Provider) -> Option<String> {
+    if has_managed_backend() {
+        return managed_backend_token_raw().or_else(|| {
+            // Legacy fallback when backend has no BACKEND_CLIENT_TOKEN set.
+            Some("forge-desktop-managed".to_string())
+        });
+    }
     let key = match provider {
         Provider::OpenAi => std::env::var("OPENAI_API_KEY"),
         Provider::Anthropic => std::env::var("ANTHROPIC_API_KEY"),
@@ -183,20 +208,9 @@ pub fn api_key(provider: Provider) -> Option<String> {
         Provider::Xai => std::env::var("GROK_API_KEY")
             .or_else(|_| std::env::var("XAI_API_KEY")),
     };
-    let explicit = key
-        .ok()
+    key.ok()
         .map(|s| sanitize_env_value(&s))
-        .filter(|s| !s.is_empty());
-    if explicit.is_some() {
-        return explicit;
-    }
-    if has_managed_backend() {
-        return managed_backend_token_raw().or_else(|| {
-            // Legacy fallback when backend has no BACKEND_CLIENT_TOKEN set.
-            Some("forge-desktop-managed".to_string())
-        });
-    }
-    None
+        .filter(|s| !s.is_empty())
 }
 
 fn validate_api_key_format(provider: Provider, key: &str) -> Result<(), String> {
@@ -324,14 +338,14 @@ pub fn resolve_api_model(model_id: &str) -> Result<(Provider, String), String> {
     let model_id = model_id.trim();
     let provider = provider_for_model(model_id).ok_or_else(|| {
         format!(
-            "Model \"{model_id}\" is not wired to a provider yet. Supported: gpt4o, gpt4-turbo, o1, claude, claude-opus, gemini, gemini-flash, deepseek, grok, grok-fast, grok-reasoning, grok-multi, grok-code."
+            "Model \"{model_id}\" is not wired to a provider yet. Supported prefixes: gemini*, claude*, gpt-*, chatgpt-*, o1*, o3*, o4*, deepseek*, grok*; legacy ids: gpt4o, gpt4-turbo, o1, deepseek."
         )
     })?;
 
     let key = api_key(provider).ok_or_else(|| {
         if has_managed_backend() {
-            "Managed backend mode is enabled but FORGE_BACKEND_URL/credentials are invalid. \
-Set FORGE_BACKEND_URL (and optional FORGE_BACKEND_TOKEN) then restart the app."
+            "Managed backend mode is enabled but FORGE_BACKEND_URL or FORGE_BACKEND_TOKEN is missing or invalid. \
+Set both (Render URL + token matching BACKEND_CLIENT_TOKEN), then rebuild or restart the app."
                 .to_string()
         } else {
             let env = match provider {
@@ -342,9 +356,7 @@ Set FORGE_BACKEND_URL (and optional FORGE_BACKEND_TOKEN) then restart the app."
                 Provider::Xai => "GROK_API_KEY (or XAI_API_KEY)",
             };
             format!(
-                "Missing {env}. Set it in a .env file and restart the app, or configure FORGE_BACKEND_URL for managed mode. \
-Checked common locations including the app folder and user config folders \
-(for Windows: %APPDATA%\\FORGE\\.env)."
+                "Missing {env}. Configure FORGE_BACKEND_URL for managed mode (Render), or set {env} for local provider mode."
             )
         }
     })?;
@@ -365,6 +377,14 @@ Checked common locations including the app folder and user config folders \
 }
 
 fn resolve_openai_model(model_id: &str) -> String {
+    if model_id.starts_with("gpt-")
+        || model_id.starts_with("chatgpt-")
+        || model_id.starts_with("o1")
+        || model_id.starts_with("o3")
+        || model_id.starts_with("o4")
+    {
+        return model_id.to_string();
+    }
     if let Some(m) = std::env::var("OPENAI_MODEL").ok().filter(|s| !s.trim().is_empty()) {
         return m;
     }
@@ -377,6 +397,9 @@ fn resolve_openai_model(model_id: &str) -> String {
 }
 
 fn resolve_anthropic_model(model_id: &str) -> String {
+    if model_id.starts_with("claude-") {
+        return model_id.to_string();
+    }
     if let Some(m) = std::env::var("ANTHROPIC_MODEL")
         .ok()
         .filter(|s| !s.trim().is_empty())
@@ -384,21 +407,21 @@ fn resolve_anthropic_model(model_id: &str) -> String {
         return m;
     }
     match model_id {
-        "claude" => "claude-sonnet-4-20250514".to_string(),
-        "claude-opus" => "claude-opus-4-20250514".to_string(),
-        _ => "claude-sonnet-4-20250514".to_string(),
+        "claude" => "claude-sonnet-4-6".to_string(),
+        "claude-opus" => "claude-opus-4-8".to_string(),
+        _ => "claude-sonnet-4-6".to_string(),
     }
 }
 
 fn resolve_gemini_model(model_id: &str) -> String {
+    if model_id.starts_with("gemini-") {
+        return model_id.to_string();
+    }
     if let Some(m) = std::env::var("GEMINI_MODEL")
         .ok()
         .filter(|s| !s.trim().is_empty())
     {
         return m;
-    }
-    if model_id.starts_with("gemini-") {
-        return model_id.to_string();
     }
     match model_id {
         "gemini" => "gemini-2.5-pro".to_string(),
@@ -408,6 +431,9 @@ fn resolve_gemini_model(model_id: &str) -> String {
 }
 
 fn resolve_deepseek_model(model_id: &str) -> String {
+    if model_id.starts_with("deepseek-") {
+        return model_id.to_string();
+    }
     if let Some(m) = std::env::var("DEEPSEEK_MODEL")
         .ok()
         .filter(|s| !s.trim().is_empty())
@@ -429,6 +455,9 @@ fn normalize_xai_api_model(model: &str) -> String {
 }
 
 fn resolve_xai_model(model_id: &str) -> String {
+    if model_id.starts_with("grok-") {
+        return normalize_xai_api_model(model_id);
+    }
     if let Some(m) = std::env::var("XAI_MODEL")
         .ok()
         .filter(|s| !s.trim().is_empty())

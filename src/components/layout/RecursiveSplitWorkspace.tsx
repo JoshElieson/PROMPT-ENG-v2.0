@@ -168,7 +168,7 @@ function ChatThreadTab({
           onDragEnd={onDragEnd}
         >
           {dropIndicatorSide === "before" && (
-            <span className="pointer-events-none absolute inset-y-0 -left-0.5 w-0.5 rounded-full bg-[#818cf8]" />
+            <span className="pointer-events-none absolute inset-y-0 -left-0.5 w-0.5 rounded-full bg-accent-bright" />
           )}
           {isRenaming ? (
             <input
@@ -229,7 +229,7 @@ function ChatThreadTab({
             </button>
           ) : null}
           {dropIndicatorSide === "after" && (
-            <span className="pointer-events-none absolute inset-y-0 -right-0.5 w-0.5 rounded-full bg-[#818cf8]" />
+            <span className="pointer-events-none absolute inset-y-0 -right-0.5 w-0.5 rounded-full bg-accent-bright" />
           )}
         </div>
       </ContextMenuTrigger>
@@ -396,6 +396,8 @@ function ChatPaneBody({
     getAgentActivityEvents,
     forceKillThread,
     truncateThreadAfterMessage,
+    continueAgentTask,
+    hasAgentContinuation,
   } = useChats();
   const { projects } = useProjects();
   const {
@@ -789,6 +791,16 @@ function ChatPaneBody({
                     message.role === "user" &&
                     index < messages.length - 1
                   }
+                  showContinueAction={
+                    message.role === "assistant" &&
+                    hasAgentContinuation(message.content) &&
+                    loadingForPane == null &&
+                    index === messages.length - 1
+                  }
+                  onContinue={() => {
+                    if (!activeChatId) return;
+                    continueAgentTask(activeChatId, leaf.threadId, message.id);
+                  }}
                   onStop={() => forceKillThread(leaf.threadId)}
                   onUndo={() => void handleUndoFromMessage(message.id)}
                   disableActions={undoMessageId === message.id}

@@ -25,6 +25,46 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
     strengths: ["general", "code"],
     orgId: "openai",
   },
+  "gpt-4o": {
+    auto: 92,
+    strengths: ["general", "code"],
+    orgId: "openai",
+  },
+  "gpt-5.4": {
+    auto: 96,
+    strengths: ["general", "code", "reasoning"],
+    orgId: "openai",
+  },
+  "gpt-5.4-mini": {
+    auto: 94,
+    strengths: ["general", "fast"],
+    orgId: "openai",
+  },
+  "gpt-5.2": {
+    auto: 90,
+    strengths: ["general", "code"],
+    orgId: "openai",
+  },
+  "gpt-5.1-codex": {
+    auto: 88,
+    strengths: ["code"],
+    orgId: "openai",
+  },
+  "gpt-4.1": {
+    auto: 86,
+    strengths: ["code", "general"],
+    orgId: "openai",
+  },
+  "gpt-4.1-mini": {
+    auto: 88,
+    strengths: ["fast", "general"],
+    orgId: "openai",
+  },
+  "gpt-4o-mini": {
+    auto: 90,
+    strengths: ["fast", "general"],
+    orgId: "openai",
+  },
   "gpt4-turbo": {
     auto: 80,
     strengths: ["general"],
@@ -35,13 +75,68 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
     strengths: ["reasoning"],
     orgId: "openai",
   },
+  o3: {
+    auto: 38,
+    strengths: ["reasoning"],
+    orgId: "openai",
+  },
+  "o3-mini": {
+    auto: 42,
+    strengths: ["reasoning", "fast"],
+    orgId: "openai",
+  },
+  "o4-mini": {
+    auto: 40,
+    strengths: ["reasoning", "fast"],
+    orgId: "openai",
+  },
   claude: {
     auto: 90,
     strengths: ["reasoning", "general"],
     orgId: "anthropic",
   },
+  "claude-sonnet-4-6": {
+    auto: 90,
+    strengths: ["reasoning", "general"],
+    orgId: "anthropic",
+  },
+  "claude-sonnet-4-5": {
+    auto: 88,
+    strengths: ["general", "fast"],
+    orgId: "anthropic",
+  },
+  "claude-haiku-4-5": {
+    auto: 93,
+    strengths: ["fast", "general"],
+    orgId: "anthropic",
+  },
   "claude-opus": {
     auto: 28,
+    strengths: ["reasoning"],
+    orgId: "anthropic",
+  },
+  "claude-fable-5": {
+    auto: 32,
+    strengths: ["reasoning"],
+    orgId: "anthropic",
+  },
+  "claude-opus-4-8": {
+    auto: 30,
+    strengths: ["reasoning", "code"],
+    orgId: "anthropic",
+  },
+  "claude-opus-4-7": {
+    auto: 28,
+    strengths: ["reasoning"],
+    orgId: "anthropic",
+  },
+  "claude-opus-4-6": {
+    auto: 26,
+    strengths: ["reasoning"],
+    orgId: "anthropic",
+  },
+  "claude-opus-4-5": {
+    auto: 24,
     strengths: ["reasoning"],
     orgId: "anthropic",
   },
@@ -50,8 +145,38 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
     strengths: ["research", "general"],
     orgId: "google",
   },
+  "gemini-2.5-pro": {
+    auto: 86,
+    strengths: ["research", "reasoning"],
+    orgId: "google",
+  },
+  "gemini-2.5-flash": {
+    auto: 92,
+    strengths: ["fast", "general"],
+    orgId: "google",
+  },
+  "gemini-2.5-flash-lite": {
+    auto: 93,
+    strengths: ["fast", "general"],
+    orgId: "google",
+  },
+  "gemini-3.5-flash": {
+    auto: 94,
+    strengths: ["fast", "general"],
+    orgId: "google",
+  },
+  "gemini-3.1-flash-lite": {
+    auto: 95,
+    strengths: ["fast"],
+    orgId: "google",
+  },
   "gemini-flash": {
     auto: 94,
+    strengths: ["fast", "general"],
+    orgId: "google",
+  },
+  "gemini-2.0-flash": {
+    auto: 92,
     strengths: ["fast", "general"],
     orgId: "google",
   },
@@ -60,12 +185,42 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
     strengths: ["code"],
     orgId: "deepseek",
   },
+  "deepseek-v4-pro": {
+    auto: 84,
+    strengths: ["code", "reasoning"],
+    orgId: "deepseek",
+  },
+  "deepseek-v4-flash": {
+    auto: 88,
+    strengths: ["code", "fast"],
+    orgId: "deepseek",
+  },
+  "deepseek-reasoner": {
+    auto: 36,
+    strengths: ["reasoning", "code"],
+    orgId: "deepseek",
+  },
+  "deepseek-chat": {
+    auto: 82,
+    strengths: ["code", "general"],
+    orgId: "deepseek",
+  },
   grok: {
     auto: 90,
     strengths: ["general", "edgy"],
     orgId: "xai",
   },
+  "grok-4.3": {
+    auto: 90,
+    strengths: ["general", "edgy"],
+    orgId: "xai",
+  },
   "grok-fast": {
+    auto: 94,
+    strengths: ["fast", "general", "edgy"],
+    orgId: "xai",
+  },
+  "grok-4.20-0309-non-reasoning": {
     auto: 94,
     strengths: ["fast", "general", "edgy"],
     orgId: "xai",

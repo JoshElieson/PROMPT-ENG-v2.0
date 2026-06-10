@@ -1,24 +1,179 @@
 @import "tailwindcss";
 
-@theme {
-  --color-background: #11151d;
-  --color-surface: #171c26;
-  --color-panel: #1b2130;
-  --color-panel-elevated: #20283a;
-  --color-composer: #232c3f;
-  --color-border: rgb(255 255 255 / 0.08);
-  --color-border-subtle: rgb(148 163 184 / 0.12);
-  --color-muted: #8e9aae;
-  --color-muted-foreground: #94a3b8;
-  --color-foreground: #f3f4f6;
-  --color-accent: #6366f1;
-  --color-accent-muted: rgb(99 102 241 / 0.16);
-  /** Opaque accent rule for the shared Chats / models / Round Table header line. */
-  --color-workspace-header-line: rgb(99 102 241 / 0.24);
-  --color-accent-hover: #4f46e5;
-  --color-menu-hover: rgb(148 163 184 / 0.12);
-  --color-menu-hover-strong: rgb(99 102 241 / 0.14);
-  --color-success: #22c55e;
+/* ── Semantic theme tokens ── */
+/* Default fallback before JS: Dark Blue (original FORGE look) */
+:root,
+:root[data-theme="dark-blue"] {
+  --bg-primary: #11151d;
+  --bg-secondary: #171c26;
+  --bg-panel: #1b2130;
+  --bg-elevated: #20283a;
+  --bg-composer: #232c3f;
+  --bg-code-surface: #1e1e1e;
+  --bg-terminal: #1a1a1a;
+  --bg-message-sent: rgb(43 49 80 / 0.55);
+  --border-subtle: rgb(148 163 184 / 0.12);
+  --border-strong: rgb(255 255 255 / 0.08);
+  --border-message-sent: rgb(99 102 241 / 0.26);
+  --text-primary: #f3f4f6;
+  --text-secondary: #94a3b8;
+  --text-muted: #8e9aae;
+  --text-on-accent: #ffffff;
+  --accent: #6366f1;
+  --accent-soft: rgb(99 102 241 / 0.16);
+  --accent-bright: #818cf8;
+  --accent-text: #c7d2fe;
+  --accent-hover: #4f46e5;
+  --accent-pressed: #4338ca;
+  --menu-hover: rgb(148 163 184 / 0.12);
+  --menu-hover-strong: rgb(99 102 241 / 0.14);
+  --hover-surface: rgb(255 255 255 / 0.06);
+  --hover-surface-subtle: rgb(255 255 255 / 0.04);
+  --workspace-header-line: rgb(99 102 241 / 0.24);
+  --success: #22c55e;
+  --shadow-soft: 0 8px 30px rgb(2 6 23 / 0.34);
+  --shadow-elevated: 0 8px 24px rgb(2 6 23 / 0.34);
+  --shadow-elevated-lg: 0 18px 40px rgb(2 6 23 / 0.46);
+  --shadow-elevated-sm: 0 4px 14px rgb(2 6 23 / 0.18);
+  --shadow-accent-button: 0 8px 18px rgb(15 23 42 / 0.28);
+  --shadow-message-sent: 0 10px 20px rgb(2 6 23 / 0.3);
+  --shadow-dock: 0 10px 28px rgb(2 6 23 / 0.38);
+  --shadow-dock-hover: 0 12px 32px rgb(2 6 23 / 0.42), 0 0 0 1px rgb(99 102 241 / 0.14);
+  --shadow-dock-active: 0 14px 36px rgb(2 6 23 / 0.45);
+  --shadow-toast: 0 14px 28px rgb(2 6 23 / 0.38);
+  --shadow-command-label: 0 8px 18px rgb(2 6 23 / 0.5);
+  --bg-command-label: rgb(15 23 42 / 0.93);
+  --text-command-label: rgb(224 231 255);
+  --body-gradient:
+    radial-gradient(circle at 12% -10%, rgb(79 70 229 / 0.05), transparent 46%),
+    radial-gradient(circle at 86% 0%, rgb(99 102 241 / 0.06), transparent 44%),
+    radial-gradient(circle at 55% 100%, rgb(59 130 246 / 0.035), transparent 42%),
+    var(--bg-primary);
+  --scrollbar-thumb: rgb(148 163 184 / 0.3);
+  --scrollbar-thumb-hover: rgb(148 163 184 / 0.45);
+  --switch-track-off: rgb(148 163 184 / 0.22);
+  --switch-thumb-checked: #e2e8f0;
+}
+
+:root[data-theme="dark"] {
+  --bg-primary: #09090b;
+  --bg-secondary: #111113;
+  --bg-panel: #18181b;
+  --bg-elevated: #1f1f23;
+  --bg-composer: #18181b;
+  --bg-code-surface: #111113;
+  --bg-terminal: #1a1a1a;
+  --bg-message-sent: rgb(99 102 241 / 0.12);
+  --border-subtle: rgb(255 255 255 / 0.08);
+  --border-strong: rgb(255 255 255 / 0.14);
+  --border-message-sent: rgb(99 102 241 / 0.22);
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --text-on-accent: #ffffff;
+  --accent: #6366f1;
+  --accent-soft: rgb(99 102 241 / 0.14);
+  --accent-bright: #818cf8;
+  --accent-text: #c7d2fe;
+  --accent-hover: #4f46e5;
+  --accent-pressed: #4338ca;
+  --menu-hover: rgb(255 255 255 / 0.06);
+  --menu-hover-strong: rgb(99 102 241 / 0.12);
+  --hover-surface: rgb(255 255 255 / 0.06);
+  --hover-surface-subtle: rgb(255 255 255 / 0.04);
+  --workspace-header-line: rgb(99 102 241 / 0.2);
+  --success: #22c55e;
+  --shadow-soft: 0 12px 40px rgb(0 0 0 / 0.35);
+  --shadow-elevated: 0 8px 24px rgb(0 0 0 / 0.32);
+  --shadow-elevated-lg: 0 18px 40px rgb(0 0 0 / 0.42);
+  --shadow-elevated-sm: 0 4px 14px rgb(0 0 0 / 0.24);
+  --shadow-accent-button: 0 8px 18px rgb(0 0 0 / 0.35);
+  --shadow-message-sent: 0 10px 20px rgb(0 0 0 / 0.28);
+  --shadow-dock: 0 10px 28px rgb(0 0 0 / 0.34);
+  --shadow-dock-hover: 0 12px 32px rgb(0 0 0 / 0.38), 0 0 0 1px rgb(99 102 241 / 0.12);
+  --shadow-dock-active: 0 14px 36px rgb(0 0 0 / 0.42);
+  --shadow-toast: 0 14px 28px rgb(0 0 0 / 0.36);
+  --shadow-command-label: 0 8px 18px rgb(0 0 0 / 0.45);
+  --bg-command-label: rgb(24 24 27 / 0.96);
+  --text-command-label: #e4e4e7;
+  --body-gradient: var(--bg-primary);
+  --scrollbar-thumb: rgb(255 255 255 / 0.16);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 0.26);
+  --switch-track-off: rgb(255 255 255 / 0.12);
+  --switch-thumb-checked: #f4f4f5;
+}
+
+:root[data-theme="light"] {
+  --bg-primary: #f7f5f1;
+  --bg-secondary: #efeee9;
+  --bg-panel: #ffffff;
+  --bg-elevated: #fafaf8;
+  --bg-composer: #ffffff;
+  --bg-code-surface: #f4f3ef;
+  --bg-terminal: #1a1a1a;
+  --bg-message-sent: rgb(99 102 241 / 0.08);
+  --border-subtle: rgb(24 24 27 / 0.1);
+  --border-strong: rgb(24 24 27 / 0.16);
+  --border-message-sent: rgb(99 102 241 / 0.22);
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+  --text-on-accent: #ffffff;
+  --accent: #6366f1;
+  --accent-soft: rgb(99 102 241 / 0.12);
+  --accent-bright: #6366f1;
+  --accent-text: #4338ca;
+  --accent-hover: #4f46e5;
+  --accent-pressed: #4338ca;
+  --menu-hover: rgb(24 24 27 / 0.05);
+  --menu-hover-strong: rgb(99 102 241 / 0.1);
+  --hover-surface: rgb(24 24 27 / 0.04);
+  --hover-surface-subtle: rgb(24 24 27 / 0.025);
+  --workspace-header-line: rgb(99 102 241 / 0.2);
+  --success: #16a34a;
+  --shadow-soft: 0 8px 30px rgb(24 24 27 / 0.08);
+  --shadow-elevated: 0 8px 24px rgb(24 24 27 / 0.08);
+  --shadow-elevated-lg: 0 18px 40px rgb(24 24 27 / 0.1);
+  --shadow-elevated-sm: 0 4px 14px rgb(24 24 27 / 0.06);
+  --shadow-accent-button: 0 8px 18px rgb(99 102 241 / 0.22);
+  --shadow-message-sent: 0 8px 20px rgb(24 24 27 / 0.06);
+  --shadow-dock: 0 10px 28px rgb(24 24 27 / 0.08);
+  --shadow-dock-hover: 0 12px 32px rgb(24 24 27 / 0.1), 0 0 0 1px rgb(99 102 241 / 0.12);
+  --shadow-dock-active: 0 14px 36px rgb(24 24 27 / 0.12);
+  --shadow-toast: 0 14px 28px rgb(24 24 27 / 0.1);
+  --shadow-command-label: 0 8px 18px rgb(24 24 27 / 0.12);
+  --bg-command-label: rgb(255 255 255 / 0.96);
+  --text-command-label: #312e81;
+  --body-gradient:
+    radial-gradient(circle at 12% -10%, rgb(99 102 241 / 0.06), transparent 46%),
+    radial-gradient(circle at 86% 0%, rgb(79 70 229 / 0.04), transparent 44%),
+    radial-gradient(circle at 55% 100%, rgb(99 102 241 / 0.03), transparent 42%),
+    var(--bg-primary);
+  --scrollbar-thumb: rgb(24 24 27 / 0.18);
+  --scrollbar-thumb-hover: rgb(24 24 27 / 0.28);
+  --switch-track-off: rgb(24 24 27 / 0.12);
+  --switch-thumb-checked: #ffffff;
+}
+
+@theme inline {
+  --color-background: var(--bg-primary);
+  --color-surface: var(--bg-secondary);
+  --color-panel: var(--bg-panel);
+  --color-panel-elevated: var(--bg-elevated);
+  --color-composer: var(--bg-composer);
+  --color-border: var(--border-strong);
+  --color-border-subtle: var(--border-subtle);
+  --color-muted: var(--text-muted);
+  --color-muted-foreground: var(--text-secondary);
+  --color-foreground: var(--text-primary);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-muted: var(--accent-soft);
+  --color-workspace-header-line: var(--workspace-header-line);
+  --color-accent-hover: var(--accent-hover);
+  --color-menu-hover: var(--menu-hover);
+  --color-menu-hover-strong: var(--menu-hover-strong);
+  --color-success: var(--success);
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --radius-xs: 0.25rem;
   --radius-sm: 0.375rem;
@@ -47,14 +202,9 @@
   }
 
   body {
-    background:
-      radial-gradient(circle at 12% -10%, rgb(79 70 229 / 0.05), transparent 46%),
-      radial-gradient(circle at 86% 0%, rgb(99 102 241 / 0.06), transparent 44%),
-      radial-gradient(circle at 55% 100%, rgb(59 130 246 / 0.035), transparent 42%),
-      var(--color-background);
+    background: var(--body-gradient);
   }
 
-  /* Prevent focus rings / borders from showing as a window-edge tint */
   html:focus,
   body:focus,
   #root:focus {
@@ -71,15 +221,14 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgb(148 163 184 / 0.3);
+    background: var(--scrollbar-thumb);
     border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgb(148 163 184 / 0.45);
+    background: var(--scrollbar-thumb-hover);
   }
 
-  /* Workspace grid cells: no nested card outlines on terminal/browser hosts */
   [data-workspace-bottom-panel] .xterm,
   [data-workspace-bottom-panel] .xterm:focus,
   [data-workspace-bottom-panel] .xterm.focus {
@@ -87,12 +236,11 @@
     box-shadow: none;
   }
 
-  /* xterm.css + FitAddon partial-row gap: default #000 shows as a strip above the status bar */
   [data-workspace-bottom-panel] .xterm,
   [data-workspace-bottom-panel] .xterm .xterm-screen,
   [data-workspace-bottom-panel] .xterm .xterm-viewport,
   [data-workspace-bottom-panel] .xterm .xterm-scroll-area {
-    background-color: #1a1a1a !important;
+    background-color: var(--bg-terminal) !important;
   }
 
   button:not(:disabled),
@@ -121,6 +269,103 @@
 }
 
 @layer utilities {
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .shadow-elevated-lg {
+    box-shadow: var(--shadow-elevated-lg);
+  }
+
+  .shadow-elevated-sm {
+    box-shadow: var(--shadow-elevated-sm);
+  }
+
+  .shadow-accent-button {
+    box-shadow: var(--shadow-accent-button);
+  }
+
+  .shadow-message-sent {
+    box-shadow: var(--shadow-message-sent);
+  }
+
+  .shadow-dock {
+    box-shadow: var(--shadow-dock);
+  }
+
+  .shadow-dock-hover {
+    box-shadow: var(--shadow-dock-hover);
+  }
+
+  .shadow-dock-active {
+    box-shadow: var(--shadow-dock-active);
+  }
+
+  .shadow-toast {
+    box-shadow: var(--shadow-toast);
+  }
+
+  .bg-hover-surface {
+    background-color: var(--hover-surface);
+  }
+
+  .bg-hover-surface-subtle {
+    background-color: var(--hover-surface-subtle);
+  }
+
+  .hover\:bg-hover-surface:hover {
+    background-color: var(--hover-surface);
+  }
+
+  .hover\:bg-hover-surface-subtle:hover {
+    background-color: var(--hover-surface-subtle);
+  }
+
+  .bg-message-sent {
+    background-color: var(--bg-message-sent);
+  }
+
+  .border-message-sent {
+    border-color: var(--border-message-sent);
+  }
+
+  .bg-code-surface {
+    background-color: var(--bg-code-surface);
+  }
+
+  .bg-terminal {
+    background-color: var(--bg-terminal);
+  }
+
+  .text-on-accent {
+    color: var(--text-on-accent);
+  }
+
+  .text-accent-bright {
+    color: var(--accent-bright);
+  }
+
+  .text-accent-soft {
+    color: var(--accent-text);
+  }
+
+  .bg-accent-brand {
+    background-color: var(--accent-hover);
+  }
+
+  .bg-accent-brand:hover,
+  .hover\:bg-accent-brand-hover:hover {
+    background-color: var(--accent-pressed);
+  }
+
+  .border-accent-brand {
+    border-color: rgb(99 102 241 / 0.35);
+  }
+
   @keyframes ai-dock-item-in {
     from {
       opacity: 0;
@@ -205,11 +450,11 @@
     pointer-events: none;
     border-radius: 0.45rem;
     border: 1px solid rgb(129 140 248 / 0.45);
-    background: rgb(15 23 42 / 0.93);
-    color: rgb(224 231 255);
+    background: var(--bg-command-label);
+    color: var(--text-command-label);
     padding: 0.2rem 0.45rem;
     font-size: 11px;
-    box-shadow: 0 8px 18px rgb(2 6 23 / 0.5);
+    box-shadow: var(--shadow-command-label);
   }
 
   @property --ai-rainbow-angle {

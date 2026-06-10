@@ -22,13 +22,13 @@ export interface ModelResponsePayload {
 
 export interface AiToolActivityEvent {
   streamId: string;
-  action: "read" | "write";
+  action: "read" | "write" | "status";
   path: string;
   added?: number;
   removed?: number;
 }
 
-/** App model ids backed by configured providers in the Tauri layer. */
+/** App model ids backed by configured providers in the Tauri layer (legacy short ids). */
 export const SUPPORTED_AI_MODEL_IDS = new Set([
   "gpt4o",
   "gpt4-turbo",
@@ -47,24 +47,38 @@ export const SUPPORTED_AI_MODEL_IDS = new Set([
 
 /** Legacy / provider-style ids mapped to app model ids. */
 const MODEL_ID_ALIASES: Record<string, string> = {
-  "openai/gpt-4o": "gpt4o",
-  "openai/gpt-4-turbo": "gpt4-turbo",
+  "openai/gpt-4o": "gpt-4o",
+  "openai/gpt-4-turbo": "gpt-4-turbo",
   "openai/o1": "o1",
-  "gpt-4o": "gpt4o",
-  "gpt-4-turbo": "gpt4-turbo",
+  "openai/gpt-5.4": "gpt-5.4",
+  "openai/gpt-4.1": "gpt-4.1",
+  "gpt-4o": "gpt-4o",
+  "gpt-4-turbo": "gpt-4-turbo",
   "anthropic/claude": "claude",
   "anthropic/claude-opus": "claude-opus",
   "claude-3-5-sonnet": "claude",
   "claude-3-opus": "claude-opus",
   "google/gemini": "gemini",
-  "deepseek-chat": "deepseek",
-  "deepseek-coder": "deepseek",
-  "deepseek/deepseek-chat": "deepseek",
+  "google/gemini-2.5-flash": "gemini-2.5-flash",
+  "deepseek/deepseek-chat": "deepseek-chat",
+  "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
   "xai/grok": "grok",
+  "xai/grok-4.3": "grok-4.3",
 };
 
 function modelIdIsWired(modelId: string): boolean {
-  return SUPPORTED_AI_MODEL_IDS.has(modelId) || modelId.startsWith("gemini");
+  return (
+    SUPPORTED_AI_MODEL_IDS.has(modelId) ||
+    modelId.startsWith("gemini") ||
+    modelId.startsWith("claude") ||
+    modelId.startsWith("gpt-") ||
+    modelId.startsWith("chatgpt-") ||
+    modelId.startsWith("o1") ||
+    modelId.startsWith("o3") ||
+    modelId.startsWith("o4") ||
+    modelId.startsWith("deepseek") ||
+    modelId.startsWith("grok")
+  );
 }
 
 /** Resolve a raw cart/active id to a wired app model id, or null if unsupported. */
@@ -132,6 +146,7 @@ export async function aiChatComplete(
   system?: string | null,
   streamId?: string | null,
   rulesContext?: RuleApplicationContext | null,
+  agentContinuation?: string | null,
 ): Promise<string> {
   requireTauri();
   const resolvedModelId = resolveModelId(modelId);
@@ -157,6 +172,7 @@ export async function aiChatComplete(
           : null,
       system: systemPrompt.length > 0 ? systemPrompt : null,
       streamId: streamId?.trim() ? streamId.trim() : null,
+      agentContinuation: agentContinuation?.trim() ? agentContinuation.trim() : null,
     });
   } catch (error) {
     const wrapped = new Error(

@@ -50,14 +50,16 @@ export function AppToastProvider({ children }: { children: ReactNode }) {
           <div
             key={toast.id}
             className={cn(
-              "rounded-lg border px-3 py-2 text-sm shadow-[0_14px_28px_rgba(2,6,23,0.38)] backdrop-blur-sm",
+              "rounded-lg border px-3 py-2 text-sm shadow-toast backdrop-blur-sm",
               "animate-in fade-in slide-in-from-bottom-2 duration-200",
               toast.tone === "success" &&
-                "border-emerald-400/35 bg-emerald-500/12 text-emerald-100",
-              toast.tone === "error" && "border-red-400/35 bg-red-500/12 text-red-100",
+                "border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-100",
+              toast.tone === "error" &&
+                "border-red-500/30 bg-red-500/10 text-red-800 dark:text-red-100",
               toast.tone === "warning" &&
-                "border-amber-400/35 bg-amber-500/12 text-amber-100",
-              toast.tone === "info" && "border-indigo-400/35 bg-indigo-500/12 text-indigo-100",
+                "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100",
+              toast.tone === "info" &&
+                "border-indigo-500/30 bg-indigo-500/10 text-indigo-900 dark:text-indigo-100",
             )}
             role="status"
             aria-live="polite"

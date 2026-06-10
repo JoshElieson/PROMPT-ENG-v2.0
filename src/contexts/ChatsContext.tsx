@@ -34,6 +34,10 @@ import {
   serializeAgentPermissions,
 } from "@/lib/agent-permissions";
 import {
+  FORGE_AGENT_CONTEXT,
+  FORGE_ENGINEERING_GUIDANCE,
+} from "@/lib/agent-system-guidance";
+import {
   canAutoTitleWorkspace,
   fallbackWorkspaceTitle,
   generateWorkspaceTitleWithAi,
@@ -114,6 +118,7 @@ import type {
 } from "@/types/agent-activity";
 import { useAiCommandBus } from "@/contexts/AiCommandBusContext";
 import { useAppToast } from "@/contexts/AppToastContext";
+import { extractForgeAgentContinue, hasForgeAgentContinue, stripAgentContinuationFromHistory } from "@/lib/forge-agent-continue";
 
 interface ChatsContextValue {
   chats: Chat[];
@@ -166,6 +171,14 @@ interface ChatsContextValue {
   ) => void;
   /** Stops the in-flight AI response for this thread without closing the tab. */
   forceKillThread: (threadId: string) => void;
+  /** Resume a paused agent task from a prior assistant message. */
+  continueAgentTask: (
+    chatId: string,
+    threadId: string,
+    messageId: string,
+  ) => void;
+  /** Whether an assistant message can be resumed with Continue. */
+  hasAgentContinuation: (content: string) => boolean;
   togglePinChat: (id: string) => void;
   deleteChat: (id: string) => void;
   sendMessage: (payload: SendMessagePayload) => void;
@@ -313,7 +326,10 @@ function buildThreadHistory(chat: Chat, threadId: string): ChatTurn[] {
   const thread = chat.threads.find((t) => t.id === threadId);
   return (thread?.messages ?? []).map((m) => ({
     role: m.role,
-    content: m.content,
+    content:
+      m.role === "assistant"
+        ? stripAgentContinuationFromHistory(m.content)
+        : m.content,
   }));
 }
 
@@ -342,6 +358,46 @@ type CommittedSend = {
   contributions: { modelId: string; percentage: number }[];
   workspace?: AiWorkspacePayload;
 };
+
+type AiRunOptions = {
+  agentContinuation?: string;
+  updateMessageId?: string;
+};
+
+type PendingAgentContinuation = {
+  modelId: string;
+  continuationJson: string;
+};
+
+function buildThreadWorkspace(
+  chat: Chat,
+  threadId: string,
+): AiWorkspacePayload | undefined {
+  const thread = chat.threads.find((item) => item.id === threadId);
+  const agentPermissions = resolveAgentPermissions(thread);
+  const gitRepoPath =
+    chat.gitProjectId != null
+      ? (loadProjects().find((project) => project.id === chat.gitProjectId)
+          ?.rootPath ?? undefined)
+      : undefined;
+  const allowGit = agentPermissions.git && !!gitRepoPath;
+  const fileAccessAllowed =
+    agentPermissions.fileRead && chat.fileAccessEnabled !== false;
+  const enabledPaths = fileAccessAllowed
+    ? Object.entries(chat.permissions ?? {})
+        .filter(([, permission]) => permission.enabled)
+        .map(([path]) => path)
+    : [];
+
+  if (enabledPaths.length === 0 && !allowGit) return undefined;
+
+  return {
+    enabledPaths,
+    allowWrite: agentPermissions.fileWrite,
+    allowGit,
+    gitRepoPath,
+  };
+}
 
 function appendUserMessageToThread(
   list: Chat[],
@@ -430,6 +486,33 @@ function appendAssistantToThread(
   });
 }
 
+function replaceAssistantMessageInThread(
+  list: Chat[],
+  chatId: string,
+  threadId: string,
+  messageId: string,
+  assistantMessage: ChatMessage,
+): Chat[] {
+  return list.map((chat) => {
+    if (chat.id !== chatId) return chat;
+    return {
+      ...chat,
+      threads: chat.threads.map((th) =>
+        th.id === threadId
+          ? {
+              ...th,
+              messages: th.messages.map((message) =>
+                message.id === messageId ? assistantMessage : message,
+              ),
+              updatedAt: assistantMessage.createdAt,
+            }
+          : th,
+      ),
+      updatedAt: assistantMessage.createdAt,
+    };
+  });
+}
+
 export function ChatsProvider({ children }: { children: ReactNode }) {
   const { addUsage, isAtTokenLimit, tokenLimitMessage, isSignedIn, signInRequiredMessage } =
     useApiUsage();
@@ -475,6 +558,9 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     Record<string, AgentActivityEvent[]>
   >({});
   const activeStreamIdByThreadRef = useRef(new Map<string, string>());
+  const pendingAgentContinuationByMessageRef = useRef(
+    new Map<string, PendingAgentContinuation>(),
+  );
   const undoHistoryByChatRef = useRef(new Map<string, Chat[]>());
   const redoHistoryByChatRef = useRef(new Map<string, Chat[]>());
   const [activeHistoryState, setActiveHistoryState] = useState({
@@ -739,15 +825,17 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         const next = [...existing, event].slice(-40);
         return { ...prev, [key]: next };
       });
-      appendAgentActivityEvent(
-        parsed.chatId,
-        parsed.threadId,
-        event.action === "read" ? "reading" : "editing",
-        event.action === "read"
-          ? `Reading ${event.path}`
-          : `Editing ${event.path}`,
-        event.path,
-      );
+      if (event.action === "read" || event.action === "write") {
+        appendAgentActivityEvent(
+          parsed.chatId,
+          parsed.threadId,
+          event.action === "read" ? "reading" : "editing",
+          event.action === "read"
+            ? `Reading ${event.path}`
+            : `Editing ${event.path}`,
+          event.path,
+        );
+      }
     })
       .then((unlisten) => {
         if (disposed) {
@@ -1180,6 +1268,10 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     [activeChatId, interruptThreadResponse],
   );
 
+  const hasAgentContinuation = useCallback((content: string) => {
+    return hasForgeAgentContinue(content);
+  }, []);
+
   const togglePinChat = useCallback(
     (id: string) => {
       patchChatById(id, (chat) => ({
@@ -1262,6 +1354,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       contributions: { modelId: string; percentage: number }[],
       workspace: AiWorkspacePayload | undefined,
       retrievedMemoryPrompt: string | null,
+      runOptions?: AiRunOptions,
     ) => {
       let modelOutputs: { modelId: string; content: string }[] = [];
       const threadKey = threadResponseKey(chatId, threadId);
@@ -1286,8 +1379,10 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       ) => {
         if (responseRunRef.current !== runId) return;
         const successful = options?.successful ?? true;
+        const { body: contentWithoutContinue, continuation } =
+          extractForgeAgentContinue(content);
         const { visibleContent: afterTools, patches: toolPatches } =
-          extractAssistantProjectTools(content);
+          extractAssistantProjectTools(contentWithoutContinue);
         if (toolPatches.length > 0) {
           appendAgentActivityEvent(
             chatId,
@@ -1353,7 +1448,10 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           enqueueCommands(commands);
         }
 
-        let finalContent = visibleContent || content;
+        let finalContent = visibleContent || contentWithoutContinue;
+        if (continuation) {
+          finalContent = `${finalContent.trim()}\n[[FORGE_AGENT_CONTINUE ${JSON.stringify(continuation)}]]`;
+        }
         if (gitCommands.length > 0 && agentPermissions.git) {
           appendAgentActivityEvent(
             chatId,
@@ -1393,7 +1491,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
               ? resolvedTargetModelIds[0]
               : undefined;
         const assistantMessage: ChatMessage = {
-          id: crypto.randomUUID(),
+          id: runOptions?.updateMessageId ?? crypto.randomUUID(),
           role: "assistant",
           content: finalContent,
           createdAt: Date.now(),
@@ -1409,17 +1507,35 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
               ? [...workspace.enabledPaths]
               : undefined,
         };
+        if (continuation) {
+          pendingAgentContinuationByMessageRef.current.set(assistantMessage.id, {
+            modelId: resolvedTargetModelIds[0]!,
+            continuationJson: JSON.stringify(continuation),
+          });
+        } else if (runOptions?.updateMessageId) {
+          pendingAgentContinuationByMessageRef.current.delete(
+            runOptions.updateMessageId,
+          );
+        }
         const currentChat = getChatByIdSnapshot(chatId);
-        if (currentChat) {
+        if (currentChat && !runOptions?.updateMessageId) {
           pushUndoSnapshot(chatId, currentChat);
         }
         setChats((prev) => {
-          const next = appendAssistantToThread(
-            prev,
-            chatId,
-            threadId,
-            assistantMessage,
-          );
+          const next = runOptions?.updateMessageId
+            ? replaceAssistantMessageInThread(
+                prev,
+                chatId,
+                threadId,
+                runOptions.updateMessageId,
+                assistantMessage,
+              )
+            : appendAssistantToThread(
+                prev,
+                chatId,
+                threadId,
+                assistantMessage,
+              );
           chatsRef.current = next;
           return next;
         });
@@ -1483,7 +1599,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
 
       if (!isTauri()) {
         await fail(
-          "AI chat requires the desktop app. Run with `npm run tauri:dev` and configure either `FORGE_BACKEND_URL` (recommended) or provider API keys in `.env`.",
+          "AI chat requires the desktop app. Run with `npm run tauri:dev` and set `FORGE_BACKEND_URL` + `FORGE_BACKEND_TOKEN` (Render managed mode).",
         );
         return;
       }
@@ -1521,7 +1637,6 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           "Searching enabled workspace paths",
         );
       }
-      appendAgentActivityEvent(chatId, threadId, "planning", "Planning response");
       addUsage(
         recordSendEstimates(
           history,
@@ -1554,6 +1669,8 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             : null;
         const systemParts = [
           agentSystemPrompt,
+          FORGE_AGENT_CONTEXT,
+          FORGE_ENGINEERING_GUIDANCE,
           permissionsNote ?? "",
           projectDescription
             ? `Project description:\n${projectDescription}`
@@ -1589,6 +1706,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             systemPrompt,
             streamId,
             { chatId, threadId },
+            runOptions?.agentContinuation ?? null,
           );
           modelOutputs = [{ modelId: resolvedTargetModelIds[0], content }];
           await finish(content);
@@ -1635,13 +1753,6 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           phase: "synthesizing",
           speakingModelIndex: -1,
         });
-        appendAgentActivityEvent(
-          chatId,
-          threadId,
-          "planning",
-          "Synthesizing model responses",
-        );
-
         const synthesized = await aiChatSynthesize(
           userContent,
           modelOutputs.map((entry) => ({
@@ -1677,6 +1788,103 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       isAtTokenLimit,
       tokenLimitMessage,
       signInRequiredMessage,
+    ],
+  );
+
+  const continueAgentTask = useCallback(
+    (chatId: string, threadId: string, messageId: string) => {
+      const pending =
+        pendingAgentContinuationByMessageRef.current.get(messageId);
+
+      if (!isSignedIn) {
+        pushToast(
+          signInRequiredMessage ??
+            "Sign in to send messages. Your monthly token allowance is tracked per account.",
+          "warning",
+        );
+        return;
+      }
+
+      if (isAtTokenLimit) {
+        pushToast(
+          tokenLimitMessage ??
+            "You've reached your monthly token limit. Upgrade to Forge Premium or wait until next month.",
+          "warning",
+        );
+        return;
+      }
+
+      const key = threadResponseKey(chatId, threadId);
+      if (inFlightThreadsRef.current.has(key)) return;
+
+      const chat = findChatSnapshot(
+        chatsRef.current,
+        draftChatRef.current,
+        chatId,
+      );
+      if (!chat) return;
+
+      const thread = chat.threads.find((item) => item.id === threadId);
+      const message = thread?.messages.find((item) => item.id === messageId);
+      const { continuation } = extractForgeAgentContinue(message?.content ?? "");
+      const modelId =
+        message?.targetModelIds?.[0] ?? pending?.modelId ?? null;
+      if (!continuation || !modelId) return;
+
+      const history = buildThreadHistory(chat, threadId);
+      const lastUser = [...history]
+        .reverse()
+        .find((turn) => turn.role === "user");
+      const userContent = lastUser?.content ?? "Continue the task.";
+      const workspace = buildThreadWorkspace(chat, threadId);
+      const runId = ++responseRunRef.current;
+      const streamId = makeAiStreamId(chatId, threadId, runId);
+
+      inFlightThreadsRef.current.add(key);
+      activeStreamIdByThreadRef.current.set(key, streamId);
+      clearStreamingActivities(chatId, threadId);
+      clearAgentActivityEvents(chatId, threadId);
+      setResponseLoading({
+        chatId,
+        threadId,
+        targetModelIds: [modelId],
+        phase: "roundtable",
+        speakingModelIndex: 0,
+      });
+
+      const retrievedMemoryPrompt = getRetrievedMemoryPrompt(
+        chat,
+        threadId,
+        userContent,
+      );
+
+      void runAiResponse(
+        runId,
+        chatId,
+        threadId,
+        userContent,
+        history,
+        [modelId],
+        [{ modelId, percentage: 100 }],
+        workspace,
+        retrievedMemoryPrompt,
+        {
+          agentContinuation: JSON.stringify(continuation),
+          updateMessageId: messageId,
+        },
+      );
+    },
+    [
+      appendAgentActivityEvent,
+      clearAgentActivityEvents,
+      clearStreamingActivities,
+      getRetrievedMemoryPrompt,
+      isAtTokenLimit,
+      isSignedIn,
+      pushToast,
+      runAiResponse,
+      signInRequiredMessage,
+      tokenLimitMessage,
     ],
   );
 
@@ -2099,6 +2307,8 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       patchAgentSettings,
       patchWorkspaceSettings,
       forceKillThread,
+      continueAgentTask,
+      hasAgentContinuation,
       togglePinChat,
       deleteChat,
       sendMessage,
@@ -2134,6 +2344,8 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       patchAgentSettings,
       patchWorkspaceSettings,
       forceKillThread,
+      continueAgentTask,
+      hasAgentContinuation,
       togglePinChat,
       deleteChat,
       sendMessage,

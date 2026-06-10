@@ -176,7 +176,7 @@ export const ComposerTextarea = forwardRef<
                 key={index}
                 className={cn(
                   segment.model
-                    ? "rounded-sm bg-[#6366f1]/14 font-medium text-[#c7d2fe]"
+                    ? "rounded-sm bg-accent/14 font-medium text-accent-soft"
                     : "text-foreground/90",
                 )}
               >

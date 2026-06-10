@@ -10,6 +10,7 @@ import {
   type AiModel,
   type ModelOrg,
 } from "@/data/ai-models";
+import { ModelCostIndicator } from "@/components/models/ModelCostIndicator";
 import { ModelLogo } from "@/components/models/ModelLogo";
 import { useChatRoundTable } from "@/hooks/use-chat-round-table";
 import { cn } from "@/lib/utils";
@@ -50,10 +51,18 @@ function FlyoutModelItem({
       ) : null}
       <ModelLogo orgId={model.orgId} size="sm" />
       <span className="min-w-0 flex-1 truncate font-medium">{model.name}</span>
-      <span className="text-muted shrink-0 text-[10px]">{model.role}</span>
+      <span className="shrink-0 text-right">
+        <span className="text-muted block text-[10px] leading-snug">{model.role}</span>
+        <ModelCostIndicator modelId={model.id} />
+      </span>
     </button>
   );
 }
+
+const FLYOUT_HEADER_PX = 52;
+const FLYOUT_DIVIDER_PX = 1;
+const FLYOUT_ITEM_PX = 44;
+const FLYOUT_LIST_PAD_PX = 12;
 
 function OrgFlyout({
   org,
@@ -78,19 +87,25 @@ function OrgFlyout({
   const spaceBelow = window.innerHeight - anchor.top - viewportPad;
   const spaceAbove = anchor.top - viewportPad;
   const openUpward = spaceBelow < 200 && spaceAbove > spaceBelow;
-  const maxHeight = Math.min(
+  const flyoutHeight = Math.min(
     maxFlyoutHeight,
     Math.max(120, openUpward ? spaceAbove : spaceBelow),
   );
+  const maxListHeight =
+    flyoutHeight - FLYOUT_HEADER_PX - FLYOUT_DIVIDER_PX;
+  const naturalListHeight =
+    models.length * FLYOUT_ITEM_PX + FLYOUT_LIST_PAD_PX;
+  const listScrollHeight = Math.min(naturalListHeight, maxListHeight);
 
   return createPortal(
     <section
-      className="border-border bg-panel/95 fixed z-50 flex min-w-[220px] flex-col overflow-hidden rounded-lg border shadow-[0_8px_24px_rgba(2,6,23,0.34)] backdrop-blur-md"
+      className="border-border bg-panel/95 fixed z-50 flex min-w-[220px] flex-col overflow-hidden rounded-lg border shadow-elevated backdrop-blur-md"
       style={{
         top: openUpward ? undefined : anchor.top,
         bottom: openUpward ? window.innerHeight - anchor.top : undefined,
         left: anchor.right + 6,
-        maxHeight,
+        maxHeight: flyoutHeight,
+        height: FLYOUT_HEADER_PX + FLYOUT_DIVIDER_PX + listScrollHeight,
       }}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
@@ -102,7 +117,10 @@ function OrgFlyout({
         </p>
       </header>
       <div className="mx-2 h-px shrink-0 bg-border" aria-hidden />
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea
+        className="w-full shrink-0"
+        style={{ height: listScrollHeight }}
+      >
         <ul className="p-1.5">
           {models.map((model) => (
             <li key={model.id}>

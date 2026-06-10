@@ -108,7 +108,7 @@ const APPEARANCE_SETTING_SEARCH_TERMS: Array<{
 }> = [
   {
     label: "Theme",
-    keywords: "theme dark light system appearance color",
+    keywords: "theme dark dark blue light appearance color",
   },
   {
     label: "Vertical Default",
@@ -302,13 +302,13 @@ function SettingsAppearancePanel() {
         <select
           value={settings.theme}
           onChange={(event) =>
-            setSetting("theme", event.target.value as "system" | "dark" | "light")
+            setSetting("theme", event.target.value as "light" | "dark" | "dark-blue")
           }
           className="border-border-subtle bg-panel-elevated/80 text-foreground focus:border-[#6366f1]/60 h-9 w-full rounded-md border px-2 text-xs outline-none"
         >
-          <option value="system">System</option>
-          <option value="dark">Dark</option>
           <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="dark-blue">Dark Blue</option>
         </select>
       </section>
 

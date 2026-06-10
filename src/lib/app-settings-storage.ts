@@ -2,8 +2,9 @@ import { getModelById } from "@/data/ai-models";
 import { normalizeTargetModelIds } from "@/lib/ai-chat";
 
 export const APP_SETTINGS_STORAGE_KEY = "prompt:app-settings:v1";
+export const THEME_LEGACY_MIGRATION_KEY = "prompt:theme-legacy-migrated:v1";
 
-export type AppTheme = "system" | "dark" | "light";
+export type AppTheme = "light" | "dark" | "dark-blue";
 
 export interface AppSettings {
   defaultModel: string;
@@ -18,7 +19,7 @@ export interface AppSettings {
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultModel: "gpt4o",
-  theme: "dark",
+  theme: "dark-blue",
   systemNotifications: true,
   automationNotifications: true,
   warningNotifications: false,
@@ -31,6 +32,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function normalizeTheme(raw: unknown): AppTheme {
+  if (raw === "light" || raw === "dark" || raw === "dark-blue") {
+    return raw;
+  }
+  if (raw === "system") {
+    return "dark-blue";
+  }
+  return DEFAULT_APP_SETTINGS.theme;
+}
+
+function applyLegacyThemeMigration(settings: AppSettings): AppSettings {
+  try {
+    if (localStorage.getItem(THEME_LEGACY_MIGRATION_KEY)) {
+      return settings;
+    }
+    localStorage.setItem(THEME_LEGACY_MIGRATION_KEY, "1");
+    if (settings.theme !== "dark") {
+      return settings;
+    }
+    const migrated = { ...settings, theme: "dark-blue" as AppTheme };
+    writeAppSettings(migrated);
+    return migrated;
+  } catch {
+    return settings;
+  }
+}
+
 export function normalizeAppSettings(raw: unknown): AppSettings {
   if (!isRecord(raw)) return DEFAULT_APP_SETTINGS;
   const defaultModel =
@@ -39,11 +67,7 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
         normalizeTargetModelIds([raw.defaultModel])[0] ??
         DEFAULT_APP_SETTINGS.defaultModel)
       : DEFAULT_APP_SETTINGS.defaultModel;
-  const theme = raw.theme;
-  const normalizedTheme: AppTheme =
-    theme === "system" || theme === "dark" || theme === "light"
-      ? theme
-      : DEFAULT_APP_SETTINGS.theme;
+  const normalizedTheme = normalizeTheme(raw.theme);
   return {
     defaultModel,
     theme: normalizedTheme,
@@ -78,7 +102,8 @@ export function readAppSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(APP_SETTINGS_STORAGE_KEY);
     if (!raw) return DEFAULT_APP_SETTINGS;
-    return normalizeAppSettings(JSON.parse(raw));
+    const settings = normalizeAppSettings(JSON.parse(raw));
+    return applyLegacyThemeMigration(settings);
   } catch {
     return DEFAULT_APP_SETTINGS;
   }

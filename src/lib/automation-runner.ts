@@ -1,4 +1,8 @@
 import { aiChatComplete } from "@/lib/ai-chat";
+import {
+  FORGE_AGENT_CONTEXT,
+  FORGE_ENGINEERING_GUIDANCE,
+} from "@/lib/agent-system-guidance";
 import { automationDisplayName } from "@/lib/automation-match";
 import { notifyAutomationComplete } from "@/lib/automation-notifications";
 import {
@@ -28,8 +32,12 @@ export async function runAutomationTask(
   const systemPrompt = [
     "You are running as an automated background task in FORGE.",
     `Automation: ${displayName}`,
-    "Complete the requested task thoroughly and concisely.",
-  ].join("\n");
+    FORGE_AGENT_CONTEXT,
+    FORGE_ENGINEERING_GUIDANCE,
+    "Complete the requested task thoroughly and autonomously using available file and git tools.",
+    "Do not ask questions or request confirmation—the automation owner already approved this run.",
+    "Investigate the codebase as needed, apply changes directly, and finish the work in one pass.",
+  ].join("\n\n");
 
   try {
     await aiChatComplete(

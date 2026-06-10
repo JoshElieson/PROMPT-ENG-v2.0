@@ -242,7 +242,7 @@ export function TerminalTabPane({
     >
       <div
         ref={hostRef}
-        className="h-full w-full overflow-hidden bg-[#1a1a1a] [&_.xterm]:h-full [&_.xterm]:w-full [&_.xterm]:!bg-[#1a1a1a] [&_.xterm-screen]:!bg-[#1a1a1a] [&_.xterm-viewport]:!bg-[#1a1a1a]"
+        className="h-full w-full overflow-hidden bg-terminal [&_.xterm]:h-full [&_.xterm]:w-full [&_.xterm]:!bg-terminal [&_.xterm-screen]:!bg-terminal [&_.xterm-viewport]:!bg-terminal"
       />
     </div>
   );

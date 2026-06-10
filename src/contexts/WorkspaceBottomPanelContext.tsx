@@ -721,7 +721,7 @@ export function WorkspaceBottomPanelTabs({
             }}
           >
             {dropHint?.targetTabId === tab.id && dropHint.side === "before" && (
-              <span className="pointer-events-none absolute inset-y-0 -left-0.5 w-0.5 rounded-full bg-[#818cf8]" />
+              <span className="pointer-events-none absolute inset-y-0 -left-0.5 w-0.5 rounded-full bg-accent-bright" />
             )}
             <button
               type="button"
@@ -745,7 +745,7 @@ export function WorkspaceBottomPanelTabs({
               <X className="h-3 w-3" />
             </button>
             {dropHint?.targetTabId === tab.id && dropHint.side === "after" && (
-              <span className="pointer-events-none absolute inset-y-0 -right-0.5 w-0.5 rounded-full bg-[#818cf8]" />
+              <span className="pointer-events-none absolute inset-y-0 -right-0.5 w-0.5 rounded-full bg-accent-bright" />
             )}
           </div>
         );

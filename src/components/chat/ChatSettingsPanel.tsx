@@ -1,4 +1,4 @@
-import { ChevronDown, Info } from "lucide-react";
+import { Check, ChevronDown, Info } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { FileContextEditor } from "@/components/chat/FileContextEditor";
 import { ProjectToolsEditor } from "@/components/chat/ProjectToolsEditor";
@@ -170,7 +170,7 @@ export function ChatSettingsPanel({ chatId, threadId }: ChatSettingsPanelProps) 
   return (
     <section className="min-h-0 space-y-3 overflow-y-auto p-3">
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold tracking-wide text-[#a5b4fc] uppercase">
+        <p className="text-accent-bright text-[11px] font-semibold tracking-wide uppercase">
           Agent
         </p>
         <label className="block space-y-1">
@@ -205,58 +205,80 @@ export function ChatSettingsPanel({ chatId, threadId }: ChatSettingsPanelProps) 
             <button
               type="button"
               onClick={allowAllPermissions}
-              className="shrink-0 text-[10px] font-medium text-[#6366f1] transition-colors hover:text-[#818cf8]"
+              className="text-accent hover:text-accent-bright shrink-0 text-[10px] font-medium transition-colors"
             >
               Allow all
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 rounded-md border border-border/45 bg-panel-elevated/35 p-2">
-            {AGENT_PERMISSION_OPTIONS.map((option) => (
-              <div
-                key={option.key}
-                className="flex min-w-0 items-center justify-between gap-1"
-              >
-                <div className="flex min-w-0 items-center gap-0.5">
-                  <span className="truncate text-xs text-foreground/90">
-                    {option.label}
-                  </span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="text-muted-foreground/80 hover:text-muted-foreground flex h-4 w-4 shrink-0 items-center justify-center rounded-sm transition-colors"
-                        aria-label={`About ${option.label}`}
-                      >
-                        <Info className="h-3 w-3" aria-hidden />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      className="max-w-[13rem] text-[11px] leading-snug"
-                    >
-                      {option.description}
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <Switch
-                  checked={agentPermissions[option.key]}
-                  onCheckedChange={(checked) => {
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1 rounded-md border border-border/45 bg-panel-elevated/35 p-1.5">
+            {AGENT_PERMISSION_OPTIONS.map((option) => {
+              const checked = agentPermissions[option.key];
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  aria-label={option.label}
+                  onClick={() => {
                     const next = {
                       ...agentPermissions,
-                      [option.key]: checked,
+                      [option.key]: !checked,
                     };
                     setAgentPermissions(next);
                     persistAgentPermissions(next);
                   }}
-                />
-              </div>
-            ))}
+                  className="flex min-w-0 cursor-pointer items-center justify-between gap-1 rounded-md border border-border/40 bg-panel px-1.5 py-1 text-left outline-none transition-colors hover:bg-hover-surface-subtle focus-visible:outline-none"
+                >
+                  <div className="flex min-w-0 items-center gap-0.5">
+                    <span className="truncate text-[11px] font-medium text-foreground/90">
+                      {option.label}
+                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="text-muted-foreground/80 hover:text-muted-foreground flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm transition-colors"
+                          aria-label={`About ${option.label}`}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.stopPropagation();
+                            }
+                          }}
+                        >
+                          <Info className="h-2.5 w-2.5" aria-hidden />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="max-w-[13rem] text-[11px] leading-snug"
+                      >
+                        {option.description}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  {checked ? (
+                    <span
+                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded bg-emerald-500/15"
+                      aria-hidden
+                    >
+                      <Check
+                        className="h-3 w-3 text-emerald-600 dark:text-emerald-400"
+                        strokeWidth={2.5}
+                      />
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
 
       <div className="space-y-2 border-t border-border/45 pt-2">
-        <p className="text-[11px] font-semibold tracking-wide text-[#a5b4fc] uppercase">
+        <p className="text-accent-bright text-[11px] font-semibold tracking-wide uppercase">
           Project
         </p>
         <label className="block space-y-1">
@@ -300,7 +322,7 @@ export function ChatSettingsPanel({ chatId, threadId }: ChatSettingsPanelProps) 
       </div>
 
       <div className="space-y-2 border-t border-border/45 pt-2">
-        <p className="text-[11px] font-semibold tracking-wide text-[#a5b4fc] uppercase">
+        <p className="text-accent-bright text-[11px] font-semibold tracking-wide uppercase">
           Chat Behavior
         </p>
         <div className="flex items-center justify-between gap-2 rounded-lg border border-border/45 bg-panel-elevated/35 px-2.5 py-2">
@@ -329,7 +351,7 @@ export function ChatSettingsPanel({ chatId, threadId }: ChatSettingsPanelProps) 
                   type="button"
                   className={cn(
                     "flex h-7 w-40 shrink-0 items-center justify-between gap-1.5 rounded-lg border border-border/60",
-                    "bg-panel-elevated/80 px-2 text-[11px] text-foreground shadow-[0_4px_14px_rgba(2,6,23,0.18)]",
+                    "bg-panel-elevated/80 px-2 text-[11px] text-foreground shadow-elevated-sm",
                     "outline-none transition-colors hover:border-border-subtle",
                     "focus-visible:border-[#6366f1]/60 focus-visible:ring-1 focus-visible:ring-[#6366f1]/25",
                     "data-[state=open]:border-[#6366f1]/50 data-[state=open]:ring-1 data-[state=open]:ring-[#6366f1]/20",

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Square, Undo2 } from "lucide-react";
+import { Square, Undo2, Play } from "lucide-react";
 import type { ChatMessage } from "@/types/chat";
 import { getModelById } from "@/data/ai-models";
 import { AttachmentChips } from "@/components/chat/AttachmentChips";
 import { CodeSnippetBlock } from "@/components/chat/CodeSnippetBlock";
 import { Button } from "@/components/ui/button";
 import { extractForgeActivities, type ForgeActivity } from "@/lib/forge-activity";
+import { extractForgeAgentContinue } from "@/lib/forge-agent-continue";
 import { parseMessageContent } from "@/lib/parse-message-content";
 import {
   isPathWithinPrefix,
@@ -349,8 +350,8 @@ function MessageContent({
   createdAt: number;
   toolContextRoots?: string[];
 }) {
-  const { body, activities } = extractForgeActivities(content);
-  const textBody = body;
+  const { body: afterAgentContinue, activities } = extractForgeActivities(content);
+  const { body: textBody } = extractForgeAgentContinue(afterAgentContinue);
   const segments = parseMessageContent(textBody);
   const hasCode = segments.some((s) => s.type === "code");
   const writeActivities = activities.filter(
@@ -469,8 +470,10 @@ interface MessageBubbleProps {
   fullWidth?: boolean;
   showStopAction?: boolean;
   showUndoAction?: boolean;
+  showContinueAction?: boolean;
   onStop?: () => void;
   onUndo?: () => void;
+  onContinue?: () => void;
   disableActions?: boolean;
 }
 
@@ -479,8 +482,10 @@ export function MessageBubble({
   fullWidth = false,
   showStopAction = false,
   showUndoAction = false,
+  showContinueAction = false,
   onStop,
   onUndo,
+  onContinue,
   disableActions = false,
 }: MessageBubbleProps) {
   const isSent = message.role === "user";
@@ -498,7 +503,7 @@ export function MessageBubble({
         className={cn(
           "min-w-0",
           isSent
-            ? "flex w-full items-start gap-2 rounded-2xl border border-[#6366f1]/26 bg-[#2b3150]/55 px-4 py-3 shadow-[0_10px_20px_rgba(2,6,23,0.3)]"
+            ? "flex w-full items-start gap-2 rounded-2xl border border-message-sent bg-message-sent px-4 py-3 shadow-message-sent"
             : fullWidth
               ? "w-full"
               : "w-full max-w-2xl",
@@ -550,6 +555,21 @@ export function MessageBubble({
           </div>
         ) : null}
       </section>
+      {!isSent && showContinueAction ? (
+        <div className="mt-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="h-8 gap-1.5 rounded-lg px-3 text-xs"
+            disabled={disableActions}
+            onClick={onContinue}
+          >
+            <Play className="h-3.5 w-3.5" />
+            Continue
+          </Button>
+        </div>
+      ) : null}
     </article>
   );
 }

@@ -129,14 +129,16 @@ export function extractAssistantUiCommands(
 }
 
 export const AI_UI_COMMAND_SYSTEM_GUIDANCE = [
-  "You may emit hidden UI commands to guide users inside the app.",
+  "In-app UI guidance (FORGE navigation):",
+  "When the user asks where something is, how to open a pane, or how to use a FORGE feature, emit UI commands to show them—do not only describe steps in prose.",
   "Only emit commands inside blocks formatted exactly as:",
   "[[FORGE_UI_COMMANDS]",
   '[{"type":"OPEN_SETTINGS","tab":"models"}]',
   "[[/FORGE_UI_COMMANDS]]",
   "Available command types: OPEN_SETTINGS, HIGHLIGHT_ELEMENT, HIGHLIGHT_TEXT, CHANGE_SETTING, CLEAR_HIGHLIGHTS.",
+  "For OPEN_SETTINGS, HIGHLIGHT_ELEMENT, and HIGHLIGHT_TEXT: emit when the user asks—no separate permission needed.",
+  "For CHANGE_SETTING: requiresConfirmation must be true; ask once before emitting a persistent or destructive app setting change.",
   "Never claim a setting was changed unless the app confirms success.",
-  "For persistent or destructive actions (CHANGE_SETTING, file access, permissions, deletes), ask for confirmation first.",
-  "Prefer guiding first (open/highlight), then offer to perform changes.",
+  "Do not emit UI commands for code, file, or git work—use file and git tools for that instead.",
 ].join("\n");
 

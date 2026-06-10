@@ -331,7 +331,7 @@ export function BrowserTabPane({
       data-focused={isFocused || undefined}
       className={cn(
         "absolute inset-0 flex flex-col",
-        !useNative && "bg-[#1a1a1a]",
+        !useNative && "bg-terminal",
       )}
     >
       <div className="border-border-subtle bg-panel flex h-8 shrink-0 items-center gap-1 border-b px-1.5">
@@ -384,7 +384,7 @@ export function BrowserTabPane({
                 e.stopPropagation();
               }
             }}
-            className="border-border-subtle text-foreground focus:ring-accent/50 min-w-0 flex-1 rounded-md border bg-zinc-800 px-2 py-0.5 text-xs outline-none focus:ring-1"
+            className="border-border-subtle text-foreground focus:ring-accent/50 bg-panel-elevated min-w-0 flex-1 rounded-md border px-2 py-0.5 text-xs outline-none focus:ring-1"
             aria-label="Address bar"
             spellCheck={false}
           />
@@ -414,15 +414,15 @@ export function BrowserTabPane({
         ref={hostRef}
         className={cn(
           "relative min-h-0 flex-1",
-          useNative ? "bg-transparent" : "bg-[#202020]",
+          useNative ? "bg-transparent" : "bg-terminal",
         )}
       >
         {loadError && (
-          <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 border-b border-amber-900/50 bg-amber-950/80 px-3 py-1.5 text-xs text-amber-100">
+          <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/80 dark:text-amber-100">
             <span className="min-w-0 truncate">{loadError}</span>
             <button
               type="button"
-              className="shrink-0 underline hover:text-white"
+              className="hover:text-foreground shrink-0 underline"
               onClick={() => void openExternal(pageUrl)}
             >
               Open externally

@@ -17,6 +17,7 @@ import type { AgentActivityEvent, AgentActivityType } from "@/types/agent-activi
 interface AIActivityStreamProps {
   events: AgentActivityEvent[];
   className?: string;
+  expanded?: boolean;
 }
 
 const TYPE_META: Record<
@@ -26,52 +27,52 @@ const TYPE_META: Record<
   analyzing: {
     label: "Analyzing",
     icon: Sparkles,
-    className: "text-indigo-300",
+    className: "text-indigo-600 dark:text-indigo-300",
   },
   searching: {
     label: "Searching",
     icon: Search,
-    className: "text-sky-300",
+    className: "text-sky-600 dark:text-sky-300",
   },
   reading: {
     label: "Reading",
     icon: FileText,
-    className: "text-slate-300",
+    className: "text-slate-600 dark:text-slate-300",
   },
   planning: {
     label: "Planning",
     icon: FileSearch,
-    className: "text-violet-300",
+    className: "text-violet-600 dark:text-violet-300",
   },
   editing: {
     label: "Editing",
     icon: FilePenLine,
-    className: "text-amber-300",
+    className: "text-amber-600 dark:text-amber-300",
   },
   creating: {
     label: "Creating",
     icon: CircleDashed,
-    className: "text-emerald-300",
+    className: "text-emerald-600 dark:text-emerald-300",
   },
   deleting: {
     label: "Deleting",
     icon: Trash2,
-    className: "text-rose-300",
+    className: "text-rose-600 dark:text-rose-300",
   },
   checking: {
     label: "Checking",
     icon: ShieldCheck,
-    className: "text-cyan-300",
+    className: "text-cyan-600 dark:text-cyan-300",
   },
   error: {
     label: "Error",
     icon: TriangleAlert,
-    className: "text-rose-300",
+    className: "text-rose-600 dark:text-rose-300",
   },
   done: {
     label: "Done",
     icon: CheckCircle2,
-    className: "text-emerald-300",
+    className: "text-emerald-600 dark:text-emerald-300",
   },
 };
 
@@ -83,7 +84,11 @@ function formatTimestamp(timestamp: number): string {
   });
 }
 
-export function AIActivityStream({ events, className }: AIActivityStreamProps) {
+export function AIActivityStream({
+  events,
+  className,
+  expanded = false,
+}: AIActivityStreamProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const hasEvents = events.length > 0;
 
@@ -120,7 +125,10 @@ export function AIActivityStream({ events, className }: AIActivityStreamProps) {
 
       <div
         ref={listRef}
-        className="max-h-44 space-y-1.5 overflow-y-auto pr-1 [scrollbar-gutter:stable]"
+        className={cn(
+          "space-y-1.5 overflow-y-auto pr-1 [scrollbar-gutter:stable]",
+          expanded ? "max-h-72" : "max-h-44",
+        )}
       >
         {sortedEvents.map((event) => {
           const meta = TYPE_META[event.type];

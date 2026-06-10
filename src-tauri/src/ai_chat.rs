@@ -1,3 +1,8 @@
+use crate::agent_context::{
+    anthropic_cached_system, anthropic_cached_tools, cap_tool_output,
+    compact_anthropic_messages, compact_gemini_contents, compact_openai_messages,
+    continuation_preserve_prefix,
+};
 use crate::ai_config::{
     api_key, base_url, has_managed_backend, resolve_api_model, synthesis_provider_for_models,
     validate_base_url, Provider,
@@ -6,7 +11,8 @@ use crate::xai_models::{
     default_account_chat_model, invalidate_cache, is_model_not_found_error, resolve_runtime_model,
 };
 use crate::ai_workspace::{
-    tool_clear_directory, tool_list_directory, tool_read_file, tool_remove_path, tool_write_file,
+    tool_clear_directory, tool_list_directory, tool_read_file, tool_remove_path,
+    tool_search_replace, tool_write_file,
     AiWorkspace, ClearDirectoryResult, RemovePathResult, WorkspacePolicy, WriteFileResult,
 };
 use crate::git::{
@@ -15,10 +21,113 @@ use crate::git::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
 use tauri::Emitter;
 
 const FORGE_USER_AGENT: &str = "FORGE/2.0 (Tauri)";
-const MAX_TOOL_ROUNDS: u32 = 14;
+/// Max tool rounds per agent run (or per Continue resume).
+const MAX_TOOL_ROUNDS: u32 = 50;
+/// Start watching for repeated tool calls after this round.
+const LOOP_DETECTION_START_ROUND: u32 = 20;
+/// Stop when the same tool signature repeats this many times.
+const LOOP_REPEAT_THRESHOLD: u32 = 3;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentContinuationState {
+    provider: String,
+    api_model: String,
+    round: u32,
+    messages: Vec<serde_json::Value>,
+}
+
+struct LoopTracker {
+    round: u32,
+    signature_counts: HashMap<String, u32>,
+}
+
+impl LoopTracker {
+    fn new(start_round: u32) -> Self {
+        Self {
+            round: start_round,
+            signature_counts: HashMap::new(),
+        }
+    }
+
+    fn advance(&mut self) -> u32 {
+        self.round += 1;
+        self.round
+    }
+
+    fn round(&self) -> u32 {
+        self.round
+    }
+
+    fn check_stuck(&mut self, signatures: &[String]) -> Option<&'static str> {
+        if self.round < LOOP_DETECTION_START_ROUND {
+            return None;
+        }
+        for signature in signatures {
+            let count = self.signature_counts.entry(signature.clone()).or_insert(0);
+            *count += 1;
+            if *count >= LOOP_REPEAT_THRESHOLD {
+                return Some("Repeated the same tool action too many times");
+            }
+        }
+        None
+    }
+}
+
+fn tool_signature(name: &str, args: &str) -> String {
+    let value: serde_json::Value = serde_json::from_str(args).unwrap_or(json!({}));
+    let key = value
+        .get("path")
+        .and_then(|entry| entry.as_str())
+        .or_else(|| value.get("message").and_then(|entry| entry.as_str()))
+        .or_else(|| value.get("url").and_then(|entry| entry.as_str()))
+        .unwrap_or("");
+    format!("{name}:{key}")
+}
+
+fn tool_signatures_from_json_args(calls: &[(String, String)]) -> Vec<String> {
+    calls
+        .iter()
+        .map(|(name, args)| tool_signature(name, args))
+        .collect()
+}
+
+fn parse_agent_continuation(raw: Option<String>) -> Result<Option<AgentContinuationState>, String> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    serde_json::from_str(trimmed)
+        .map(Some)
+        .map_err(|e| format!("Invalid agent continuation payload: {e}"))
+}
+
+/// Strip embedded agent continuation payloads from chat history so they are not
+/// re-billed on the next user message.
+fn sanitize_chat_history_content(content: &str) -> String {
+    const MARKER: &str = "[[FORGE_AGENT_CONTINUE";
+    if let Some(index) = content.rfind(MARKER) {
+        return content[..index].trim().to_string();
+    }
+    content.trim().to_string()
+}
+
+fn provider_agent_key(provider: Provider) -> &'static str {
+    match provider {
+        Provider::OpenAi => "openai",
+        Provider::Anthropic => "anthropic",
+        Provider::Google => "google",
+        Provider::DeepSeek => "deepseek",
+        Provider::Xai => "xai",
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,7 +168,7 @@ fn provider_http_error(provider: Provider, url: &str, err: reqwest::Error) -> St
         let hint = if has_managed_backend() {
             "Set FORGE_BACKEND_URL to your full Render URL (https://your-app.onrender.com) and FORGE_BACKEND_TOKEN to match BACKEND_CLIENT_TOKEN, then rebuild with npm run release:beta."
         } else {
-            "Check API keys and base URLs in .env - remove quotes and line breaks."
+            "Check provider API keys and base URLs — remove quotes and line breaks."
         };
         return provider_error(
             provider,
@@ -80,6 +189,58 @@ fn provider_http_error(provider: Provider, url: &str, err: reqwest::Error) -> St
         );
     }
     provider_error(provider, "request failed", &err.to_string())
+}
+
+fn gemini_generate_url(base: &str, api_model: &str, key: &str) -> String {
+    if has_managed_backend() {
+        format!(
+            "{}/models/{}:generateContent",
+            base.trim_end_matches('/'),
+            api_model
+        )
+    } else {
+        format!(
+            "{}/models/{}:generateContent?key={}",
+            base.trim_end_matches('/'),
+            api_model,
+            key
+        )
+    }
+}
+
+fn anthropic_post(client: &reqwest::Client, url: &str, key: &str) -> reqwest::RequestBuilder {
+    anthropic_post_with_cache(client, url, key, false)
+}
+
+fn anthropic_post_with_cache(
+    client: &reqwest::Client,
+    url: &str,
+    key: &str,
+    prompt_cache: bool,
+) -> reqwest::RequestBuilder {
+    let builder = client
+        .post(url)
+        .header("anthropic-version", "2023-06-01")
+        .header("Content-Type", "application/json");
+    let builder = if prompt_cache {
+        builder.header("anthropic-beta", "prompt-caching-2024-07-31")
+    } else {
+        builder
+    };
+    if has_managed_backend() {
+        builder.header("Authorization", format!("Bearer {key}"))
+    } else {
+        builder.header("x-api-key", key)
+    }
+}
+
+fn gemini_post(client: &reqwest::Client, url: &str, key: &str) -> reqwest::RequestBuilder {
+    let builder = client.post(url).header("Content-Type", "application/json");
+    if has_managed_backend() {
+        builder.header("Authorization", format!("Bearer {key}"))
+    } else {
+        builder
+    }
 }
 
 fn extract_error_detail(data: &serde_json::Value, raw: &str) -> String {
@@ -105,10 +266,10 @@ fn extract_error_detail(data: &serde_json::Value, raw: &str) -> String {
 
 const GIT_TOOLS_GUIDANCE: &str = "\n\
 Git/source control:\n\
-- You have git tools for the active repository. Use them when the user asks to commit, push, pull, fetch, check status, init, clone, or discard changes.\n\
-- Do not tell the user to run terminal git commands manually when you can call a git tool instead.\n\
+- You have git tools for the active repository. When the user asks to commit, push, pull, fetch, check status, init, clone, or discard changes, call the matching tool immediately—do not ask permission or tell them to run commands manually.\n\
 - For commit, call git_commit with a clear message. Use stageAll=true when the user wants every change committed.\n\
-- For push/pull/fetch, call the matching git tool and report the tool result.\n";
+- For push/pull/fetch, call the matching git tool and report the tool result.\n\
+- Only ask before destructive git operations (restore/discard) when the paths were not specified or the scope is unclear.\n";
 
 fn append_file_tools_openai(tools: &mut Vec<serde_json::Value>, policy: &WorkspacePolicy) {
     if !policy.has_file_access() {
@@ -150,7 +311,7 @@ fn append_file_tools_openai(tools: &mut Vec<serde_json::Value>, policy: &Workspa
                 "type": "function",
                 "function": {
                     "name": "write_file",
-                    "description": "Create or overwrite a UTF-8 text file under the user's AI-enabled paths; parent dirs are created. Use to apply edits or add files the user asked for—read existing files first when merging or partial edits matter.",
+                    "description": "Create or overwrite a UTF-8 text file under the user's AI-enabled paths; parent dirs are created. Requires the full file body. For edits to large existing files, prefer search_replace—truncated write_file payloads are rejected.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -158,6 +319,23 @@ fn append_file_tools_openai(tools: &mut Vec<serde_json::Value>, policy: &Workspa
                             "content": { "type": "string", "description": "Full new file contents" }
                         },
                         "required": ["path", "content"]
+                    }
+                }
+            }),
+            json!({
+                "type": "function",
+                "function": {
+                    "name": "search_replace",
+                    "description": "Replace one exact substring in an existing UTF-8 text file. Prefer this for partial edits to large files. old_string must match exactly (including whitespace). When replace_all is false, old_string must appear exactly once.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Absolute file path" },
+                            "old_string": { "type": "string", "description": "Exact text to find" },
+                            "new_string": { "type": "string", "description": "Replacement text" },
+                            "replace_all": { "type": "boolean", "description": "Replace every occurrence (default false)" }
+                        },
+                        "required": ["path", "old_string", "new_string"]
                     }
                 }
             }),
@@ -298,48 +476,58 @@ fn tools_schema_openai(policy: &WorkspacePolicy) -> Vec<serde_json::Value> {
 const CODE_FORMATTING_GUIDANCE: &str = "\n\
 Formatting:\n\
 - When sharing code, commands, or config snippets, use fenced markdown code blocks with a language tag (e.g. ```python).\n\
-- Put a short plain-language intro before or after the block when helpful; keep the code itself inside the fence.\n";
+- Put a short plain-language intro before or after the block when helpful; keep the code itself inside the fence.\n\
+- When you applied edits via tools, cite changed files by path in your summary—do not paste entire files unless the user asked to see them.\n";
 
 const RESPONSE_STYLE_GUIDANCE: &str = "\n\
 Response style contract:\n\
-- Format responses in a modern, highly readable developer-tool UI style.\n\
-- Use clear section headers frequently; prefer structured layouts over plain prose.\n\
-- Keep spacing clean and breathable, avoid large walls of text, and keep paragraphs short (1-3 lines).\n\
-- Use bullet points whenever information can be grouped or scanned.\n\
-- Use strong visual hierarchy: title, section headers, bullets, sub-bullets, and small notes where useful.\n\
-- Highlight important keywords, warnings, filenames, commands, and core concepts with markdown bold.\n\
-- Use inline code formatting for technical terms, APIs, functions, variables, file paths, and commands.\n\
-- Convert comparisons into compact markdown tables when useful.\n\
-- For longer answers, start with concise key takeaways.\n\
-- Keep tone technical, modern, minimal, and polished; reduce filler words.\n\
+- After completing tool/file work, lead with a concise summary of what you did; avoid long preambles or proposal-style plans.\n\
+- Use structured sections (headers, bullets) for explanations, architecture, or comparisons—not as a substitute for acting.\n\
+- Keep spacing clean and breathable; avoid walls of text; keep paragraphs short (1-3 lines).\n\
+- Highlight important filenames, commands, warnings, and decisions with markdown bold.\n\
+- Use inline code for technical terms, APIs, functions, variables, file paths, and commands.\n\
+- For longer explanatory answers, start with concise key takeaways.\n\
+- Keep tone technical, calm, and direct; reduce filler and hedging.\n\
 \n\
 Technical depth contract:\n\
 - Assume the user is technically literate unless they explicitly ask for simplification.\n\
-- Prefer precise engineering terminology over consumer wording.\n\
-- Explain architecture, trade-offs, implementation details, and runtime behavior when relevant.\n\
-- Include scalability, performance, maintainability, memory, latency, and developer experience implications when useful.\n\
-- Reference concrete engineering concepts naturally (APIs, state management, concurrency, async flows, caching, indexing, retrieval pipelines, data structures, event systems, orchestration, rendering pipelines, distributed systems, dependency graphs, serialization, networking).\n\
-- Favor implementation-oriented guidance, production patterns, and explicit alternatives.\n\
-- Call out edge cases, constraints, and failure modes when materially relevant.\n\
-- Do not oversimplify or provide generic best-practices without context.\n";
+- Prefer precise engineering terminology and concrete implementation detail over generic advice.\n\
+- Explain trade-offs, edge cases, and failure modes when they materially affect the task.\n\
+- Do not oversimplify or list best-practices without tying them to this project's context.\n";
+
+const FORGE_ENGINEERING_GUIDANCE: &str = "Forge engineering standards:\n\
+- Inspect existing code and match project conventions before writing.\n\
+- Make the smallest correct change; no drive-by refactors or unrelated edits.\n\
+- Preserve behavior unless the user explicitly requested a change.\n\
+- Reuse existing modules and patterns instead of duplicating logic.\n\
+- Read before inventing: use list_directory and read_file when the answer depends on the codebase.\n";
+
+const AGENT_EXECUTION_GUIDANCE: &str = "Execution policy (act, don't ask):\n\
+- When the user requests changes, fixes, improvements, or new files, perform the work in this same turn with your tools. Read what you need, then make the edits immediately.\n\
+- Never end your turn with only observations, a list of suggested improvements, or an implementation plan followed by \"Would you like me to proceed?\". The user's request IS the approval to proceed.\n\
+- Do not ask permission to start, continue, or finish work the user already asked for. Asking \"should I make these changes?\" when the user requested changes is a failure.\n\
+- Only stop to ask a question when the request is genuinely ambiguous in a way that materially changes the outcome, or when an action is destructive beyond what was asked (e.g. deleting files the user did not mention).\n\
+- Respect explicit scope limits the user states (e.g. \"don't touch desktop styles\") while still completing the in-scope work fully.\n\
+- After acting, summarize what you changed and why—as a report of completed work, not a proposal.";
 
 const UI_PANE_GUIDANCE: &str = "\n\
 UI pane controls:\n\
-- If the user explicitly asks you to open or close a UI pane, include one directive token on its own line using this exact format: [[FORGE_PANE action=\"open|close\" target=\"terminal|websites|models|explorer|agent-cart\"]]\n\
+- When the user asks to open or close a UI pane (terminal, browser, models, explorer, agent cart), emit the directive immediately on its own line: [[FORGE_PANE action=\"open|close\" target=\"terminal|websites|models|explorer|agent-cart\"]]\n\
 - You may include multiple directive lines if the user asked for multiple pane changes.\n\
 - Keep your normal conversational response in plain text around the directive lines.\n\
 - Do not output pane directives unless the user asked to change panes.\n";
 
 const DEFAULT_CHAT_SYSTEM: &str =
-    "You are a helpful assistant in a multi-model AI workspace.";
+    "You are an agent in FORGE, an AI-native multi-agent engineering workspace. \
+Users expect precise, implementation-oriented help—not generic advice or permission-seeking plans.";
 
 fn chat_system_prompt(user: Option<&str>) -> String {
     match user.map(str::trim).filter(|s| !s.is_empty()) {
         Some(custom) => format!(
-            "{custom}{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}"
+            "{custom}\n\n{FORGE_ENGINEERING_GUIDANCE}{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}"
         ),
         None => format!(
-            "{DEFAULT_CHAT_SYSTEM}{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}"
+            "{DEFAULT_CHAT_SYSTEM}\n\n{FORGE_ENGINEERING_GUIDANCE}{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}"
         ),
     }
 }
@@ -357,11 +545,12 @@ fn workspace_system_prompt(policy: &WorkspacePolicy) -> String {
     if policy.has_file_access() {
         if policy.allows_write() {
             sections.push(format!(
-                "The user enabled the following locations for AI file access. You have tools read_file, write_file, list_directory, remove_path, and clear_directory to work on their real project on disk.\n\
+                "The user enabled the following locations for AI file access. You have tools read_file, write_file, search_replace, list_directory, remove_path, and clear_directory to work on their real project on disk.\n\
 \n\
 How to work:\n\
 - Whenever the request depends on this codebase (behavior, errors, structure, config, or \"what does X do\"), use list_directory and/or read_file early instead of guessing.\n\
-- When the user wants changes, fixes, refactors, or new files, carry them out with write_file after reading any files you need to change safely.\n\
+- When the user wants changes, fixes, refactors, or new files, carry them out with write_file or search_replace in this same turn after reading what you need.\n\
+- For partial edits to existing files—especially large ones like stylesheets—use search_replace instead of write_file.\n\
 - When the user asks to delete files, remove folders, or empty/clear a directory, use remove_path or clear_directory—do not claim deletion without calling a tool.\n\
 - To empty a folder but keep the folder itself, call clear_directory with that folder's absolute path (works even when only files inside are AI-enabled).\n\
 - remove_path deletes any file, including individually AI-enabled files. It deletes subfolders recursively. Only an AI-enabled folder root itself must be cleared with clear_directory, not remove_path.\n\
@@ -370,18 +559,20 @@ How to work:\n\
 Rules:\n\
 - Only access paths under these AI-enabled locations (absolute paths):\n{}\n\
 - Prefer read_file or list_directory before overwriting files.\n\
-- write_file replaces the entire file contents; it does not delete files.\n\
+- write_file replaces the entire file contents; truncated payloads to large files are refused—use search_replace or include the complete file.\n\
 - remove_path cannot delete an AI-enabled folder root in one step—use clear_directory on that folder instead.\n\
 - Use absolute paths exactly as they appear on disk.",
                 policy.roots_summary()
             ));
+            sections.push(AGENT_EXECUTION_GUIDANCE.to_string());
         } else {
             sections.push(format!(
                 "The user enabled read-only file access for the following locations. You have tools read_file and list_directory only—do not modify or delete files.\n\
 \n\
 How to work:\n\
 - Whenever the request depends on this codebase (behavior, errors, structure, config, or \"what does X do\"), use list_directory and/or read_file early instead of guessing.\n\
-- If the user asks for edits, explain that file write access is disabled for this agent.\n\
+- If the user asks for edits, explain that file write access is disabled for this agent and give precise, copy-paste-ready changes they can apply—or tell them to enable write access so you can apply edits directly.\n\
+- Do not respond with only a plan or suggestions when the user asked for implementation; deliver the fullest answer you can within read-only limits.\n\
 - If you are unsure which file matters, list_directory near the roots below, then read the most relevant paths.\n\
 \n\
 Rules:\n\
@@ -399,15 +590,16 @@ Rules:\n\
         ));
     }
     format!(
-        "{}{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}",
+        "{}{FORGE_ENGINEERING_GUIDANCE}{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}",
         sections.join("\n\n")
     )
 }
 
 fn synthesis_system_prompt(user: Option<&str>) -> String {
-    const DEFAULT_SYNTHESIS_SYSTEM: &str = "You synthesize multiple AI assistant answers into one clear, unified reply. \
-Incorporate the strongest points; avoid repeating the same idea. Do not mention round tables \
-or that you are merging sources unless the user asked for that process.";
+    const DEFAULT_SYNTHESIS_SYSTEM: &str = "You synthesize multiple AI agent answers from a FORGE Round Table into one unified reply. \
+Merge the strongest, most actionable points; resolve contradictions; prefer concrete implementation detail over repetition. \
+Do not mention round tables, merging, or individual models unless the user asked about that process. \
+If agents proposed work, present a single coherent plan or result—not a meta-discussion of who said what.";
 
     match user.map(str::trim).filter(|s| !s.is_empty()) {
         Some(custom) => format!("{custom}{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}"),
@@ -461,6 +653,21 @@ impl ToolActivitySink {
             path: activity.path.clone(),
             added: activity.added,
             removed: activity.removed,
+        };
+        let _ = self.app.emit("ai-tool-activity", payload);
+    }
+
+    fn emit_status(&self, message: &str) {
+        let trimmed = message.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        let payload = ToolActivityEvent {
+            stream_id: self.stream_id.clone(),
+            action: "status".to_string(),
+            path: trimmed.to_string(),
+            added: None,
+            removed: None,
         };
         let _ = self.app.emit("ai-tool-activity", payload);
     }
@@ -621,6 +828,79 @@ fn with_tool_activity(content: String, activities: &[ToolActivity]) -> String {
     }
 }
 
+fn summarize_tool_progress(activities: &[ToolActivity]) -> String {
+    if activities.is_empty() {
+        return "- No file tool actions recorded yet.".to_string();
+    }
+    let mut reads = 0usize;
+    let mut writes = 0usize;
+    let mut write_paths: Vec<&str> = Vec::new();
+    for activity in activities {
+        match activity.action.as_str() {
+            "read" => reads += 1,
+            "write" => {
+                writes += 1;
+                if write_paths.len() < 8 {
+                    write_paths.push(activity.path.as_str());
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut lines = vec![format!("- {reads} file read(s), {writes} file write(s)")];
+    if !write_paths.is_empty() {
+        lines.push("- Edited:".to_string());
+        for path in write_paths {
+            lines.push(format!("  - {path}"));
+        }
+    }
+    lines.join("\n")
+}
+
+fn agent_pause_message(
+    partial: &str,
+    reason: &str,
+    state: &AgentContinuationState,
+    activities: &[ToolActivity],
+) -> Result<String, String> {
+    let progress = summarize_tool_progress(activities);
+    let body = if partial.trim().is_empty() {
+        format!(
+            "I paused before finishing ({reason}).\n\n**Progress so far:**\n{progress}\n\nUse **Continue** below to resume where I left off."
+        )
+    } else {
+        format!(
+            "{partial}\n\n---\n\nI paused before finishing ({reason}).\n\n**Progress so far:**\n{progress}\n\nUse **Continue** below to resume where I left off."
+        )
+    };
+    let mut compact_state = state.clone();
+    let preserve_prefix = continuation_preserve_prefix(
+        compact_state.messages.len(),
+        true,
+    );
+    match compact_state.provider.as_str() {
+        "openai" => compact_openai_messages(&mut compact_state.messages, preserve_prefix),
+        "anthropic" => compact_anthropic_messages(&mut compact_state.messages, preserve_prefix),
+        "google" => compact_gemini_contents(&mut compact_state.messages, preserve_prefix),
+        "deepseek" => compact_openai_messages(&mut compact_state.messages, preserve_prefix),
+        "xai" => compact_openai_messages(&mut compact_state.messages, preserve_prefix),
+        _ => {}
+    }
+    let state_json = serde_json::to_string(&compact_state)
+        .map_err(|e| format!("Could not serialize agent continuation: {e}"))?;
+    Ok(format!(
+        "{}\n[[FORGE_AGENT_CONTINUE {}]]",
+        with_tool_activity(body, activities),
+        state_json
+    ))
+}
+
+fn emit_agent_step(activity_sink: Option<&ToolActivitySink>, round: u32) {
+    if let Some(sink) = activity_sink {
+        sink.emit_status(&format!("Agent step {round} — calling model"));
+    }
+}
+
 fn run_tool(
     policy: &WorkspacePolicy,
     name: &str,
@@ -632,6 +912,7 @@ fn run_tool(
             serde_json::from_str(args).map_err(|e| format!("Invalid tool arguments JSON: {e}"))?;
         let write_tools = [
             "write_file",
+            "search_replace",
             "remove_path",
             "delete_path",
             "delete_file",
@@ -673,6 +954,27 @@ fn run_tool(
                     .ok_or_else(|| "write_file: missing path".to_string())?;
                 let content = v["content"].as_str().unwrap_or("");
                 let result: WriteFileResult = tool_write_file(policy, path, content)?;
+                Ok(ToolExecution {
+                    output: result.message,
+                    activity: Some(ToolActivity {
+                        action: "write".to_string(),
+                        path: path.to_string(),
+                        added: Some(result.added_lines),
+                        removed: Some(result.removed_lines),
+                    }),
+                })
+            }
+            "search_replace" => {
+                let path = v["path"]
+                    .as_str()
+                    .ok_or_else(|| "search_replace: missing path".to_string())?;
+                let old_string = v["old_string"]
+                    .as_str()
+                    .ok_or_else(|| "search_replace: missing old_string".to_string())?;
+                let new_string = v["new_string"].as_str().unwrap_or("");
+                let replace_all = v["replace_all"].as_bool().unwrap_or(false);
+                let result: WriteFileResult =
+                    tool_search_replace(policy, path, old_string, new_string, replace_all)?;
                 Ok(ToolExecution {
                     output: result.message,
                     activity: Some(ToolActivity {
@@ -727,7 +1029,8 @@ fn run_tool(
         }
     })();
     match result {
-        Ok(exec) => {
+        Ok(mut exec) => {
+            exec.output = cap_tool_output(exec.output);
             if let Some(activity) = exec.activity.as_ref() {
                 if let Some(sink) = activity_sink {
                     sink.emit(activity);
@@ -736,14 +1039,45 @@ fn run_tool(
             exec
         }
         Err(e) => ToolExecution {
-            output: format!("ERROR: {e}"),
+            output: cap_tool_output(format!("ERROR: {e}")),
             activity: None,
         },
     }
 }
 
 fn model_supports_tools(model_id: &str) -> bool {
-    !matches!(model_id, "o1")
+    if matches!(model_id, "o1" | "o1-mini" | "o3" | "o3-mini" | "o4-mini") {
+        return false;
+    }
+    !(model_id.starts_with("o1-") || model_id.starts_with("o3-") || model_id.starts_with("o4-"))
+}
+
+const OPENAI_MAX_OUTPUT_TOKENS: u32 = 4096;
+
+/// Newer OpenAI chat models reject `max_tokens` and require `max_completion_tokens`.
+fn openai_uses_max_completion_tokens(api_model: &str) -> bool {
+    let model = api_model.trim().to_ascii_lowercase();
+    model.starts_with("gpt-5")
+        || model.starts_with("chatgpt-")
+        || model.starts_with("o1")
+        || model.starts_with("o3")
+        || model.starts_with("o4")
+        || model.starts_with("gpt-4.1")
+        || model.starts_with("gpt-4.5")
+}
+
+fn apply_openai_output_limit(body: &mut serde_json::Value, api_model: &str) {
+    let Some(obj) = body.as_object_mut() else {
+        return;
+    };
+    obj.remove("max_tokens");
+    obj.remove("max_completion_tokens");
+    let key = if openai_uses_max_completion_tokens(api_model) {
+        "max_completion_tokens"
+    } else {
+        "max_tokens"
+    };
+    obj.insert(key.to_string(), json!(OPENAI_MAX_OUTPUT_TOKENS));
 }
 
 async fn complete_openai(
@@ -775,11 +1109,11 @@ async fn complete_openai(
         }));
     }
 
-    let body = json!({
+    let mut body = json!({
         "model": api_model,
         "messages": api_messages,
-        "max_tokens": 4096,
     });
+    apply_openai_output_limit(&mut body, api_model);
 
     let client = http_client()?;
     let res = client
@@ -823,6 +1157,7 @@ async fn openai_agent_loop(
     policy: &WorkspacePolicy,
     system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
+    continuation: Option<&AgentContinuationState>,
 ) -> Result<String, String> {
     let key = api_key(Provider::OpenAi).expect("key checked");
     let base = base_url(Provider::OpenAi, "https://api.openai.com/v1");
@@ -831,28 +1166,47 @@ async fn openai_agent_loop(
     let client = http_client()?;
     let tools = tools_schema_openai(policy);
 
-    let mut api_messages: Vec<serde_json::Value> = vec![json!({
-        "role": "system",
-        "content": merged_workspace_system(policy, system),
-    })];
+    let mut api_messages: Vec<serde_json::Value> = if let Some(cont) =
+        continuation.filter(|state| state.provider == "openai")
+    {
+        cont.messages.clone()
+    } else {
+        let mut messages: Vec<serde_json::Value> = vec![json!({
+            "role": "system",
+            "content": merged_workspace_system(policy, system),
+        })];
+        for turn in chat_messages {
+            let role = if turn.role == "assistant" {
+                "assistant"
+            } else {
+                "user"
+            };
+            messages.push(json!({ "role": role, "content": sanitize_chat_history_content(&turn.content) }));
+        }
+        messages
+    };
+    let from_continuation = continuation
+        .map(|state| state.provider == "openai")
+        .unwrap_or(false);
+    let agent_loop_start = api_messages.len();
+    let preserve_prefix =
+        continuation_preserve_prefix(agent_loop_start, from_continuation);
     let mut activities: Vec<ToolActivity> = Vec::new();
-    for turn in chat_messages {
-        let role = if turn.role == "assistant" {
-            "assistant"
-        } else {
-            "user"
-        };
-        api_messages.push(json!({ "role": role, "content": turn.content }));
-    }
+    let mut tracker = LoopTracker::new(continuation.map(|state| state.round).unwrap_or(0));
+    let mut rounds_left = MAX_TOOL_ROUNDS;
 
-    for _ in 0..MAX_TOOL_ROUNDS {
-        let body = json!({
+    while rounds_left > 0 {
+        rounds_left -= 1;
+        tracker.advance();
+        emit_agent_step(activity_sink.as_ref(), tracker.round());
+        compact_openai_messages(&mut api_messages, preserve_prefix);
+        let mut body = json!({
             "model": api_model,
             "messages": api_messages,
             "tools": tools,
             "tool_choice": "auto",
-            "max_tokens": 4096,
         });
+        apply_openai_output_limit(&mut body, api_model);
 
         let res = client
             .post(&url)
@@ -887,10 +1241,12 @@ async fn openai_agent_loop(
             if !calls.is_empty() {
                 api_messages.push(msg.clone());
 
+                let mut signatures = Vec::new();
                 for call in calls {
                     let id = call["id"].as_str().unwrap_or("");
                     let name = call["function"]["name"].as_str().unwrap_or("");
                     let args = call["function"]["arguments"].as_str().unwrap_or("{}");
+                    signatures.push(tool_signature(name, args));
                     let output = run_tool(policy, name, args, activity_sink.as_ref());
                     if let Some(activity) = output.activity {
                         activities.push(activity);
@@ -900,6 +1256,15 @@ async fn openai_agent_loop(
                         "tool_call_id": id,
                         "content": output.output,
                     }));
+                }
+                if let Some(reason) = tracker.check_stuck(&signatures) {
+                    let state = AgentContinuationState {
+                        provider: provider_agent_key(Provider::OpenAi).to_string(),
+                        api_model: api_model.to_string(),
+                        round: tracker.round(),
+                        messages: api_messages.clone(),
+                    };
+                    return agent_pause_message("", reason, &state, &activities);
                 }
                 continue;
             }
@@ -914,7 +1279,18 @@ async fn openai_agent_loop(
             });
     }
 
-    Err("OpenAI: stopped after too many tool rounds (possible loop).".to_string())
+    let state = AgentContinuationState {
+        provider: provider_agent_key(Provider::OpenAi).to_string(),
+        api_model: api_model.to_string(),
+        round: tracker.round(),
+        messages: api_messages,
+    };
+    agent_pause_message(
+        "",
+        &format!("reached the {MAX_TOOL_ROUNDS}-step agent limit"),
+        &state,
+        &activities,
+    )
 }
 
 async fn complete_deepseek(
@@ -994,6 +1370,7 @@ async fn deepseek_agent_loop(
     policy: &WorkspacePolicy,
     system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
+    continuation: Option<&AgentContinuationState>,
 ) -> Result<String, String> {
     let key = api_key(Provider::DeepSeek).expect("key checked");
     let base = base_url(Provider::DeepSeek, "https://api.deepseek.com/v1");
@@ -1002,21 +1379,40 @@ async fn deepseek_agent_loop(
     let client = http_client()?;
     let tools = tools_schema_openai(policy);
 
-    let mut api_messages: Vec<serde_json::Value> = vec![json!({
-        "role": "system",
-        "content": merged_workspace_system(policy, system),
-    })];
+    let mut api_messages: Vec<serde_json::Value> = if let Some(cont) =
+        continuation.filter(|state| state.provider == "deepseek")
+    {
+        cont.messages.clone()
+    } else {
+        let mut messages: Vec<serde_json::Value> = vec![json!({
+            "role": "system",
+            "content": merged_workspace_system(policy, system),
+        })];
+        for turn in chat_messages {
+            let role = if turn.role == "assistant" {
+                "assistant"
+            } else {
+                "user"
+            };
+            messages.push(json!({ "role": role, "content": sanitize_chat_history_content(&turn.content) }));
+        }
+        messages
+    };
+    let from_continuation = continuation
+        .map(|state| state.provider == "deepseek")
+        .unwrap_or(false);
+    let agent_loop_start = api_messages.len();
+    let preserve_prefix =
+        continuation_preserve_prefix(agent_loop_start, from_continuation);
     let mut activities: Vec<ToolActivity> = Vec::new();
-    for turn in chat_messages {
-        let role = if turn.role == "assistant" {
-            "assistant"
-        } else {
-            "user"
-        };
-        api_messages.push(json!({ "role": role, "content": turn.content }));
-    }
+    let mut tracker = LoopTracker::new(continuation.map(|state| state.round).unwrap_or(0));
+    let mut rounds_left = MAX_TOOL_ROUNDS;
 
-    for _ in 0..MAX_TOOL_ROUNDS {
+    while rounds_left > 0 {
+        rounds_left -= 1;
+        tracker.advance();
+        emit_agent_step(activity_sink.as_ref(), tracker.round());
+        compact_openai_messages(&mut api_messages, preserve_prefix);
         let body = json!({
             "model": api_model,
             "messages": api_messages,
@@ -1058,10 +1454,12 @@ async fn deepseek_agent_loop(
             if !calls.is_empty() {
                 api_messages.push(msg.clone());
 
+                let mut signatures = Vec::new();
                 for call in calls {
                     let id = call["id"].as_str().unwrap_or("");
                     let name = call["function"]["name"].as_str().unwrap_or("");
                     let args = call["function"]["arguments"].as_str().unwrap_or("{}");
+                    signatures.push(tool_signature(name, args));
                     let output = run_tool(policy, name, args, activity_sink.as_ref());
                     if let Some(activity) = output.activity {
                         activities.push(activity);
@@ -1071,6 +1469,15 @@ async fn deepseek_agent_loop(
                         "tool_call_id": id,
                         "content": output.output,
                     }));
+                }
+                if let Some(reason) = tracker.check_stuck(&signatures) {
+                    let state = AgentContinuationState {
+                        provider: provider_agent_key(Provider::DeepSeek).to_string(),
+                        api_model: api_model.to_string(),
+                        round: tracker.round(),
+                        messages: api_messages.clone(),
+                    };
+                    return agent_pause_message("", reason, &state, &activities);
                 }
                 continue;
             }
@@ -1085,7 +1492,18 @@ async fn deepseek_agent_loop(
             });
     }
 
-    Err("DeepSeek: stopped after too many tool rounds (possible loop).".to_string())
+    let state = AgentContinuationState {
+        provider: provider_agent_key(Provider::DeepSeek).to_string(),
+        api_model: api_model.to_string(),
+        round: tracker.round(),
+        messages: api_messages,
+    };
+    agent_pause_message(
+        "",
+        &format!("reached the {MAX_TOOL_ROUNDS}-step agent limit"),
+        &state,
+        &activities,
+    )
 }
 
 async fn complete_xai_once(
@@ -1181,6 +1599,7 @@ async fn xai_agent_loop_once(
     policy: &WorkspacePolicy,
     system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
+    continuation: Option<&AgentContinuationState>,
 ) -> Result<String, String> {
     let key = api_key(Provider::Xai).expect("key checked");
     let base = base_url(Provider::Xai, "https://api.x.ai/v1");
@@ -1189,21 +1608,40 @@ async fn xai_agent_loop_once(
     let client = http_client()?;
     let tools = tools_schema_openai(policy);
 
-    let mut api_messages: Vec<serde_json::Value> = vec![json!({
-        "role": "system",
-        "content": merged_workspace_system(policy, system),
-    })];
+    let mut api_messages: Vec<serde_json::Value> = if let Some(cont) =
+        continuation.filter(|state| state.provider == "xai")
+    {
+        cont.messages.clone()
+    } else {
+        let mut messages: Vec<serde_json::Value> = vec![json!({
+            "role": "system",
+            "content": merged_workspace_system(policy, system),
+        })];
+        for turn in chat_messages {
+            let role = if turn.role == "assistant" {
+                "assistant"
+            } else {
+                "user"
+            };
+            messages.push(json!({ "role": role, "content": sanitize_chat_history_content(&turn.content) }));
+        }
+        messages
+    };
+    let from_continuation = continuation
+        .map(|state| state.provider == "xai")
+        .unwrap_or(false);
+    let agent_loop_start = api_messages.len();
+    let preserve_prefix =
+        continuation_preserve_prefix(agent_loop_start, from_continuation);
     let mut activities: Vec<ToolActivity> = Vec::new();
-    for turn in chat_messages {
-        let role = if turn.role == "assistant" {
-            "assistant"
-        } else {
-            "user"
-        };
-        api_messages.push(json!({ "role": role, "content": turn.content }));
-    }
+    let mut tracker = LoopTracker::new(continuation.map(|state| state.round).unwrap_or(0));
+    let mut rounds_left = MAX_TOOL_ROUNDS;
 
-    for _ in 0..MAX_TOOL_ROUNDS {
+    while rounds_left > 0 {
+        rounds_left -= 1;
+        tracker.advance();
+        emit_agent_step(activity_sink.as_ref(), tracker.round());
+        compact_openai_messages(&mut api_messages, preserve_prefix);
         let body = json!({
             "model": api_model,
             "messages": api_messages,
@@ -1244,10 +1682,12 @@ async fn xai_agent_loop_once(
             if !calls.is_empty() {
                 api_messages.push(msg.clone());
 
+                let mut signatures = Vec::new();
                 for call in calls {
                     let id = call["id"].as_str().unwrap_or("");
                     let name = call["function"]["name"].as_str().unwrap_or("");
                     let args = call["function"]["arguments"].as_str().unwrap_or("{}");
+                    signatures.push(tool_signature(name, args));
                     let output = run_tool(policy, name, args, activity_sink.as_ref());
                     if let Some(activity) = output.activity {
                         activities.push(activity);
@@ -1257,6 +1697,15 @@ async fn xai_agent_loop_once(
                         "tool_call_id": id,
                         "content": output.output,
                     }));
+                }
+                if let Some(reason) = tracker.check_stuck(&signatures) {
+                    let state = AgentContinuationState {
+                        provider: provider_agent_key(Provider::Xai).to_string(),
+                        api_model: api_model.to_string(),
+                        round: tracker.round(),
+                        messages: api_messages.clone(),
+                    };
+                    return agent_pause_message("", reason, &state, &activities);
                 }
                 continue;
             }
@@ -1269,7 +1718,18 @@ async fn xai_agent_loop_once(
             .ok_or_else(|| provider_error(Provider::Xai, "response", "empty assistant message"));
     }
 
-    Err("xAI: stopped after too many tool rounds (possible loop).".to_string())
+    let state = AgentContinuationState {
+        provider: provider_agent_key(Provider::Xai).to_string(),
+        api_model: api_model.to_string(),
+        round: tracker.round(),
+        messages: api_messages,
+    };
+    agent_pause_message(
+        "",
+        &format!("reached the {MAX_TOOL_ROUNDS}-step agent limit"),
+        &state,
+        &activities,
+    )
 }
 
 async fn xai_agent_loop(
@@ -1278,6 +1738,7 @@ async fn xai_agent_loop(
     policy: &WorkspacePolicy,
     system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
+    continuation: Option<&AgentContinuationState>,
 ) -> Result<String, String> {
     let api_model = resolve_runtime_model(api_model).await;
     match xai_agent_loop_once(
@@ -1286,6 +1747,7 @@ async fn xai_agent_loop(
         policy,
         system,
         activity_sink.clone(),
+        continuation,
     )
     .await
     {
@@ -1296,7 +1758,15 @@ async fn xai_agent_loop(
             if fallback == api_model {
                 return Err(err);
             }
-            xai_agent_loop_once(&fallback, chat_messages, policy, system, activity_sink).await
+            xai_agent_loop_once(
+                &fallback,
+                chat_messages,
+                policy,
+                system,
+                activity_sink,
+                continuation,
+            )
+            .await
         }
         Err(err) => Err(err),
     }
@@ -1334,7 +1804,7 @@ fn append_file_tools_anthropic(tools: &mut Vec<serde_json::Value>, policy: &Work
         tools.extend([
             json!({
                 "name": "write_file",
-                "description": "Create or overwrite a UTF-8 text file under AI-enabled paths. Use to persist edits or new files; read existing files first when merges or partial edits matter.",
+                "description": "Create or overwrite a UTF-8 text file under AI-enabled paths. Requires the full file body. For large existing files, prefer search_replace—truncated write_file payloads are rejected.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -1342,6 +1812,20 @@ fn append_file_tools_anthropic(tools: &mut Vec<serde_json::Value>, policy: &Work
                         "content": { "type": "string" }
                     },
                     "required": ["path", "content"]
+                }
+            }),
+            json!({
+                "name": "search_replace",
+                "description": "Replace one exact substring in an existing UTF-8 text file. Prefer for partial edits to large files. old_string must match exactly. When replace_all is false, old_string must appear exactly once.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string" },
+                        "old_string": { "type": "string" },
+                        "new_string": { "type": "string" },
+                        "replace_all": { "type": "boolean" }
+                    },
+                    "required": ["path", "old_string", "new_string"]
                 }
             }),
             json!({
@@ -1477,11 +1961,7 @@ async fn complete_anthropic(
     }
 
     let client = http_client()?;
-    let res = client
-        .post(&url)
-        .header("x-api-key", key.as_str())
-        .header("anthropic-version", "2023-06-01")
-        .header("Content-Type", "application/json")
+    let res = anthropic_post(&client, &url, key.as_str())
         .json(&body)
         .send()
         .await
@@ -1532,6 +2012,7 @@ async fn anthropic_agent_loop(
     policy: &WorkspacePolicy,
     system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
+    continuation: Option<&AgentContinuationState>,
 ) -> Result<String, String> {
     let key = api_key(Provider::Anthropic).expect("key checked");
     let base = base_url(Provider::Anthropic, "https://api.anthropic.com");
@@ -1540,34 +2021,51 @@ async fn anthropic_agent_loop(
     let client = http_client()?;
     let tools = anthropic_tools(policy);
 
-    let mut api_messages: Vec<serde_json::Value> = Vec::new();
+    let mut api_messages: Vec<serde_json::Value> = if let Some(cont) =
+        continuation.filter(|state| state.provider == "anthropic")
+    {
+        cont.messages.clone()
+    } else {
+        let mut messages: Vec<serde_json::Value> = Vec::new();
+        for turn in chat_messages {
+            let role = if turn.role == "assistant" {
+                "assistant"
+            } else {
+                "user"
+            };
+            messages.push(json!({
+                "role": role,
+                "content": [{ "type": "text", "text": sanitize_chat_history_content(&turn.content) }],
+            }));
+        }
+        messages
+    };
+    let from_continuation = continuation
+        .map(|state| state.provider == "anthropic")
+        .unwrap_or(false);
+    let agent_loop_start = api_messages.len();
+    let preserve_prefix =
+        continuation_preserve_prefix(agent_loop_start, from_continuation);
+    let system_prompt = merged_workspace_system(policy, system);
+    let cached_tools = anthropic_cached_tools(&tools);
     let mut activities: Vec<ToolActivity> = Vec::new();
-    for turn in chat_messages {
-        let role = if turn.role == "assistant" {
-            "assistant"
-        } else {
-            "user"
-        };
-        api_messages.push(json!({
-            "role": role,
-            "content": [{ "type": "text", "text": turn.content }],
-        }));
-    }
+    let mut tracker = LoopTracker::new(continuation.map(|state| state.round).unwrap_or(0));
+    let mut rounds_left = MAX_TOOL_ROUNDS;
 
-    for _ in 0..MAX_TOOL_ROUNDS {
+    while rounds_left > 0 {
+        rounds_left -= 1;
+        tracker.advance();
+        emit_agent_step(activity_sink.as_ref(), tracker.round());
+        compact_anthropic_messages(&mut api_messages, preserve_prefix);
         let body = json!({
             "model": api_model,
             "max_tokens": 4096,
-            "system": merged_workspace_system(policy, system),
-            "tools": tools,
+            "system": anthropic_cached_system(&system_prompt),
+            "tools": cached_tools,
             "messages": api_messages,
         });
 
-        let res = client
-            .post(&url)
-            .header("x-api-key", key.as_str())
-            .header("anthropic-version", "2023-06-01")
-            .header("Content-Type", "application/json")
+        let res = anthropic_post_with_cache(&client, &url, key.as_str(), true)
             .json(&body)
             .send()
             .await
@@ -1613,6 +2111,11 @@ async fn anthropic_agent_loop(
 
         if !tool_uses.is_empty() {
             let mut results: Vec<serde_json::Value> = Vec::new();
+            let sig_calls: Vec<(String, String)> = tool_uses
+                .iter()
+                .map(|(_, name, args)| (name.clone(), args.clone()))
+                .collect();
+            let signatures = tool_signatures_from_json_args(&sig_calls);
             for (id, name, args) in tool_uses {
                 let out = run_tool(policy, &name, &args, activity_sink.as_ref());
                 if let Some(activity) = out.activity {
@@ -1625,6 +2128,15 @@ async fn anthropic_agent_loop(
                 }));
             }
             api_messages.push(json!({ "role": "user", "content": results }));
+            if let Some(reason) = tracker.check_stuck(&signatures) {
+                let state = AgentContinuationState {
+                    provider: provider_agent_key(Provider::Anthropic).to_string(),
+                    api_model: api_model.to_string(),
+                    round: tracker.round(),
+                    messages: api_messages.clone(),
+                };
+                return agent_pause_message("", reason, &state, &activities);
+            }
             continue;
         }
 
@@ -1640,7 +2152,18 @@ async fn anthropic_agent_loop(
         ));
     }
 
-    Err("Anthropic: stopped after too many tool rounds.".to_string())
+    let state = AgentContinuationState {
+        provider: provider_agent_key(Provider::Anthropic).to_string(),
+        api_model: api_model.to_string(),
+        round: tracker.round(),
+        messages: api_messages,
+    };
+    agent_pause_message(
+        "",
+        &format!("reached the {MAX_TOOL_ROUNDS}-step agent limit"),
+        &state,
+        &activities,
+    )
 }
 
 fn append_file_tools_gemini(declarations: &mut Vec<serde_json::Value>, policy: &WorkspacePolicy) {
@@ -1675,7 +2198,7 @@ fn append_file_tools_gemini(declarations: &mut Vec<serde_json::Value>, policy: &
         declarations.extend([
             json!({
                 "name": "write_file",
-                "description": "Create or overwrite a UTF-8 text file under AI-enabled paths. Use to save edits or new files; read first when needed for safe changes.",
+                "description": "Create or overwrite a UTF-8 text file under AI-enabled paths. Requires the full file body. For large existing files, prefer search_replace—truncated write_file payloads are rejected.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -1683,6 +2206,20 @@ fn append_file_tools_gemini(declarations: &mut Vec<serde_json::Value>, policy: &
                         "content": { "type": "string" }
                     },
                     "required": ["path", "content"]
+                }
+            }),
+            json!({
+                "name": "search_replace",
+                "description": "Replace one exact substring in an existing UTF-8 text file. Prefer for partial edits to large files. old_string must match exactly. When replace_all is false, old_string must appear exactly once.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string" },
+                        "old_string": { "type": "string" },
+                        "new_string": { "type": "string" },
+                        "replace_all": { "type": "boolean" }
+                    },
+                    "required": ["path", "old_string", "new_string"]
                 }
             }),
             json!({
@@ -1796,12 +2333,7 @@ async fn complete_gemini(
         "https://generativelanguage.googleapis.com/v1beta",
     );
     validate_base_url(Provider::Google, &base)?;
-    let url = format!(
-        "{}/models/{}:generateContent?key={}",
-        base.trim_end_matches('/'),
-        api_model,
-        key
-    );
+    let url = gemini_generate_url(&base, api_model, key.as_str());
 
     let mut contents: Vec<serde_json::Value> = Vec::new();
     for turn in messages {
@@ -1824,9 +2356,7 @@ async fn complete_gemini(
     }
 
     let client = http_client()?;
-    let res = client
-        .post(&url)
-        .header("Content-Type", "application/json")
+    let res = gemini_post(&client, &url, key.as_str())
         .json(&body)
         .send()
         .await
@@ -1861,6 +2391,7 @@ async fn gemini_agent_loop(
     policy: &WorkspacePolicy,
     system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
+    continuation: Option<&AgentContinuationState>,
 ) -> Result<String, String> {
     let key = api_key(Provider::Google).expect("key checked");
     let base = base_url(
@@ -1868,29 +2399,44 @@ async fn gemini_agent_loop(
         "https://generativelanguage.googleapis.com/v1beta",
     );
     validate_base_url(Provider::Google, &base)?;
-    let url = format!(
-        "{}/models/{}:generateContent?key={}",
-        base.trim_end_matches('/'),
-        api_model,
-        key
-    );
+    let url = gemini_generate_url(&base, api_model, key.as_str());
     let client = http_client()?;
     let mut activities: Vec<ToolActivity> = Vec::new();
 
-    let mut contents: Vec<serde_json::Value> = Vec::new();
-    for turn in chat_messages {
-        let role = if turn.role == "assistant" {
-            "model"
-        } else {
-            "user"
-        };
-        contents.push(json!({
-            "role": role,
-            "parts": [{ "text": turn.content }],
-        }));
-    }
+    let mut contents: Vec<serde_json::Value> = if let Some(cont) =
+        continuation.filter(|state| state.provider == "google")
+    {
+        cont.messages.clone()
+    } else {
+        let mut history: Vec<serde_json::Value> = Vec::new();
+        for turn in chat_messages {
+            let role = if turn.role == "assistant" {
+                "model"
+            } else {
+                "user"
+            };
+            history.push(json!({
+                "role": role,
+                "parts": [{ "text": sanitize_chat_history_content(&turn.content) }],
+            }));
+        }
+        history
+    };
 
-    for _ in 0..MAX_TOOL_ROUNDS {
+    let from_continuation = continuation
+        .map(|state| state.provider == "google")
+        .unwrap_or(false);
+    let agent_loop_start = contents.len();
+    let preserve_prefix =
+        continuation_preserve_prefix(agent_loop_start, from_continuation);
+    let mut tracker = LoopTracker::new(continuation.map(|state| state.round).unwrap_or(0));
+    let mut rounds_left = MAX_TOOL_ROUNDS;
+
+    while rounds_left > 0 {
+        rounds_left -= 1;
+        tracker.advance();
+        emit_agent_step(activity_sink.as_ref(), tracker.round());
+        compact_gemini_contents(&mut contents, preserve_prefix);
         let body = json!({
             "contents": contents,
             "systemInstruction": {
@@ -1899,9 +2445,7 @@ async fn gemini_agent_loop(
             "tools": gemini_tool_declarations(policy),
         });
 
-        let res = client
-            .post(&url)
-            .header("Content-Type", "application/json")
+        let res = gemini_post(&client, &url, key.as_str())
             .json(&body)
             .send()
             .await
@@ -1948,6 +2492,16 @@ async fn gemini_agent_loop(
 
         if !function_calls.is_empty() {
             let mut response_parts: Vec<serde_json::Value> = Vec::new();
+            let sig_calls: Vec<(String, String)> = function_calls
+                .iter()
+                .map(|(name, args_val)| {
+                    (
+                        name.clone(),
+                        serde_json::to_string(args_val).unwrap_or_else(|_| "{}".to_string()),
+                    )
+                })
+                .collect();
+            let signatures = tool_signatures_from_json_args(&sig_calls);
             for (name, args_val) in function_calls {
                 let args_str = serde_json::to_string(&args_val).unwrap_or_else(|_| "{}".to_string());
                 let out = run_tool(policy, &name, &args_str, activity_sink.as_ref());
@@ -1962,6 +2516,15 @@ async fn gemini_agent_loop(
                 }));
             }
             contents.push(json!({ "role": "user", "parts": response_parts }));
+            if let Some(reason) = tracker.check_stuck(&signatures) {
+                let state = AgentContinuationState {
+                    provider: provider_agent_key(Provider::Google).to_string(),
+                    api_model: api_model.to_string(),
+                    round: tracker.round(),
+                    messages: contents.clone(),
+                };
+                return agent_pause_message("", reason, &state, &activities);
+            }
             continue;
         }
 
@@ -1971,7 +2534,18 @@ async fn gemini_agent_loop(
             .ok_or_else(|| provider_error(Provider::Google, "response", "empty assistant message"));
     }
 
-    Err("Gemini: stopped after too many tool rounds.".to_string())
+    let state = AgentContinuationState {
+        provider: provider_agent_key(Provider::Google).to_string(),
+        api_model: api_model.to_string(),
+        round: tracker.round(),
+        messages: contents,
+    };
+    agent_pause_message(
+        "",
+        &format!("reached the {MAX_TOOL_ROUNDS}-step agent limit"),
+        &state,
+        &activities,
+    )
 }
 
 async fn complete_for_model(
@@ -1995,6 +2569,7 @@ async fn complete_for_model_with_workspace(
     policy: &WorkspacePolicy,
     system: Option<&str>,
     activity_sink: Option<ToolActivitySink>,
+    continuation: Option<&AgentContinuationState>,
 ) -> Result<String, String> {
     let (provider, api_model) = resolve_api_model(model_id)?;
     if !model_supports_tools(model_id) {
@@ -2003,18 +2578,60 @@ async fn complete_for_model_with_workspace(
     }
     match provider {
         Provider::OpenAi => {
-            openai_agent_loop(&api_model, messages, policy, system, activity_sink).await
+            openai_agent_loop(
+                &api_model,
+                messages,
+                policy,
+                system,
+                activity_sink,
+                continuation,
+            )
+            .await
         }
         Provider::Anthropic => {
-            anthropic_agent_loop(&api_model, messages, policy, system, activity_sink).await
+            anthropic_agent_loop(
+                &api_model,
+                messages,
+                policy,
+                system,
+                activity_sink,
+                continuation,
+            )
+            .await
         }
         Provider::Google => {
-            gemini_agent_loop(&api_model, messages, policy, system, activity_sink).await
+            gemini_agent_loop(
+                &api_model,
+                messages,
+                policy,
+                system,
+                activity_sink,
+                continuation,
+            )
+            .await
         }
         Provider::DeepSeek => {
-            deepseek_agent_loop(&api_model, messages, policy, system, activity_sink).await
+            deepseek_agent_loop(
+                &api_model,
+                messages,
+                policy,
+                system,
+                activity_sink,
+                continuation,
+            )
+            .await
         }
-        Provider::Xai => xai_agent_loop(&api_model, messages, policy, system, activity_sink).await,
+        Provider::Xai => {
+            xai_agent_loop(
+                &api_model,
+                messages,
+                policy,
+                system,
+                activity_sink,
+                continuation,
+            )
+            .await
+        }
     }
 }
 
@@ -2026,8 +2643,10 @@ pub async fn ai_chat_complete(
     workspace: Option<AiWorkspace>,
     system: Option<String>,
     stream_id: Option<String>,
+    agent_continuation: Option<String>,
 ) -> Result<String, String> {
-    if messages.is_empty() {
+    let continuation = parse_agent_continuation(agent_continuation)?;
+    if messages.is_empty() && continuation.is_none() {
         return Err("No messages to send.".to_string());
     }
     if let Some(ws) = workspace.as_ref() {
@@ -2043,6 +2662,7 @@ pub async fn ai_chat_complete(
                 &policy,
                 system.as_deref(),
                 activity_sink,
+                continuation.as_ref(),
             )
             .await;
         }
@@ -2089,7 +2709,7 @@ Write one cohesive answer for the user."
         .collect();
 
     let (provider, _) = synthesis_provider_for_models(&participant_ids).ok_or_else(|| {
-        "No AI provider credentials are configured. Set FORGE_BACKEND_URL for managed mode, or add OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, or GROK_API_KEY to .env.".to_string()
+        "No AI provider credentials are configured. Set FORGE_BACKEND_URL and FORGE_BACKEND_TOKEN for managed mode (Render), or configure provider API keys for local mode.".to_string()
     })?;
 
     let model_id = match provider {

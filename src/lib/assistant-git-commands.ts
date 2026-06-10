@@ -100,7 +100,8 @@ export function buildGitCommandsSystemGuidance(repoPath: string | null): string 
   return [
     "Git command execution:",
     repoLine,
-    "When the user explicitly asks you to run git/source-control operations, emit one directive per operation on its own line:",
+    "When the user asks you to run git/source-control operations, emit the matching directive immediately—do not ask permission or tell them to run commands manually.",
+    "Emit one directive per operation on its own line:",
     '[[FORGE_GIT action="status"]]',
     '[[FORGE_GIT action="pull"]]',
     '[[FORGE_GIT action="push"]]',
@@ -113,6 +114,7 @@ export function buildGitCommandsSystemGuidance(repoPath: string | null): string 
     "For commit, message is required; stageAll defaults to false (commit staged only) unless the user asked to commit everything.",
     "For clone, parentPath is optional and defaults to the active repository root.",
     "For restore, paths is a comma-separated list of repo-relative or absolute paths to discard.",
+    "Only ask before restore when the paths were not specified or the scope is unclear.",
     "The app executes these directives automatically. Summarize what you ran in plain text; do not claim success without emitting the directive.",
     "Do not emit git directives unless the user asked for git/source-control work.",
   ].join("\n");

@@ -38,7 +38,7 @@ export function ModelLogo({ orgId, size = "md", className, muted }: ModelLogoPro
   return (
     <span
       className={cn(
-        "flex shrink-0 select-none items-center justify-center bg-[#1a1a1a] ring-1 ring-border-subtle",
+        "flex shrink-0 select-none items-center justify-center bg-terminal ring-1 ring-border-subtle",
         sizeClasses[size],
         muted && "opacity-50 grayscale",
         className,

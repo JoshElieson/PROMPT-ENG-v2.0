@@ -265,7 +265,7 @@ export function AiCommandBusProvider({ children }: { children: ReactNode }) {
     <AiCommandBusContext.Provider value={value}>
       {children}
       {pendingSettingChange ? (
-        <section className="fixed right-4 bottom-4 z-[240] w-[26rem] max-w-[calc(100vw-2rem)] rounded-xl border border-indigo-400/35 bg-panel/95 p-3 shadow-[0_18px_34px_rgba(2,6,23,0.5)] backdrop-blur-md">
+        <section className="fixed right-4 bottom-4 z-[240] w-[26rem] max-w-[calc(100vw-2rem)] rounded-xl border border-indigo-400/35 bg-panel/95 p-3 shadow-elevated-lg backdrop-blur-md">
           <p className="text-sm font-medium text-foreground">AI requested a setting change</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Change <span className="text-foreground">{pendingSettingLabel}</span> to{" "}

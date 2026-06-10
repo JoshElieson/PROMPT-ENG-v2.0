@@ -47,7 +47,7 @@ export function ChatSettingsDialog({
       <section
         className={cn(
           "relative z-10 flex max-h-[min(32rem,calc(100%-2rem))] w-[min(26rem,calc(100%-2rem))] flex-col rounded-xl",
-          "border border-border/60 bg-panel/92 shadow-[0_18px_40px_rgba(2,6,23,0.46)] backdrop-blur-lg",
+          "border border-border/60 bg-panel/92 shadow-elevated-lg backdrop-blur-lg",
           "animate-in zoom-in-95 duration-200 ease-out",
         )}
         role="dialog"

@@ -1,3 +1,4 @@
+mod agent_context;
 mod agent_notifications;
 mod system_tray;
 mod app_icon;

@@ -1,19 +1,108 @@
 <!doctype html>
+
 <html lang="en">
+
   <head>
+
+    <script>
+
+      (function () {
+
+        try {
+
+          var raw = localStorage.getItem("prompt:app-settings:v1");
+
+          var preference = "dark-blue";
+
+          if (raw) {
+
+            var parsed = JSON.parse(raw);
+
+            if (
+
+              parsed &&
+
+              (parsed.theme === "light" ||
+
+                parsed.theme === "dark" ||
+
+                parsed.theme === "dark-blue" ||
+
+                parsed.theme === "system")
+
+            ) {
+
+              preference = parsed.theme;
+
+            }
+
+          }
+
+          var resolved = preference;
+
+          if (preference === "system") {
+
+            resolved = "dark-blue";
+
+          } else if (preference === "dark") {
+
+            if (!localStorage.getItem("prompt:theme-legacy-migrated:v1")) {
+
+              resolved = "dark-blue";
+
+            }
+
+          }
+
+          document.documentElement.dataset.theme = resolved;
+
+          if (resolved !== "light") {
+
+            document.documentElement.classList.add("dark");
+
+          }
+
+        } catch (_err) {
+
+          document.documentElement.dataset.theme = "dark-blue";
+
+          document.documentElement.classList.add("dark");
+
+        }
+
+      })();
+
+    </script>
+
     <meta charset="UTF-8" />
+
     <link rel="icon" type="image/png" href="/app-icon.png" />
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
+
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
     <link
+
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+
       rel="stylesheet"
+
     />
+
     <title>FORGE</title>
+
   </head>
+
   <body>
+
     <div id="root"></div>
+
     <script type="module" src="/src/main.tsx"></script>
+
   </body>
+
 </html>
+

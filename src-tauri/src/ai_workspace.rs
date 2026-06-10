@@ -6,6 +6,12 @@ use crate::fs::{list_directory, remove_path, FsEntry};
 
 const MAX_READ_BYTES: usize = 512 * 1024;
 const MAX_LIST_ENTRIES: usize = 200;
+/// Existing files at or above this size trigger shrink guards on write_file.
+const WRITE_GUARD_MIN_BYTES: usize = 4 * 1024;
+/// Existing files at or above this line count trigger shrink guards on write_file.
+const WRITE_GUARD_MIN_LINES: usize = 100;
+/// Reject write_file when new content is below this fraction of the prior size.
+const WRITE_GUARD_MAX_SHRINK_RATIO: f64 = 0.20;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -230,6 +236,60 @@ fn estimate_line_changes(before: &str, after: &str) -> (usize, usize) {
     (added, removed)
 }
 
+/// True when replacing `existing` with `content` would wipe most of a large file
+/// (typical when model/tool output truncates mid-write).
+fn looks_like_truncated_overwrite(existing: &str, content: &str) -> bool {
+    let existing_bytes = existing.len();
+    let existing_lines = line_count(existing);
+    if existing_bytes < WRITE_GUARD_MIN_BYTES && existing_lines < WRITE_GUARD_MIN_LINES {
+        return false;
+    }
+
+    let new_bytes = content.len();
+    if existing_bytes > 0 && new_bytes == 0 {
+        return true;
+    }
+
+    if existing_bytes >= WRITE_GUARD_MIN_BYTES {
+        let min_allowed = ((existing_bytes as f64) * WRITE_GUARD_MAX_SHRINK_RATIO).floor() as usize;
+        if new_bytes < min_allowed.max(1) {
+            return true;
+        }
+    }
+
+    if existing_lines >= WRITE_GUARD_MIN_LINES {
+        let min_lines =
+            ((existing_lines as f64) * WRITE_GUARD_MAX_SHRINK_RATIO).floor() as usize;
+        if line_count(content) < min_lines.max(1) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn apply_search_replace(existing: &str, old_string: &str, new_string: &str, replace_all: bool) -> Result<String, String> {
+    if old_string.is_empty() {
+        return Err("search_replace: old_string must not be empty".to_string());
+    }
+
+    let matches = existing.match_indices(old_string).count();
+    if matches == 0 {
+        return Err("search_replace: old_string not found in file (match whitespace and line endings exactly)".to_string());
+    }
+    if !replace_all && matches > 1 {
+        return Err(format!(
+            "search_replace: old_string appears {matches} times; include more surrounding context so it is unique, or set replace_all to true"
+        ));
+    }
+
+    Ok(if replace_all {
+        existing.replace(old_string, new_string)
+    } else {
+        existing.replacen(old_string, new_string, 1)
+    })
+}
+
 pub fn tool_write_file(
     policy: &WorkspacePolicy,
     path_str: &str,
@@ -253,8 +313,20 @@ pub fn tool_write_file(
     }
 
     let before_text = fs::read_to_string(path).ok();
-    let (added_lines, removed_lines) = match before_text {
-        Some(existing) => estimate_line_changes(&existing, content),
+    let (added_lines, removed_lines) = match before_text.as_deref() {
+        Some(existing) => {
+            if looks_like_truncated_overwrite(existing, content) {
+                return Err(format!(
+                    "write_file: refused — new content ({} bytes, {} lines) is far smaller than the existing file ({} bytes, {} lines). \
+This usually means the payload was truncated. Use search_replace for partial edits, add changes in a new file, or call write_file again with the complete file after read_file.",
+                    content.len(),
+                    line_count(content),
+                    existing.len(),
+                    line_count(existing),
+                ));
+            }
+            estimate_line_changes(existing, content)
+        }
         None => (line_count(content), 0),
     };
 
@@ -263,6 +335,50 @@ pub fn tool_write_file(
         message: format!(
             "Wrote {} bytes to {} (+{} -{} lines)",
             content.len(),
+            path.display(),
+            added_lines,
+            removed_lines
+        ),
+        added_lines,
+        removed_lines,
+    })
+}
+
+pub fn tool_search_replace(
+    policy: &WorkspacePolicy,
+    path_str: &str,
+    old_string: &str,
+    new_string: &str,
+    replace_all: bool,
+) -> Result<WriteFileResult, String> {
+    let path = Path::new(path_str.trim());
+    if path_str.trim().is_empty() {
+        return Err("search_replace: path is empty".to_string());
+    }
+    if !policy.allows_path(path) {
+        return Err(format!(
+            "search_replace: path is not inside an AI-enabled folder or file: {}",
+            path.display()
+        ));
+    }
+    if !path.exists() {
+        return Err(format!(
+            "search_replace: file does not exist: {}",
+            path.display()
+        ));
+    }
+    if !path.is_file() {
+        return Err(format!("search_replace: not a file: {}", path.display()));
+    }
+
+    let existing = tool_read_file(policy, path_str)?;
+    let updated = apply_search_replace(&existing, old_string, new_string, replace_all)?;
+    let (added_lines, removed_lines) = estimate_line_changes(&existing, &updated);
+
+    fs::write(path, updated.as_bytes()).map_err(|e| format!("search_replace: {e}"))?;
+    Ok(WriteFileResult {
+        message: format!(
+            "Updated {} (+{} -{} lines)",
             path.display(),
             added_lines,
             removed_lines
@@ -411,4 +527,40 @@ pub fn tool_clear_directory(
         errors.len(),
         errors.join("\n")
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncation_guard_allows_small_files() {
+        assert!(!looks_like_truncated_overwrite("short", ""));
+    }
+
+    #[test]
+    fn truncation_guard_blocks_large_shrink() {
+        let existing = "line\n".repeat(200);
+        assert!(looks_like_truncated_overwrite(&existing, "/* truncated */"));
+    }
+
+    #[test]
+    fn truncation_guard_allows_similar_sized_rewrite() {
+        let existing = "x".repeat(5000);
+        let updated = format!("{existing}\nextra");
+        assert!(!looks_like_truncated_overwrite(&existing, &updated));
+    }
+
+    #[test]
+    fn search_replace_requires_unique_match_by_default() {
+        let existing = "abc abc";
+        let err = apply_search_replace(existing, "abc", "z", false).unwrap_err();
+        assert!(err.contains("appears 2 times"));
+    }
+
+    #[test]
+    fn search_replace_replace_all() {
+        let updated = apply_search_replace("abc abc", "abc", "z", true).unwrap();
+        assert_eq!(updated, "z z");
+    }
 }

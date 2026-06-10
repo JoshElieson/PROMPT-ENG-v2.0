@@ -13,7 +13,6 @@ import {
 } from "react";
 import {
   ArrowUp,
-  AtSign,
   Clock,
   Loader2,
   Paperclip,
@@ -199,10 +198,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [mentionDismissed, setMentionDismissed] = useState(false);
   const [slashDismissed, setSlashDismissed] = useState(false);
-  const [mentionPickerOpen, setMentionPickerOpen] = useState(false);
-  const [pickerIndex, setPickerIndex] = useState(0);
   const textareaRef = useRef<ComposerTextareaHandle>(null);
-  const pickerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isComposerDragOver, setIsComposerDragOver] = useState(false);
   const [optimizingPrompt, setOptimizingPrompt] = useState(false);
   const optimizeHighlight = useAiLoadingHighlight(optimizingPrompt);
@@ -588,71 +584,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     [input, insertModelsAtCursor, selectedIds],
   );
 
-  const clearPickerCloseTimer = useCallback(() => {
-    if (pickerCloseTimerRef.current) {
-      clearTimeout(pickerCloseTimerRef.current);
-      pickerCloseTimerRef.current = null;
-    }
-  }, []);
-
-  const schedulePickerClose = useCallback(() => {
-    clearPickerCloseTimer();
-    pickerCloseTimerRef.current = setTimeout(() => {
-      setMentionPickerOpen(false);
-    }, 150);
-  }, [clearPickerCloseTimer]);
-
-  const openMentionPicker = useCallback(() => {
-    clearPickerCloseTimer();
-    setPickerIndex(0);
-    setMentionPickerOpen(true);
-  }, [clearPickerCloseTimer]);
-
-  const pickModelFromMentionMenu = useCallback(
-    (model: AiModel) => {
-      insertModelMentionAtCursor(model);
-      setMentionPickerOpen(false);
-      textareaRef.current?.focus();
-    },
-    [insertModelMentionAtCursor],
-  );
-
-  const handleMentionListKeyDown = useCallback(
-    (
-      e: { key: string; preventDefault: () => void },
-      models: AiModel[],
-      activeIndex: number,
-      onSelect: (model: AiModel) => void,
-      onDismiss: () => void,
-    ): boolean => {
-      if (models.length === 0) return false;
-
-      // Menu sits above the anchor — screen-down moves toward the composer.
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setPickerIndex((i) => (i - 1 + models.length) % models.length);
-        return true;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setPickerIndex((i) => (i + 1) % models.length);
-        return true;
-      }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        onSelect(models[activeIndex]);
-        return true;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onDismiss();
-        return true;
-      }
-      return false;
-    },
-    [],
-  );
-
   const insertAllCartMentions = useCallback(() => {
     if (cartModels.length === 0) {
       setError(
@@ -854,29 +785,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   };
 
   useEffect(() => {
-    if (!mentionPickerOpen) return;
-
-    const onKeyDown = (e: globalThis.KeyboardEvent) => {
-      handleMentionListKeyDown(
-        e,
-        cartModels,
-        pickerIndex,
-        pickModelFromMentionMenu,
-        () => setMentionPickerOpen(false),
-      );
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    mentionPickerOpen,
-    cartModels,
-    pickerIndex,
-    pickModelFromMentionMenu,
-    handleMentionListKeyDown,
-  ]);
-
-  useEffect(() => {
     const onWindowKeyDown = (e: globalThis.KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
       if (e.key !== "1" && e.key !== "2" && e.key !== "3" && e.key !== "4") {
@@ -906,19 +814,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   }, [handleModelNumberShortcut]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (
-      mentionPickerOpen &&
-      handleMentionListKeyDown(
-        e,
-        cartModels,
-        pickerIndex,
-        pickModelFromMentionMenu,
-        () => setMentionPickerOpen(false),
-      )
-    ) {
-      return;
-    }
-
     if (
       (e.key === "Backspace" || e.key === "Delete") &&
       !e.ctrlKey &&
@@ -1062,7 +957,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
         <section
           className={cn(
-            "relative rounded-2xl border border-border bg-composer/95 shadow-[0_10px_24px_rgba(2,6,23,0.3)] transition-all duration-150",
+            "relative rounded-2xl border border-border bg-composer/95 shadow-soft transition-all duration-150",
             "focus-within:border-[#6366f1]/35 focus-within:ring-1 focus-within:ring-[#6366f1]/28",
             isComposerDragOver &&
               "border-[#6366f1]/55 bg-[#6366f1]/8 ring-1 ring-[#6366f1]/35",
@@ -1079,7 +974,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl border border-dashed border-[#6366f1]/60 bg-[#6366f1]/8"
               aria-hidden
             >
-              <span className="bg-composer/95 rounded-md px-3 py-1.5 text-sm font-medium text-[#c7d2fe] shadow-sm">
+              <span className="bg-composer/95 rounded-md px-3 py-1.5 text-sm font-medium text-accent-soft shadow-sm">
                 {isProjectDragActive() ? "Drop here" : "Drop files here"}
               </span>
             </div>
@@ -1199,41 +1094,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
-              <section
-                className="relative"
-                onPointerEnter={openMentionPicker}
-                onPointerLeave={schedulePickerClose}
-              >
-                {mentionPickerOpen && (
-                  <section
-                    className="absolute bottom-full left-0 z-30 mb-2 w-64"
-                    onPointerEnter={clearPickerCloseTimer}
-                    onPointerLeave={schedulePickerClose}
-                  >
-                    <MentionAutocomplete
-                      models={cartModels}
-                      activeIndex={pickerIndex}
-                      onActiveIndexChange={setPickerIndex}
-                      onSelect={pickModelFromMentionMenu}
-                    />
-                  </section>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground hover:bg-panel-elevated/90 hover:text-foreground h-7 w-7 rounded-md"
-                  onClick={openMentionPicker}
-                >
-                  <AtSign className="h-4 w-4" />
-                </Button>
-              </section>
             </section>
             <div className="flex items-center gap-1.5">
               <Button
                 type="button"
                 size="icon"
-                className="h-7 w-7 rounded-full border border-[#6366f1]/35 bg-[#4f46e5] text-white shadow-[0_6px_12px_rgba(15,23,42,0.3)] hover:bg-[#4338ca]"
+                className="border-accent-brand bg-accent-brand text-on-accent shadow-accent-button h-7 w-7 rounded-full border hover:bg-accent-brand-hover"
                 disabled={!canSend}
                 onClick={handleSend}
                 title={
