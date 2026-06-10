@@ -167,7 +167,10 @@ export async function aiChatComplete(
       messages,
       workspace:
         workspace &&
-        (workspace.enabledPaths.length > 0 || workspace.allowGit)
+        (workspace.enabledPaths.length > 0 ||
+          workspace.allowGit ||
+          workspace.allowTerminalPane ||
+          workspace.allowBrowserPane)
           ? workspace
           : null,
       system: systemPrompt.length > 0 ? systemPrompt : null,

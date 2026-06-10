@@ -464,12 +464,60 @@ fn append_git_tools_openai(tools: &mut Vec<serde_json::Value>) {
     ]);
 }
 
+/// Pane targets the agent may control, derived from per-agent permissions.
+fn pane_tool_targets(policy: &WorkspacePolicy) -> Vec<&'static str> {
+    let mut targets = Vec::new();
+    if policy.allows_terminal_pane() {
+        targets.push("terminal");
+    }
+    if policy.allows_browser_pane() {
+        targets.push("browser");
+    }
+    targets
+}
+
+const OPEN_PANE_DESCRIPTION: &str = "Open (show) a FORGE workspace pane for the user. Call this immediately when the user asks to open or show the terminal or browser pane.";
+const CLOSE_PANE_DESCRIPTION: &str = "Close (hide) a FORGE workspace pane for the user. Call this immediately when the user asks to close or hide the terminal or browser pane.";
+
+fn append_pane_tools_openai(tools: &mut Vec<serde_json::Value>, policy: &WorkspacePolicy) {
+    let targets = pane_tool_targets(policy);
+    if targets.is_empty() {
+        return;
+    }
+    let parameters = json!({
+        "type": "object",
+        "properties": {
+            "target": { "type": "string", "enum": targets, "description": "Pane to act on" }
+        },
+        "required": ["target"]
+    });
+    tools.extend([
+        json!({
+            "type": "function",
+            "function": {
+                "name": "open_pane",
+                "description": OPEN_PANE_DESCRIPTION,
+                "parameters": parameters.clone()
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": "close_pane",
+                "description": CLOSE_PANE_DESCRIPTION,
+                "parameters": parameters
+            }
+        }),
+    ]);
+}
+
 fn tools_schema_openai(policy: &WorkspacePolicy) -> Vec<serde_json::Value> {
     let mut tools = Vec::new();
     append_file_tools_openai(&mut tools, policy);
     if policy.allows_git() {
         append_git_tools_openai(&mut tools);
     }
+    append_pane_tools_openai(&mut tools, policy);
     tools
 }
 
@@ -516,6 +564,12 @@ UI pane controls:\n\
 - You may include multiple directive lines if the user asked for multiple pane changes.\n\
 - Keep your normal conversational response in plain text around the directive lines.\n\
 - Do not output pane directives unless the user asked to change panes.\n";
+
+const PANE_TOOLS_GUIDANCE: &str = "\n\
+Pane tools (terminal/browser):\n\
+- You have open_pane and close_pane tools. When the user asks to open, show, close, or hide the terminal or browser pane, call the tool immediately—do not describe steps or emit [[FORGE_PANE]] directives for these two panes.\n\
+- The tool result confirms the pane change was applied; report it briefly.\n\
+- For sidebar panes (models, explorer, agent cart) keep using the [[FORGE_PANE]] directive.\n";
 
 const DEFAULT_CHAT_SYSTEM: &str =
     "You are an agent in FORGE, an AI-native multi-agent engineering workspace. \
@@ -589,8 +643,13 @@ Rules:\n\
             GIT_TOOLS_GUIDANCE.trim()
         ));
     }
+    let pane_tools = if policy.allows_pane_control() {
+        PANE_TOOLS_GUIDANCE
+    } else {
+        ""
+    };
     format!(
-        "{}{FORGE_ENGINEERING_GUIDANCE}{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}",
+        "{}{FORGE_ENGINEERING_GUIDANCE}{RESPONSE_STYLE_GUIDANCE}{CODE_FORMATTING_GUIDANCE}{UI_PANE_GUIDANCE}{pane_tools}",
         sections.join("\n\n")
     )
 }
@@ -674,6 +733,13 @@ impl ToolActivitySink {
 
     fn emit_git_refresh(&self) {
         let _ = self.app.emit("forge:git-refresh", ());
+    }
+
+    fn emit_pane_action(&self, action: &str, target: &str) {
+        let _ = self.app.emit(
+            "forge:pane-action",
+            serde_json::json!({ "action": action, "target": target }),
+        );
     }
 }
 
@@ -901,6 +967,45 @@ fn emit_agent_step(activity_sink: Option<&ToolActivitySink>, round: u32) {
     }
 }
 
+/// Handle open_pane/close_pane by emitting a UI event the frontend applies.
+fn run_pane_tool(
+    policy: &WorkspacePolicy,
+    name: &str,
+    v: &serde_json::Value,
+    activity_sink: Option<&ToolActivitySink>,
+) -> Result<ToolExecution, String> {
+    let raw_target = v["target"].as_str().unwrap_or("").trim().to_ascii_lowercase();
+    let target = match raw_target.as_str() {
+        "terminal" => "terminal",
+        "browser" | "websites" | "website" => "browser",
+        other => return Err(format!("{name}: unsupported pane target '{other}'")),
+    };
+    let allowed = match target {
+        "terminal" => policy.allows_terminal_pane(),
+        _ => policy.allows_browser_pane(),
+    };
+    if !allowed {
+        return Err(format!("{name}: the {target} pane is disabled for this agent"));
+    }
+    let sink = activity_sink
+        .ok_or_else(|| format!("{name}: pane control is unavailable in this context"))?;
+    let action = if name == "open_pane" { "open" } else { "close" };
+    sink.emit_pane_action(action, target);
+    sink.emit_status(&format!(
+        "{} the {target} pane",
+        if action == "open" { "Opening" } else { "Closing" }
+    ));
+    let result = if action == "open" {
+        format!("Done: the {target} pane is now open in the FORGE UI.")
+    } else {
+        format!("Done: the {target} pane is now closed in the FORGE UI.")
+    };
+    Ok(ToolExecution {
+        output: result,
+        activity: None,
+    })
+}
+
 fn run_tool(
     policy: &WorkspacePolicy,
     name: &str,
@@ -922,6 +1027,9 @@ fn run_tool(
         ];
         if !policy.allows_write() && write_tools.contains(&name) {
             return Err(format!("{name}: file write access is disabled for this agent"));
+        }
+        if name == "open_pane" || name == "close_pane" {
+            return run_pane_tool(policy, name, &v, activity_sink);
         }
         if name.starts_with("git_") {
             return git_tool_output(policy, name, &v, activity_sink).map(|output| ToolExecution {
@@ -1919,12 +2027,39 @@ fn append_git_tools_anthropic(tools: &mut Vec<serde_json::Value>) {
     ]);
 }
 
+fn append_pane_tools_anthropic(tools: &mut Vec<serde_json::Value>, policy: &WorkspacePolicy) {
+    let targets = pane_tool_targets(policy);
+    if targets.is_empty() {
+        return;
+    }
+    let input_schema = json!({
+        "type": "object",
+        "properties": {
+            "target": { "type": "string", "enum": targets, "description": "Pane to act on" }
+        },
+        "required": ["target"]
+    });
+    tools.extend([
+        json!({
+            "name": "open_pane",
+            "description": OPEN_PANE_DESCRIPTION,
+            "input_schema": input_schema.clone()
+        }),
+        json!({
+            "name": "close_pane",
+            "description": CLOSE_PANE_DESCRIPTION,
+            "input_schema": input_schema
+        }),
+    ]);
+}
+
 fn anthropic_tools(policy: &WorkspacePolicy) -> Vec<serde_json::Value> {
     let mut tools = Vec::new();
     append_file_tools_anthropic(&mut tools, policy);
     if policy.allows_git() {
         append_git_tools_anthropic(&mut tools);
     }
+    append_pane_tools_anthropic(&mut tools, policy);
     tools
 }
 
@@ -2313,12 +2448,39 @@ fn append_git_tools_gemini(declarations: &mut Vec<serde_json::Value>) {
     ]);
 }
 
+fn append_pane_tools_gemini(declarations: &mut Vec<serde_json::Value>, policy: &WorkspacePolicy) {
+    let targets = pane_tool_targets(policy);
+    if targets.is_empty() {
+        return;
+    }
+    let parameters = json!({
+        "type": "object",
+        "properties": {
+            "target": { "type": "string", "enum": targets }
+        },
+        "required": ["target"]
+    });
+    declarations.extend([
+        json!({
+            "name": "open_pane",
+            "description": OPEN_PANE_DESCRIPTION,
+            "parameters": parameters.clone()
+        }),
+        json!({
+            "name": "close_pane",
+            "description": CLOSE_PANE_DESCRIPTION,
+            "parameters": parameters
+        }),
+    ]);
+}
+
 fn gemini_tool_declarations(policy: &WorkspacePolicy) -> serde_json::Value {
     let mut declarations = Vec::new();
     append_file_tools_gemini(&mut declarations, policy);
     if policy.allows_git() {
         append_git_tools_gemini(&mut declarations);
     }
+    append_pane_tools_gemini(&mut declarations, policy);
     json!([{ "function_declarations": declarations }])
 }
 

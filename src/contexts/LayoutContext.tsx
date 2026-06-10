@@ -8,8 +8,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { listen } from "@tauri-apps/api/event";
 import type { SidebarView } from "@/components/layout/ActivityBar";
 import type { MenuActionId } from "@/data/menu-items";
+import { isTauri } from "@/lib/tauri";
 import {
   clearWindowLayoutStorage,
   LEFT_SIDEBAR_COLLAPSED_KEY,
@@ -75,6 +77,8 @@ interface LayoutContextValue {
   reportBottomPanelKindsVisible: (visible: BottomPanelKindsVisible) => void;
   registerBottomPanelControl: (control: BottomPanelControl) => () => void;
   toggleBottomPanelKind: (kind: BottomPanelBootTab) => void;
+  openBottomPanelKind: (kind: BottomPanelBootTab) => void;
+  closeBottomPanelKind: (kind: BottomPanelBootTab) => void;
 }
 
 const LayoutContext = createContext<LayoutContextValue | null>(null);
@@ -239,6 +243,50 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     },
     [workspaceBottomPanelOpen, requestBottomPanelTab],
   );
+
+  const closeBottomPanelKind = useCallback(
+    (kind: BottomPanelBootTab) => {
+      if (!workspaceBottomPanelOpen) return;
+      const control = bottomPanelControlRef.current;
+      if (!control) {
+        setWorkspaceBottomPanelOpen(false);
+        return;
+      }
+      if (control.isKindVisible(kind)) {
+        control.hideKind(kind);
+      }
+    },
+    [workspaceBottomPanelOpen],
+  );
+
+  // Apply pane open/close requests emitted by AI agent tools (open_pane/close_pane).
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let off: (() => void) | undefined;
+    void listen<{ action: string; target: string }>(
+      "forge:pane-action",
+      (event) => {
+        const { action, target } = event.payload;
+        if (target !== "terminal" && target !== "browser") return;
+        if (action === "open") {
+          openBottomPanelKind(target);
+        } else if (action === "close") {
+          closeBottomPanelKind(target);
+        }
+      },
+    ).then((unlisten) => {
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      off = unlisten;
+    });
+    return () => {
+      disposed = true;
+      off?.();
+    };
+  }, [openBottomPanelKind, closeBottomPanelKind]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -411,6 +459,8 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
       reportBottomPanelKindsVisible,
       registerBottomPanelControl,
       toggleBottomPanelKind,
+      openBottomPanelKind,
+      closeBottomPanelKind,
     }),
     [
       settingsOpen,
@@ -441,6 +491,8 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
       reportBottomPanelKindsVisible,
       registerBottomPanelControl,
       toggleBottomPanelKind,
+      openBottomPanelKind,
+      closeBottomPanelKind,
     ],
   );
 

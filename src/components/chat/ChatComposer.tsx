@@ -178,12 +178,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
           .filter(([, p]) => p.enabled)
           .map(([path]) => path)
       : [];
-    if (enabledPaths.length === 0 && !allowGit) return undefined;
+    const allowTerminalPane = agentPermissions.terminal;
+    const allowBrowserPane = agentPermissions.browser;
+    if (
+      enabledPaths.length === 0 &&
+      !allowGit &&
+      !allowTerminalPane &&
+      !allowBrowserPane
+    ) {
+      return undefined;
+    }
     return {
       enabledPaths,
       allowWrite: agentPermissions.fileWrite,
       allowGit,
       gitRepoPath,
+      allowTerminalPane,
+      allowBrowserPane,
     };
   }, [composerChat, composerThread, projects]);
 

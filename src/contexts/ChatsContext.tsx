@@ -389,13 +389,25 @@ function buildThreadWorkspace(
         .map(([path]) => path)
     : [];
 
-  if (enabledPaths.length === 0 && !allowGit) return undefined;
+  const allowTerminalPane = agentPermissions.terminal;
+  const allowBrowserPane = agentPermissions.browser;
+
+  if (
+    enabledPaths.length === 0 &&
+    !allowGit &&
+    !allowTerminalPane &&
+    !allowBrowserPane
+  ) {
+    return undefined;
+  }
 
   return {
     enabledPaths,
     allowWrite: agentPermissions.fileWrite,
     allowGit,
     gitRepoPath,
+    allowTerminalPane,
+    allowBrowserPane,
   };
 }
 
@@ -518,8 +530,8 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     useApiUsage();
   const { awardNewAgent } = useUserXp();
   const {
-    requestBottomPanelTab,
-    setWorkspaceBottomPanelOpen,
+    openBottomPanelKind,
+    closeBottomPanelKind,
     setLeftSidebarViewVisible,
   } = useLayout();
   const { enqueueCommands } = useAiCommandBus();
@@ -1422,13 +1434,13 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
             continue;
           }
           if (action.target === "terminal") {
-            if (action.verb === "open") requestBottomPanelTab("terminal");
-            else setWorkspaceBottomPanelOpen(false);
+            if (action.verb === "open") openBottomPanelKind("terminal");
+            else closeBottomPanelKind("terminal");
             continue;
           }
           if (action.target === "websites") {
-            if (action.verb === "open") requestBottomPanelTab("browser");
-            else setWorkspaceBottomPanelOpen(false);
+            if (action.verb === "open") openBottomPanelKind("browser");
+            else closeBottomPanelKind("browser");
             continue;
           }
           if (action.target === "models") {
@@ -1776,8 +1788,8 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       addMessageMemoryRecord,
       appendAgentActivityEvent,
       clearStreamingActivities,
-      requestBottomPanelTab,
-      setWorkspaceBottomPanelOpen,
+      openBottomPanelKind,
+      closeBottomPanelKind,
       setLeftSidebarViewVisible,
       patchWorkspaceSettings,
       enqueueCommands,

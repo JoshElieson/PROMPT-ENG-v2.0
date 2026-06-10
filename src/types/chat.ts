@@ -90,6 +90,10 @@ export interface AiWorkspacePayload {
   allowGit?: boolean;
   /** Active repository root for git tools (from Source Control selection). */
   gitRepoPath?: string;
+  /** When true, open_pane/close_pane tools may control the terminal pane. */
+  allowTerminalPane?: boolean;
+  /** When true, open_pane/close_pane tools may control the browser pane. */
+  allowBrowserPane?: boolean;
 }
 
 export interface SendMessagePayload {

@@ -76,6 +76,16 @@ const AGENT_TOOL_REGISTRY = [
     description:
       "Empty a folder while keeping it in place. Use to reset directory contents.",
   },
+  {
+    id: "open_pane",
+    description:
+      "Open the terminal or browser pane in the FORGE workspace when the user asks to show it.",
+  },
+  {
+    id: "close_pane",
+    description:
+      "Close the terminal or browser pane in the FORGE workspace when the user asks to hide it.",
+  },
 ] as const;
 
 const APP_TERMS = [

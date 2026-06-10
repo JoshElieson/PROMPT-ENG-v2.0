@@ -171,8 +171,8 @@ app.post("/gemini/v1beta/models/:modelAction", async (req, res) => {
     const key = providerKeyOrThrow("GEMINI_API_KEY");
     const base = (process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta").replace(/\/+$/, "");
     const modelAction = req.params.modelAction;
-    const modelActionEncoded = encodeURIComponent(modelAction);
-    const url = `${base}/models/${modelActionEncoded}?key=${encodeURIComponent(key)}`;
+    // Keep the literal colon in ":generateContent" — encoding it (%3A) makes Google return 404.
+    const url = `${base}/models/${modelAction}?key=${encodeURIComponent(key)}`;
     return await proxyJson({
       res,
       url,

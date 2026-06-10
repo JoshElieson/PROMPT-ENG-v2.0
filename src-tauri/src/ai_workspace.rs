@@ -27,6 +27,12 @@ pub struct AiWorkspace {
     /// Absolute path to the active git repository root.
     #[serde(default)]
     pub git_repo_path: Option<String>,
+    /// When true, the agent may open/close the terminal pane via pane tools.
+    #[serde(default)]
+    pub allow_terminal_pane: Option<bool>,
+    /// When true, the agent may open/close the browser pane via pane tools.
+    #[serde(default)]
+    pub allow_browser_pane: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +41,8 @@ pub struct WorkspacePolicy {
     allow_write: bool,
     allow_git: bool,
     git_repo_path: Option<String>,
+    allow_terminal_pane: bool,
+    allow_browser_pane: bool,
 }
 
 impl WorkspacePolicy {
@@ -53,7 +61,13 @@ impl WorkspacePolicy {
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
-        if roots.is_empty() && !(allow_git && git_repo_path.is_some()) {
+        let allow_terminal_pane = ws.allow_terminal_pane.unwrap_or(false);
+        let allow_browser_pane = ws.allow_browser_pane.unwrap_or(false);
+        if roots.is_empty()
+            && !(allow_git && git_repo_path.is_some())
+            && !allow_terminal_pane
+            && !allow_browser_pane
+        {
             return None;
         }
         Some(Self {
@@ -61,6 +75,8 @@ impl WorkspacePolicy {
             allow_write: ws.allow_write.unwrap_or(true),
             allow_git: allow_git && git_repo_path.is_some(),
             git_repo_path,
+            allow_terminal_pane,
+            allow_browser_pane,
         })
     }
 
@@ -78,6 +94,18 @@ impl WorkspacePolicy {
 
     pub fn git_repo_path(&self) -> Option<&str> {
         self.git_repo_path.as_deref()
+    }
+
+    pub fn allows_terminal_pane(&self) -> bool {
+        self.allow_terminal_pane
+    }
+
+    pub fn allows_browser_pane(&self) -> bool {
+        self.allow_browser_pane
+    }
+
+    pub fn allows_pane_control(&self) -> bool {
+        self.allow_terminal_pane || self.allow_browser_pane
     }
 
     /// True if `path` is an enabled root, lies under one, or is a parent of one
