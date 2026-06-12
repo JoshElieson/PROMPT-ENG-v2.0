@@ -188,8 +188,45 @@ impl McpClient {
     }
 }
 
+fn is_supabase_plugin_installed() -> bool {
+    let app_data = std::env::var("APPDATA").unwrap_or_default();
+    if app_data.is_empty() {
+        return true;
+    }
+
+    let path = std::path::Path::new(&app_data)
+        .join("com.forge.desktop")
+        .join("installed-plugins.v1.json");
+
+    if !path.exists() {
+        return true;
+    }
+
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return false;
+    };
+
+    let Ok(json) = serde_json::from_str::<Value>(&content) else {
+        return false;
+    };
+
+    let ids = json
+        .get("ids")
+        .and_then(|value| value.as_array())
+        .or_else(|| json.as_array());
+
+    ids.map(|items| {
+        items.iter().any(|item| item.as_str() == Some("supabase"))
+    })
+    .unwrap_or(false)
+}
+
 pub async fn get_mcp_tools() -> Result<Vec<Value>, String> {
     let mut lock = MCP_CLIENT.lock().await;
+    if !is_supabase_plugin_installed() {
+        *lock = None;
+        return Ok(vec![]);
+    }
     if lock.is_none() {
         let app_data = std::env::var("APPDATA").unwrap_or_default();
         if !app_data.is_empty() {

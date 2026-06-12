@@ -25,14 +25,12 @@ export function GitHubAuthStatus({
     deviceFlow,
     isHydrated,
     isGitHubConfigured,
-    isGoogleConfigured,
     loginProvider,
   } = useAuth();
 
   const isMenu = variant === "menu";
   const activeProvider = session?.provider ?? loginProvider ?? "github";
   const ProviderIcon = activeProvider === "google" ? GoogleIcon : GitHubIcon;
-  const anyConfigured = isGitHubConfigured || isGoogleConfigured;
 
   if (!isHydrated) {
     return (
@@ -133,7 +131,7 @@ export function GitHubAuthStatus({
         className,
       )}
       title={
-        anyConfigured
+        isGitHubConfigured
           ? "Not signed in"
           : "Sign-in is not configured"
       }

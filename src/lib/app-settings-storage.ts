@@ -4,7 +4,7 @@ import { normalizeTargetModelIds } from "@/lib/ai-chat";
 export const APP_SETTINGS_STORAGE_KEY = "prompt:app-settings:v1";
 export const THEME_LEGACY_MIGRATION_KEY = "prompt:theme-legacy-migrated:v1";
 
-export type AppTheme = "light" | "dark" | "dark-blue";
+export type AppTheme = "light" | "dark" | "dark-blue" | "forest-green";
 
 export interface AppSettings {
   defaultModel: string;
@@ -33,7 +33,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeTheme(raw: unknown): AppTheme {
-  if (raw === "light" || raw === "dark" || raw === "dark-blue") {
+  if (
+    raw === "light" ||
+    raw === "dark" ||
+    raw === "dark-blue" ||
+    raw === "forest-green"
+  ) {
     return raw;
   }
   if (raw === "system") {

@@ -14,7 +14,6 @@ import {
 import {
   ArrowUp,
   Clock,
-  Database,
   Loader2,
   Paperclip,
   Sparkles,
@@ -27,6 +26,8 @@ import {
   type ComposerTextareaHandle,
 } from "@/components/chat/ComposerTextarea";
 import { MentionAutocomplete } from "@/components/chat/MentionAutocomplete";
+import { PluginInstallHint } from "@/components/chat/PluginInstallHint";
+import { SupabaseConfigureHint } from "@/components/chat/SupabaseConfigureHint";
 import { SlashCommandAutocomplete } from "@/components/chat/SlashCommandAutocomplete";
 import { Button } from "@/components/ui/button";
 import { useAppSelection } from "@/contexts/AppSelectionContext";
@@ -75,6 +76,12 @@ import {
 import { useAiLoadingHighlight } from "@/hooks/use-ai-loading-highlight";
 import { useLayout } from "@/contexts/LayoutContext";
 import { loadSupabaseConfig } from "@/lib/supabase-auth";
+import {
+  isPluginInstalled,
+  SUPABASE_PLUGIN_ID,
+  useInstalledPlugins,
+} from "@/lib/installed-plugins";
+import { findUninstalledPluginMention } from "@/lib/plugin-mention-detection";
 import { cn } from "@/lib/utils";
 
 const OPTIMIZE_PROMPT_AI_TOOLTIP = "Optimize prompt wording (keep meaning)";
@@ -223,23 +230,35 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   const isProgrammaticInputRef = useRef(false);
 
   const { openSettings } = useLayout();
+  const installedPlugins = useInstalledPlugins();
+  const supabasePluginInstalled = installedPlugins.has(SUPABASE_PLUGIN_ID);
   const [supabaseConnected, setSupabaseConnected] = useState(true);
 
   useEffect(() => {
+    if (!supabasePluginInstalled) {
+      setSupabaseConnected(false);
+      return;
+    }
     void loadSupabaseConfig().then((config) => {
       const isConnected = !!(config.personalAccessToken && config.projectUrl && config.anonKey);
       setSupabaseConnected(isConnected);
     });
-  }, [chatId, threadId]);
+  }, [chatId, threadId, supabasePluginInstalled]);
 
   const showDatabaseHint = useMemo(() => {
-    if (supabaseConnected) return false;
+    if (!supabasePluginInstalled || supabaseConnected) return false;
     const keywords = ["database", "supabase", "postgres", "sql", "table", "schema"];
     const text = input.toLowerCase();
     return keywords.some((k) => text.includes(k));
-  }, [input, supabaseConnected]);
+  }, [input, supabaseConnected, supabasePluginInstalled]);
+
+  const suggestedUninstalledPlugin = useMemo(
+    () => findUninstalledPluginMention(input, installedPlugins),
+    [input, installedPlugins],
+  );
 
   const navigateToSupabase = useCallback(() => {
+    if (!isPluginInstalled(SUPABASE_PLUGIN_ID)) return;
     openSettings();
     setTimeout(() => {
       window.dispatchEvent(
@@ -997,24 +1016,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
           </section>
         )}
 
-        {showDatabaseHint && (
-          <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-[#6366f1]/20 bg-[#6366f1]/5 px-3 py-1.5 text-[11px] text-muted-foreground shadow-sm">
-            <div className="flex items-center gap-2">
-              <Database className="h-3.5 w-3.5 text-[#6366f1] shrink-0" />
-              <span>
-                💡 <b>Need a database?</b> Link Supabase to automate table creation and schemas.
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={navigateToSupabase}
-              className="text-[11px] font-semibold text-[#6366f1] hover:underline shrink-0"
-            >
-              Configure Supabase →
-            </button>
-          </div>
-        )}
-
         <section
           className={cn(
             "relative rounded-2xl border border-border bg-composer/95 shadow-soft transition-all duration-150",
@@ -1029,6 +1030,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
           onDragOver={handleComposerDragOver}
           onDrop={handleComposerDrop}
         >
+          {showDatabaseHint || suggestedUninstalledPlugin ? (
+            <div className="absolute bottom-full left-0 z-20 mb-2 flex flex-col gap-1.5">
+              {showDatabaseHint ? (
+                <SupabaseConfigureHint onClick={navigateToSupabase} />
+              ) : null}
+              {suggestedUninstalledPlugin ? (
+                <PluginInstallHint plugin={suggestedUninstalledPlugin} />
+              ) : null}
+            </div>
+          ) : null}
+
           {isComposerDragOver && (
             <div
               className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl border border-dashed border-[#6366f1]/60 bg-[#6366f1]/8"

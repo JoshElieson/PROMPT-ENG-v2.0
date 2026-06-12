@@ -118,9 +118,17 @@ function validateSettingValue(
 
   if (settingKey === "theme") {
 
-    if (value !== "light" && value !== "dark" && value !== "dark-blue") {
+    if (
+      value !== "light" &&
+      value !== "dark" &&
+      value !== "dark-blue" &&
+      value !== "forest-green"
+    ) {
 
-      return { ok: false, reason: "Theme must be light, dark, or dark-blue." };
+      return {
+        ok: false,
+        reason: "Theme must be light, dark, dark-blue, or forest-green.",
+      };
 
     }
 

@@ -1,41 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { LucideIcon } from "lucide-react";
-import {
-  Activity,
-  BarChart3,
-  Bot,
-  Brain,
-  Bug,
-  ChartPie,
-  Cloud,
-  Container,
-  CreditCard,
-  Database,
-  FlaskConical,
-  Globe,
-  KeyRound,
-  LayoutDashboard,
-  LineChart,
-  ListTodo,
-  Loader2,
-  MessageCircle,
-  MessageSquare,
-  PenTool,
-  Plane,
-  PlugZap,
-  Route,
-  Search,
-  Shield,
-  Sparkles,
-  StickyNote,
-  TrainFront,
-  Triangle,
-  Users,
-  Video,
-  Wallet,
-  X,
-} from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 import { PluginIcon } from "@/components/settings/PluginIcon";
+import {
+  PLUGIN_GROUPS,
+  RECOMMENDED_PLUGIN_IDS,
+  type PluginGroup,
+  type PluginPlaceholder,
+} from "@/data/plugins";
+import {
+  getDatabasePluginById,
+  isDatabasePluginId,
+} from "@/data/database-plugins";
+import {
+  installPlugin,
+  uninstallPlugin,
+  useInstalledPlugins,
+} from "@/lib/installed-plugins";
 import { cn } from "@/lib/utils";
 
 type PluginFilter = "all" | "installed" | "recommended";
@@ -46,373 +26,15 @@ const PLUGIN_FILTERS: { id: PluginFilter; label: string }[] = [
   { id: "recommended", label: "Recommended" },
 ];
 
-const RECOMMENDED_PLUGIN_IDS = new Set([
-  "mcp-manager",
-  "docker",
-  "figma",
-  "excalidraw",
-  "slack",
-  "linear",
-  "vercel",
-  "supabase",
-  "openai",
-  "sentry",
-]);
+const PLUGIN_INSTALL_DURATION_MS = 3000;
 
-interface PluginPlaceholder {
-  id: string;
-  name: string;
-  description: string;
-  icon: LucideIcon;
-}
-
-interface PluginGroup {
-  label: string;
-  plugins: PluginPlaceholder[];
-}
-
-const PLUGIN_GROUPS: PluginGroup[] = [
-  {
-    label: "Built-in tools",
-    plugins: [
-      {
-        id: "mcp-manager",
-        name: "MCP Manager",
-        description: "Install and configure Model Context Protocol servers for agents.",
-        icon: PlugZap,
-      },
-      {
-        id: "api-tester",
-        name: "API Tester",
-        description: "Send HTTP requests and inspect responses without leaving Forge.",
-        icon: FlaskConical,
-      },
-      {
-        id: "docker",
-        name: "Docker",
-        description: "Manage containers, images, and compose stacks from the workspace.",
-        icon: Container,
-      },
-      {
-        id: "import-ai-models",
-        name: "Import AI Model(s)",
-        description: "Add custom or third-party models to use alongside built-in options.",
-        icon: Brain,
-      },
-    ],
-  },
-  {
-    label: "Design & collaboration",
-    plugins: [
-      {
-        id: "figma",
-        name: "Figma",
-        description: "Import designs and sync components from Figma into your workspace.",
-        icon: PenTool,
-      },
-      {
-        id: "excalidraw",
-        name: "Excalidraw",
-        description: "Create and edit hand-drawn diagrams and whiteboards in Forge.",
-        icon: StickyNote,
-      },
-      {
-        id: "miro",
-        name: "Miro",
-        description: "Import boards and collaborate on visual planning from Miro.",
-        icon: LayoutDashboard,
-      },
-    ],
-  },
-  {
-    label: "Databases",
-    plugins: [
-      {
-        id: "supabase",
-        name: "Supabase",
-        description: "Connect projects to Supabase for database, auth, and storage.",
-        icon: Database,
-      },
-      {
-        id: "neon",
-        name: "Neon",
-        description: "Manage serverless Postgres branches and databases from Neon.",
-        icon: Database,
-      },
-      {
-        id: "planetscale",
-        name: "PlanetScale",
-        description: "Connect to PlanetScale for scalable MySQL workflows.",
-        icon: Database,
-      },
-      {
-        id: "mongodb-atlas",
-        name: "MongoDB Atlas",
-        description: "Browse collections and manage MongoDB Atlas clusters.",
-        icon: Database,
-      },
-    ],
-  },
-  {
-    label: "Hosting & deploy",
-    plugins: [
-      {
-        id: "vercel",
-        name: "Vercel",
-        description: "Deploy previews and production builds to Vercel.",
-        icon: Triangle,
-      },
-      {
-        id: "netlify",
-        name: "Netlify",
-        description: "Deploy sites and manage Netlify projects from Forge.",
-        icon: Globe,
-      },
-      {
-        id: "railway",
-        name: "Railway",
-        description: "Provision services and deploy apps on Railway.",
-        icon: TrainFront,
-      },
-      {
-        id: "render",
-        name: "Render",
-        description: "Manage Render services, deploys, and environment variables.",
-        icon: Cloud,
-      },
-      {
-        id: "fly-io",
-        name: "Fly.io",
-        description: "Deploy and scale apps globally on Fly.io machines.",
-        icon: Plane,
-      },
-    ],
-  },
-  {
-    label: "Cloud providers",
-    plugins: [
-      {
-        id: "aws",
-        name: "AWS",
-        description: "Interact with Amazon Web Services resources and deployments.",
-        icon: Cloud,
-      },
-      {
-        id: "google-cloud",
-        name: "Google Cloud",
-        description: "Manage Google Cloud projects, services, and credentials.",
-        icon: Cloud,
-      },
-      {
-        id: "microsoft-azure",
-        name: "Microsoft Azure",
-        description: "Connect Azure subscriptions and cloud resources to Forge.",
-        icon: Cloud,
-      },
-      {
-        id: "cloudflare",
-        name: "Cloudflare",
-        description: "Manage DNS, Workers, and edge services on Cloudflare.",
-        icon: Cloud,
-      },
-    ],
-  },
-  {
-    label: "Project management",
-    plugins: [
-      {
-        id: "linear",
-        name: "Linear",
-        description: "Sync issues, cycles, and project updates from Linear.",
-        icon: ListTodo,
-      },
-      {
-        id: "jira",
-        name: "Jira",
-        description: "Track Jira issues, sprints, and boards alongside your code.",
-        icon: ListTodo,
-      },
-      {
-        id: "trello",
-        name: "Trello",
-        description: "Import Trello boards and cards into your workflow.",
-        icon: LayoutDashboard,
-      },
-      {
-        id: "asana",
-        name: "Asana",
-        description: "Connect Asana tasks and projects to agent workflows.",
-        icon: ListTodo,
-      },
-    ],
-  },
-  {
-    label: "Communication",
-    plugins: [
-      {
-        id: "slack",
-        name: "Slack",
-        description: "Send updates and receive notifications in Slack channels.",
-        icon: MessageSquare,
-      },
-      {
-        id: "discord",
-        name: "Discord",
-        description: "Post agent results and alerts to Discord servers.",
-        icon: MessageCircle,
-      },
-      {
-        id: "microsoft-teams",
-        name: "Microsoft Teams",
-        description: "Share automation output and alerts in Microsoft Teams.",
-        icon: Users,
-      },
-    ],
-  },
-  {
-    label: "AI providers",
-    plugins: [
-      {
-        id: "openai",
-        name: "OpenAI",
-        description: "Connect OpenAI API keys and models for agent tasks.",
-        icon: Sparkles,
-      },
-      {
-        id: "anthropic",
-        name: "Anthropic",
-        description: "Use Anthropic Claude models with your Forge agents.",
-        icon: Bot,
-      },
-      {
-        id: "google-ai-studio",
-        name: "Google AI Studio",
-        description: "Access Gemini and other Google AI Studio models.",
-        icon: Sparkles,
-      },
-      {
-        id: "openrouter",
-        name: "OpenRouter",
-        description: "Route requests across many models through OpenRouter.",
-        icon: Route,
-      },
-      {
-        id: "hugging-face",
-        name: "Hugging Face",
-        description: "Browse and run models from the Hugging Face Hub.",
-        icon: Sparkles,
-      },
-    ],
-  },
-  {
-    label: "Authentication",
-    plugins: [
-      {
-        id: "clerk",
-        name: "Clerk",
-        description: "Integrate Clerk user management and authentication flows.",
-        icon: KeyRound,
-      },
-      {
-        id: "auth0",
-        name: "Auth0",
-        description: "Connect Auth0 tenants, apps, and identity settings.",
-        icon: Shield,
-      },
-      {
-        id: "firebase-authentication",
-        name: "Firebase Authentication",
-        description: "Manage Firebase Auth users and sign-in providers.",
-        icon: Shield,
-      },
-    ],
-  },
-  {
-    label: "Payments",
-    plugins: [
-      {
-        id: "stripe",
-        name: "Stripe",
-        description: "Inspect payments, subscriptions, and Stripe webhooks.",
-        icon: CreditCard,
-      },
-      {
-        id: "paypal",
-        name: "PayPal",
-        description: "Connect PayPal commerce and payout workflows.",
-        icon: Wallet,
-      },
-      {
-        id: "lemon-squeezy",
-        name: "Lemon Squeezy",
-        description: "Manage Lemon Squeezy products, orders, and subscriptions.",
-        icon: CreditCard,
-      },
-    ],
-  },
-  {
-    label: "Analytics & monitoring",
-    plugins: [
-      {
-        id: "posthog",
-        name: "PostHog",
-        description: "View product analytics and feature flags from PostHog.",
-        icon: BarChart3,
-      },
-      {
-        id: "mixpanel",
-        name: "Mixpanel",
-        description: "Explore event analytics and funnels from Mixpanel.",
-        icon: LineChart,
-      },
-      {
-        id: "google-analytics",
-        name: "Google Analytics",
-        description: "Pull traffic and conversion metrics from Google Analytics.",
-        icon: ChartPie,
-      },
-      {
-        id: "sentry",
-        name: "Sentry",
-        description: "Monitor errors, releases, and performance in Sentry.",
-        icon: Bug,
-      },
-      {
-        id: "datadog",
-        name: "Datadog",
-        description: "Inspect logs, metrics, and alerts from Datadog.",
-        icon: Activity,
-      },
-      {
-        id: "logrocket",
-        name: "LogRocket",
-        description: "Review session replays and frontend diagnostics in LogRocket.",
-        icon: Video,
-      },
-    ],
-  },
-];
-
-const INSTALLED_PLUGINS_STORAGE_KEY = "prompt:installed-plugins:v1";
-
-function readInstalledPluginIds(): Set<string> {
-  try {
-    const raw = localStorage.getItem(INSTALLED_PLUGINS_STORAGE_KEY);
-    if (!raw) return new Set();
-
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-
-    return new Set(parsed.filter((id): id is string => typeof id === "string"));
-  } catch {
-    return new Set();
-  }
-}
-
-function writeInstalledPluginIds(ids: Set<string>) {
-  localStorage.setItem(
-    INSTALLED_PLUGINS_STORAGE_KEY,
-    JSON.stringify([...ids]),
+function navigateToDatabasePluginSetup(pluginId: string): void {
+  const plugin = getDatabasePluginById(pluginId);
+  if (!plugin) return;
+  window.dispatchEvent(
+    new CustomEvent("forge:settings-navigate", {
+      detail: { sectionId: plugin.sectionId },
+    }),
   );
 }
 
@@ -486,8 +108,6 @@ function PluginsEmptyState() {
     </div>
   );
 }
-
-const PLUGIN_INSTALL_DURATION_MS = 3000;
 
 function PluginCard({
   plugin,
@@ -592,7 +212,7 @@ export function SettingsPluginsPanel() {
   const installingRef = useRef<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<PluginFilter>("all");
-  const [installedIds, setInstalledIds] = useState(readInstalledPluginIds);
+  const installedIds = useInstalledPlugins();
   const [installingIds, setInstallingIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
@@ -605,7 +225,7 @@ export function SettingsPluginsPanel() {
     };
   }, []);
 
-  const installPlugin = (pluginId: string) => {
+  const handleInstallPlugin = (pluginId: string) => {
     if (installedIds.has(pluginId) || installingRef.current.has(pluginId)) return;
 
     installingRef.current.add(pluginId);
@@ -623,18 +243,16 @@ export function SettingsPluginsPanel() {
         next.delete(pluginId);
         return next;
       });
-      setInstalledIds((current) => {
-        const next = new Set(current);
-        next.add(pluginId);
-        writeInstalledPluginIds(next);
-        return next;
-      });
+      installPlugin(pluginId);
+      if (isDatabasePluginId(pluginId)) {
+        navigateToDatabasePluginSetup(pluginId);
+      }
     }, PLUGIN_INSTALL_DURATION_MS);
 
     installTimeoutsRef.current.set(pluginId, timeoutId);
   };
 
-  const uninstallPlugin = (pluginId: string) => {
+  const handleUninstallPlugin = (pluginId: string) => {
     const pendingTimeout = installTimeoutsRef.current.get(pluginId);
     if (pendingTimeout !== undefined) {
       window.clearTimeout(pendingTimeout);
@@ -648,12 +266,7 @@ export function SettingsPluginsPanel() {
       return;
     }
 
-    setInstalledIds((current) => {
-      const next = new Set(current);
-      next.delete(pluginId);
-      writeInstalledPluginIds(next);
-      return next;
-    });
+    uninstallPlugin(pluginId);
   };
 
   const filteredGroups = useMemo(() => {
@@ -724,8 +337,8 @@ export function SettingsPluginsPanel() {
               group={group}
               installedIds={installedIds}
               installingIds={installingIds}
-              onInstall={installPlugin}
-              onUninstall={uninstallPlugin}
+              onInstall={handleInstallPlugin}
+              onUninstall={handleUninstallPlugin}
             />
           ))}
         </div>
@@ -734,10 +347,3 @@ export function SettingsPluginsPanel() {
   );
 }
 
-export const PLUGIN_SEARCH_TERMS = PLUGIN_GROUPS.flatMap((group) =>
-  group.plugins.map((plugin) => ({
-    label: plugin.name,
-    keywords:
-      `plugin ${plugin.id} ${plugin.name} ${plugin.description} ${group.label}`.toLowerCase(),
-  })),
-);

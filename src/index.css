@@ -55,6 +55,58 @@
   --switch-thumb-checked: #e2e8f0;
 }
 
+:root[data-theme="forest-green"] {
+  --bg-primary: #0f1411;
+  --bg-secondary: #141a16;
+  --bg-panel: #18201b;
+  --bg-elevated: #1d2720;
+  --bg-composer: #212c24;
+  --bg-code-surface: #1a1e1a;
+  --bg-terminal: #141814;
+  --bg-message-sent: rgb(34 56 44 / 0.55);
+  --border-subtle: rgb(134 168 148 / 0.12);
+  --border-strong: rgb(255 255 255 / 0.08);
+  --border-message-sent: rgb(34 197 94 / 0.26);
+  --text-primary: #f0f5f2;
+  --text-secondary: #94b0a0;
+  --text-muted: #7a9488;
+  --text-on-accent: #ffffff;
+  --accent: #22c55e;
+  --accent-soft: rgb(34 197 94 / 0.16);
+  --accent-bright: #4ade80;
+  --accent-text: #bbf7d0;
+  --accent-hover: #16a34a;
+  --accent-pressed: #15803d;
+  --menu-hover: rgb(134 168 148 / 0.12);
+  --menu-hover-strong: rgb(34 197 94 / 0.14);
+  --hover-surface: rgb(255 255 255 / 0.06);
+  --hover-surface-subtle: rgb(255 255 255 / 0.04);
+  --workspace-header-line: rgb(34 197 94 / 0.24);
+  --success: #4ade80;
+  --shadow-soft: 0 8px 30px rgb(2 23 10 / 0.34);
+  --shadow-elevated: 0 8px 24px rgb(2 23 10 / 0.34);
+  --shadow-elevated-lg: 0 18px 40px rgb(2 23 10 / 0.46);
+  --shadow-elevated-sm: 0 4px 14px rgb(2 23 10 / 0.18);
+  --shadow-accent-button: 0 8px 18px rgb(15 42 23 / 0.28);
+  --shadow-message-sent: 0 10px 20px rgb(2 23 10 / 0.3);
+  --shadow-dock: 0 10px 28px rgb(2 23 10 / 0.38);
+  --shadow-dock-hover: 0 12px 32px rgb(2 23 10 / 0.42), 0 0 0 1px rgb(34 197 94 / 0.14);
+  --shadow-dock-active: 0 14px 36px rgb(2 23 10 / 0.45);
+  --shadow-toast: 0 14px 28px rgb(2 23 10 / 0.38);
+  --shadow-command-label: 0 8px 18px rgb(2 23 10 / 0.5);
+  --bg-command-label: rgb(15 42 23 / 0.93);
+  --text-command-label: rgb(187 247 208);
+  --body-gradient:
+    radial-gradient(circle at 12% -10%, rgb(21 128 61 / 0.05), transparent 46%),
+    radial-gradient(circle at 86% 0%, rgb(34 197 94 / 0.06), transparent 44%),
+    radial-gradient(circle at 55% 100%, rgb(22 163 74 / 0.035), transparent 42%),
+    var(--bg-primary);
+  --scrollbar-thumb: rgb(134 168 148 / 0.3);
+  --scrollbar-thumb-hover: rgb(134 168 148 / 0.45);
+  --switch-track-off: rgb(134 168 148 / 0.22);
+  --switch-thumb-checked: #dcfce7;
+}
+
 :root[data-theme="dark"] {
   --bg-primary: #09090b;
   --bg-secondary: #111113;

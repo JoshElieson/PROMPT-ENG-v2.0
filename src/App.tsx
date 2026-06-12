@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { ActivityBar } from "@/components/layout/ActivityBar";
 import { EditContextMenu } from "@/components/layout/EditContextMenu";
 import { LeftSidebar } from "@/components/layout/LeftSidebar";
@@ -23,6 +24,7 @@ import { AiCommandBusProvider } from "@/contexts/AiCommandBusContext";
 import { AppToastProvider } from "@/contexts/AppToastContext";
 import { AutomationsProvider } from "@/contexts/AutomationsContext";
 import { RulesProvider } from "@/contexts/RulesContext";
+import { initializeInstalledPlugins } from "@/lib/installed-plugins";
 
 function AppShell() {
   const { sidebarView, setSidebarView, settingsOpen } = useLayout();
@@ -51,6 +53,10 @@ function AppShell() {
 }
 
 function App() {
+  useEffect(() => {
+    void initializeInstalledPlugins();
+  }, []);
+
   if (window.location.pathname === "/oauth/google/callback") {
     return <GoogleOAuthCallback />;
   }

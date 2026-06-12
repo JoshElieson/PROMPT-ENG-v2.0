@@ -14,19 +14,24 @@ import { SettingsAgentsPanel } from "@/components/settings/SettingsAgentsPanel";
 import { SettingsAutomationPanel } from "@/components/settings/SettingsAutomationPanel";
 import { SettingsDocsPanel } from "@/components/settings/SettingsDocsPanel";
 import { SettingsGeneralPanel } from "@/components/settings/SettingsGeneralPanel";
-import {
-  PLUGIN_SEARCH_TERMS,
-  SettingsPluginsPanel,
-} from "@/components/settings/SettingsPluginsPanel";
+import { SettingsPluginsPanel } from "@/components/settings/SettingsPluginsPanel";
+import { PLUGIN_SEARCH_TERMS } from "@/data/plugins";
 import { SettingsRulesPanel } from "@/components/settings/SettingsRulesPanel";
 import { SettingsPlanUsagePanel } from "@/components/settings/SettingsPlanUsagePanel";
+import { DatabasePluginTodoPanel } from "@/components/settings/DatabasePluginTodoPanel";
 import { SupabaseSetupAssistant } from "@/components/settings/SupabaseSetupAssistant";
 import {
-  SETTINGS_NAV_GROUPS,
+  buildSettingsNavGroups,
   SETTINGS_SECTION_LABELS,
-  type SettingsNavItem,
+  type SettingsNavGroup,
   type SettingsSectionId,
 } from "@/components/settings/settings-nav";
+import {
+  getDatabasePluginBySectionId,
+  isDatabasePluginSectionId,
+  isDatabasePluginSectionInstalled,
+} from "@/data/database-plugins";
+import { useInstalledPlugins } from "@/lib/installed-plugins";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppSettings } from "@/contexts/AppSettingsContext";
 import { popularAiModels } from "@/data/ai-models";
@@ -109,7 +114,7 @@ const APPEARANCE_SETTING_SEARCH_TERMS: Array<{
 }> = [
   {
     label: "Theme",
-    keywords: "theme dark dark blue light appearance color",
+    keywords: "theme dark dark blue forest green light appearance color",
   },
   {
     label: "Vertical Default",
@@ -169,18 +174,20 @@ const GENERAL_SETTING_SEARCH_TERMS: Array<{
   },
 ];
 
-const NAV_SEARCH_INDEX: SettingsSearchResult[] = SETTINGS_NAV_GROUPS.flatMap((group) =>
-  group.items.map((item: SettingsNavItem) => ({
-    id: `section-${item.id}`,
-    sectionId: item.id,
-    label: item.label,
-    keywords: item.label.toLowerCase(),
-    sectionLabel: SETTINGS_SECTION_LABELS[item.id],
-  })),
-);
 
-const SETTINGS_SEARCH_INDEX: SettingsSearchResult[] = [
-  ...NAV_SEARCH_INDEX,
+function buildNavSearchIndex(navGroups: SettingsNavGroup[]): SettingsSearchResult[] {
+  return navGroups.flatMap((group) =>
+    group.items.map((item) => ({
+      id: `section-${item.id}`,
+      sectionId: item.id,
+      label: item.label,
+      keywords: item.label.toLowerCase(),
+      sectionLabel: SETTINGS_SECTION_LABELS[item.id],
+    })),
+  );
+}
+
+const STATIC_SETTINGS_SEARCH_INDEX: SettingsSearchResult[] = [
   ...GENERAL_SETTING_SEARCH_TERMS.map((item, index) => ({
     id: `general-setting-${index}`,
     sectionId: "general" as const,
@@ -231,6 +238,10 @@ const SETTINGS_SEARCH_INDEX: SettingsSearchResult[] = [
     sectionLabel: SETTINGS_SECTION_LABELS.plugins,
   })),
 ];
+
+function buildSettingsSearchIndex(navGroups: SettingsNavGroup[]): SettingsSearchResult[] {
+  return [...buildNavSearchIndex(navGroups), ...STATIC_SETTINGS_SEARCH_INDEX];
+}
 
 function SettingsPlaceholderPanel({ sectionId }: { sectionId: SettingsSectionId }) {
   const label = SETTINGS_SECTION_LABELS[sectionId];
@@ -303,13 +314,21 @@ function SettingsAppearancePanel() {
         <select
           value={settings.theme}
           onChange={(event) =>
-            setSetting("theme", event.target.value as "light" | "dark" | "dark-blue")
+            setSetting(
+              "theme",
+              event.target.value as
+                | "light"
+                | "dark"
+                | "dark-blue"
+                | "forest-green",
+            )
           }
           className="border-border-subtle bg-panel-elevated/80 text-foreground focus:border-[#6366f1]/60 h-9 w-full rounded-md border px-2 text-xs outline-none"
         >
           <option value="light">Light</option>
           <option value="dark">Dark</option>
           <option value="dark-blue">Dark Blue</option>
+          <option value="forest-green">Forest Green</option>
         </select>
       </section>
 
@@ -330,17 +349,28 @@ function SettingsAppearancePanel() {
   );
 }
 
-function SettingsContent({ sectionId }: { sectionId: SettingsSectionId }) {
+function SettingsContent({
+  sectionId,
+  installedPluginIds,
+}: {
+  sectionId: SettingsSectionId;
+  installedPluginIds: Set<string>;
+}) {
   const title = SETTINGS_SECTION_LABELS[sectionId];
+  const databasePlugin = getDatabasePluginBySectionId(sectionId);
+  const databasePluginInstalled = databasePlugin
+    ? installedPluginIds.has(databasePlugin.id)
+    : false;
+  const isSupabaseSection = sectionId === "supabase";
 
   return (
     <div className={cn(
       "min-h-0 flex-1 px-10 py-8",
-      sectionId === "supabase" ? "overflow-hidden flex flex-col h-full" : "overflow-y-auto"
+      isSupabaseSection ? "overflow-hidden flex flex-col h-full" : "overflow-y-auto"
     )}>
       <h1 className={cn(
         "text-2xl font-semibold tracking-tight text-foreground",
-        sectionId === "supabase" ? "mb-4 shrink-0" : "mb-8"
+        isSupabaseSection ? "mb-4 shrink-0" : "mb-8"
       )}>
         {title}
       </h1>
@@ -352,7 +382,10 @@ function SettingsContent({ sectionId }: { sectionId: SettingsSectionId }) {
       {sectionId === "agents" && <SettingsAgentsPanel />}
       {sectionId === "docs" && <SettingsDocsPanel />}
       {sectionId === "plugins" && <SettingsPluginsPanel />}
-      {sectionId === "supabase" && <SupabaseSetupAssistant />}
+      {isSupabaseSection && databasePluginInstalled && <SupabaseSetupAssistant />}
+      {databasePlugin &&
+        databasePlugin.id !== "supabase" &&
+        databasePluginInstalled && <DatabasePluginTodoPanel />}
       {sectionId === "rules" && <SettingsRulesPanel />}
       {sectionId !== "general" &&
         sectionId !== "models" &&
@@ -362,7 +395,7 @@ function SettingsContent({ sectionId }: { sectionId: SettingsSectionId }) {
         sectionId !== "agents" &&
         sectionId !== "docs" &&
         sectionId !== "plugins" &&
-        sectionId !== "supabase" &&
+        !databasePlugin &&
         sectionId !== "rules" && (
           <SettingsPlaceholderPanel sectionId={sectionId} />
         )}
@@ -374,10 +407,12 @@ function SettingsNav({
   activeSection,
   onSectionChange,
   onBack,
+  navGroups,
 }: {
   activeSection: SettingsSectionId;
   onSectionChange: (id: SettingsSectionId) => void;
   onBack: () => void;
+  navGroups: SettingsNavGroup[];
 }) {
   const { session } = useAuth();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -392,15 +427,19 @@ function SettingsNav({
     .slice(0, 2)
     .toUpperCase();
   const trimmedSearch = searchQuery.trim().toLowerCase();
+  const settingsSearchIndex = useMemo(
+    () => buildSettingsSearchIndex(navGroups),
+    [navGroups],
+  );
   const searchResults = useMemo(() => {
     if (!trimmedSearch) return [];
-    return SETTINGS_SEARCH_INDEX.filter((entry) => {
+    return settingsSearchIndex.filter((entry) => {
       const label = entry.label.toLowerCase();
       return (
         label.includes(trimmedSearch) || entry.keywords.includes(trimmedSearch)
       );
     }).slice(0, 8);
-  }, [trimmedSearch]);
+  }, [settingsSearchIndex, trimmedSearch]);
 
   useEffect(() => {
     if (!searchOpen) return;
@@ -515,7 +554,7 @@ function SettingsNav({
             )}
           </div>
         ) : null}
-        {SETTINGS_NAV_GROUPS.map((group, groupIndex) => (
+        {navGroups.map((group, groupIndex) => (
           <div
             key={`group-${groupIndex}`}
             className={cn(groupIndex > 0 && "mt-6")}
@@ -578,14 +617,34 @@ function SettingsNav({
 
 export function SettingsPage() {
   const { closeSettings } = useLayout();
+  const installedPluginIds = useInstalledPlugins();
+  const navGroups = useMemo(
+    () => buildSettingsNavGroups(installedPluginIds),
+    [installedPluginIds],
+  );
   const [activeSection, setActiveSection] =
     useState<SettingsSectionId>("general");
+
+  useEffect(() => {
+    if (
+      isDatabasePluginSectionId(activeSection) &&
+      !isDatabasePluginSectionInstalled(activeSection, installedPluginIds)
+    ) {
+      setActiveSection("plugins");
+    }
+  }, [activeSection, installedPluginIds]);
 
   useEffect(() => {
     const onNavigate = (event: Event) => {
       const custom = event as CustomEvent<{ sectionId?: SettingsSectionId }>;
       const sectionId = custom.detail?.sectionId;
       if (!sectionId) return;
+      if (
+        isDatabasePluginSectionId(sectionId) &&
+        !isDatabasePluginSectionInstalled(sectionId, installedPluginIds)
+      ) {
+        return;
+      }
       if (SETTINGS_SECTION_LABELS[sectionId]) {
         setActiveSection(sectionId);
       }
@@ -596,7 +655,7 @@ export function SettingsPage() {
         "forge:settings-navigate",
         onNavigate as EventListener,
       );
-  }, []);
+  }, [installedPluginIds]);
 
   useEffect(() => {
     window.dispatchEvent(
@@ -615,9 +674,13 @@ export function SettingsPage() {
         activeSection={activeSection}
         onSectionChange={setActiveSection}
         onBack={closeSettings}
+        navGroups={navGroups}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <SettingsContent sectionId={activeSection} />
+        <SettingsContent
+          sectionId={activeSection}
+          installedPluginIds={installedPluginIds}
+        />
       </div>
     </div>
   );

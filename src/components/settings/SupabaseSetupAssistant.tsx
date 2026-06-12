@@ -483,14 +483,6 @@ export function SupabaseSetupAssistant() {
     setIsProcessing(false);
   };
 
-  const navigateToProjectApi = async (ref: string) => {
-    setError(null);
-    setIsProcessing(true);
-    setStatusText("Loading project API credentials...");
-    await navigateBrowserWebview("supabase-setup-browser", `https://supabase.com/dashboard/project/${ref}/settings/api`);
-    setIsProcessing(false);
-  };
-
   const navigateToProjectApiKeys = async (ref: string) => {
     setError(null);
     setIsProcessing(true);

@@ -12,6 +12,7 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
+import { DATABASE_PLUGINS } from "@/data/database-plugins";
 
 export type SettingsSectionId =
   | "general"
@@ -23,6 +24,9 @@ export type SettingsSectionId =
   | "models"
   | "plugins"
   | "supabase"
+  | "neon"
+  | "planetscale"
+  | "mongodb-atlas"
   | "rules"
   | "docs";
 
@@ -56,7 +60,6 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     items: [
       { id: "plugins", label: "Plugins", icon: Puzzle },
-      { id: "supabase", label: "Supabase Setup", icon: Database },
       { id: "automation", label: "Automation", icon: Repeat2 },
       { id: "rules", label: "Rules", icon: ScrollText },
     ],
@@ -68,6 +71,29 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   },
 ];
 
+export function buildSettingsNavGroups(
+  installedPluginIds: Set<string>,
+): SettingsNavGroup[] {
+  return SETTINGS_NAV_GROUPS.map((group) => {
+    const pluginsIndex = group.items.findIndex((item) => item.id === "plugins");
+    if (pluginsIndex === -1) return group;
+
+    const databaseNavItems: SettingsNavItem[] = DATABASE_PLUGINS.filter((plugin) =>
+      installedPluginIds.has(plugin.id),
+    ).map((plugin) => ({
+      id: plugin.sectionId,
+      label: plugin.label,
+      icon: Database,
+    }));
+
+    if (databaseNavItems.length === 0) return group;
+
+    const items = [...group.items];
+    items.splice(pluginsIndex + 1, 0, ...databaseNavItems);
+    return { ...group, items };
+  });
+}
+
 export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   general: "General",
   appearance: "Appearance",
@@ -78,6 +104,9 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   models: "Models",
   plugins: "Plugins",
   supabase: "Supabase Setup",
+  neon: "Neon Setup",
+  planetscale: "PlanetScale Setup",
+  "mongodb-atlas": "MongoDB Atlas Setup",
   rules: "Rules",
   docs: "Docs",
 };

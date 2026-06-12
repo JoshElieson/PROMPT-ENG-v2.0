@@ -4,8 +4,6 @@ import { Loader2, LogOut, User } from "lucide-react";
 
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
 
-import { GoogleIcon } from "@/components/icons/GoogleIcon";
-
 import { Button } from "@/components/ui/button";
 
 import {
@@ -48,11 +46,7 @@ export function AccountMenu() {
 
     isGitHubConfigured,
 
-    isGoogleConfigured,
-
     isLoggingIn,
-
-    loginProvider,
 
     deviceFlow,
 
@@ -61,8 +55,6 @@ export function AccountMenu() {
     error,
 
     startGitHubLogin,
-
-    startGoogleLogin,
 
     cancelLogin,
 
@@ -77,10 +69,6 @@ export function AccountMenu() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const isLoggedIn = session != null;
-
-  const googleLoginPending = isLoggingIn && loginProvider === "google";
-
-
 
   return (
 
@@ -112,11 +100,7 @@ export function AccountMenu() {
 
               : isLoggingIn
 
-                ? loginProvider === "google"
-
-                  ? "Finishing Google sign-in…"
-
-                  : "Finishing GitHub sign-in…"
+                ? "Finishing GitHub sign-in…"
 
                 : "Account"
 
@@ -353,51 +337,7 @@ export function AccountMenu() {
 
 
 
-            {googleLoginPending && (
-
-              <section className="space-y-2 px-2 py-2">
-
-                <p className="text-muted text-[11px] leading-snug">
-
-                  Complete sign-in in your browser, then return to Forge.
-
-                </p>
-
-                <p className="text-muted flex items-center justify-center gap-1.5 text-[11px]">
-
-                  <GoogleIcon className="h-4 w-4" />
-
-                  <Loader2 className="h-3 w-3 animate-spin" />
-
-                  Waiting for Google authorization…
-
-                </p>
-
-                <Button
-
-                  type="button"
-
-                  size="sm"
-
-                  variant="outline"
-
-                  className="w-full"
-
-                  onClick={cancelLogin}
-
-                >
-
-                  Cancel
-
-                </Button>
-
-              </section>
-
-            )}
-
-
-
-            {!deviceFlow && !googleLoginPending && !isLoggingIn && (
+            {!deviceFlow && !isLoggingIn && (
 
               <>
 
@@ -425,37 +365,13 @@ export function AccountMenu() {
 
                 </DropdownMenuItem>
 
-                <DropdownMenuItem
-
-                  onSelect={(e) => {
-
-                    e.preventDefault();
-
-                    setMenuOpen(true);
-
-                    void startGoogleLogin();
-
-                  }}
-
-                  className="gap-2"
-
-                  disabled={!isGoogleConfigured}
-
-                >
-
-                  <GoogleIcon className="h-4 w-4" />
-
-                  Sign in with Google
-
-                </DropdownMenuItem>
-
               </>
 
             )}
 
 
 
-            {isLoggingIn && !deviceFlow && !googleLoginPending && (
+            {isLoggingIn && !deviceFlow && (
 
               <p className="text-muted flex items-center justify-center gap-1.5 px-2 py-3 text-[11px]">
 
@@ -469,39 +385,15 @@ export function AccountMenu() {
 
 
 
-            {(!isGitHubConfigured || !isGoogleConfigured) && (
+            {!isGitHubConfigured && (
 
               <p className="text-muted px-2 py-2 text-[10px] leading-snug">
 
-                {!isGitHubConfigured && (
+                GitHub: set{" "}
 
-                  <>
+                <code className="text-foreground">VITE_GITHUB_CLIENT_ID</code>{" "}
 
-                    GitHub: set{" "}
-
-                    <code className="text-foreground">VITE_GITHUB_CLIENT_ID</code>{" "}
-
-                    (see GITHUB_SETUP.md).
-
-                  </>
-
-                )}
-
-                {!isGitHubConfigured && !isGoogleConfigured ? " " : null}
-
-                {!isGoogleConfigured && (
-
-                  <>
-
-                    Google: set{" "}
-
-                    <code className="text-foreground">VITE_GOOGLE_CLIENT_ID</code>{" "}
-
-                    (see GOOGLE_SETUP.md).
-
-                  </>
-
-                )}
+                (see GITHUB_SETUP.md).
 
               </p>
 
