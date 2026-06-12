@@ -15,7 +15,7 @@ import type { AutomationDraft } from "@/types/automation";
 import type { Chat } from "@/types/chat";
 import type { Project } from "@/types/project";
 
-export const AUTOMATION_MODEL_ID = "gpt4o";
+const AUTOMATION_MODEL_ID = "gpt4o";
 
 export async function runAutomationTask(
   automation: AutomationDraft,

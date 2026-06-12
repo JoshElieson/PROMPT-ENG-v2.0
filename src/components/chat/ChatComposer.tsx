@@ -75,7 +75,7 @@ import {
 } from "@/lib/project-drag";
 import { useAiLoadingHighlight } from "@/hooks/use-ai-loading-highlight";
 import { useLayout } from "@/contexts/LayoutContext";
-import { loadSupabaseConfig } from "@/lib/supabase-auth";
+import { loadSupabaseConfig } from "@/plugins/supabase/supabase-auth";
 import {
   isPluginInstalled,
   SUPABASE_PLUGIN_ID,

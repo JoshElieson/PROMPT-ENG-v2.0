@@ -1,4 +1,8 @@
-import { PLUGIN_CATALOG, type PluginPlaceholder } from "@/data/plugins";
+import {
+  PLUGIN_CATALOG,
+  isPluginInstallable,
+  type PluginPlaceholder,
+} from "@/data/plugins";
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -36,7 +40,9 @@ export function findUninstalledPluginMention(
   if (!text.trim()) return null;
 
   const candidates = PLUGIN_CATALOG
-    .filter((plugin) => !installedIds.has(plugin.id))
+    .filter(
+      (plugin) => isPluginInstallable(plugin) && !installedIds.has(plugin.id),
+    )
     .sort((a, b) => b.name.length - a.name.length);
 
   for (const plugin of candidates) {

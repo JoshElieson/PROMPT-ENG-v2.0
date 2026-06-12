@@ -1,4 +1,4 @@
-export type ForgeActivityAction = "read" | "write";
+type ForgeActivityAction = "read" | "write";
 
 export interface ForgeActivity {
   action: ForgeActivityAction;

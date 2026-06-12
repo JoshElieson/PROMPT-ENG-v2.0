@@ -1,8 +1,8 @@
 export const XP_MAX_LEVEL = 10;
-export const XP_MIN_LEVEL = 1;
+const XP_MIN_LEVEL = 1;
 /** Progress units from level 1 (0) through max level (9). */
-export const XP_MAX_PROGRESS = XP_MAX_LEVEL - XP_MIN_LEVEL;
-export const XP_GAIN_PER_AGENT = 0.5;
+const XP_MAX_PROGRESS = XP_MAX_LEVEL - XP_MIN_LEVEL;
+const XP_GAIN_PER_AGENT = 0.5;
 
 const STORAGE_KEY = "prompt:user-xp:v1";
 
@@ -43,7 +43,7 @@ export function loadUserProgress(login: string): number {
   return clampProgress(store[login] ?? 0);
 }
 
-export function saveUserProgress(login: string, progress: number): number {
+function saveUserProgress(login: string, progress: number): number {
   const next = clampProgress(progress);
   const store = readStore();
   store[login] = next;

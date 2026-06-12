@@ -3,7 +3,7 @@ import type { QueuedMessageBehavior } from "@/types/chat-behavior";
 import type { NodePermissions } from "@/types/project";
 import type { WorkspacePaneLayout } from "@/types/workspace-pane";
 
-export type MessageRole = "user" | "assistant";
+type MessageRole = "user" | "assistant";
 
 /** Share of an assistant response attributed to each model (sums to 100). */
 export interface ModelContribution {

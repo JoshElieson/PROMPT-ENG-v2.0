@@ -1,5 +1,6 @@
 import type { GitFileChange } from "@/types/git";
 import { aiChatComplete, type ChatTurn } from "@/lib/ai-chat";
+import { firstLineOfAiReply } from "@/lib/ai-reply-text";
 import { formatInvokeError } from "@/lib/git";
 
 function basename(path: string): string {
@@ -38,7 +39,7 @@ function inferType(changes: GitFileChange[]): string {
   return "chore";
 }
 
-export const COMMIT_MESSAGE_MODEL_ID = "gpt4o";
+const COMMIT_MESSAGE_MODEL_ID = "gpt4o";
 
 const COMMIT_MESSAGE_SYSTEM = `You write git commit messages.
 
@@ -61,18 +62,7 @@ function toChangesContext(changes: GitFileChange[]): string {
 }
 
 function normalizeCommitSubject(raw: string): string {
-  let text = raw.trim();
-  if (!text) return "";
-  if (text.startsWith("```")) {
-    const lines = text.split("\n");
-    if (lines[0]?.match(/^```/)) lines.shift();
-    const last = lines[lines.length - 1];
-    if (last?.match(/^```/)) lines.pop();
-    text = lines.join("\n").trim();
-  }
-  text = text.split(/\r?\n/)[0]?.trim() ?? "";
-  text = text.replace(/^["'`]+|["'`]+$/g, "").trim();
-  text = text.replace(/\.+$/, "").trim();
+  let text = firstLineOfAiReply(raw);
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length > 7) {
     text = words.slice(0, 7).join(" ");

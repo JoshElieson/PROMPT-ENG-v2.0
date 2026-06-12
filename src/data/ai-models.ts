@@ -1,3 +1,5 @@
+import { readImportedModels } from "@/lib/imported-models-storage";
+
 export interface ModelOrg {
   id: string;
   name: string;
@@ -625,7 +627,7 @@ export type ModelOrgGroup = { org: ModelOrg; models: AiModel[] };
 
 const MODEL_CART_EXCLUDED_ORG_IDS = new Set(["meta", "mistral"]);
 
-export function getModelsGroupedByOrg(): ModelOrgGroup[] {
+function getModelsGroupedByOrg(): ModelOrgGroup[] {
   return modelOrgs
     .map((org) => ({
       org,
@@ -683,7 +685,9 @@ export function filterModelsGroupedByOrg(
 
 export function getModelById(id: string): AiModel | undefined {
   const normalized = id.toLowerCase();
-  return popularAiModels.find((m) => m.id.toLowerCase() === normalized);
+  const builtin = popularAiModels.find((m) => m.id.toLowerCase() === normalized);
+  if (builtin) return builtin;
+  return readImportedModels().find((m) => m.id.toLowerCase() === normalized);
 }
 
 /** First listed model for a provider (e.g. GPT-4o for ChatGPT). */

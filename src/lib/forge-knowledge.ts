@@ -481,14 +481,14 @@ function buildKnowledgeBase(): ForgeKnowledgeBase {
 
 const FORGE_KNOWLEDGE_BASE = buildKnowledgeBase();
 
-export function isForgeKnowledgeQuery(query: string): boolean {
+function isForgeKnowledgeQuery(query: string): boolean {
   const normalized = query.toLowerCase();
   if (!normalized.trim()) return false;
   if (APP_TERMS.some((token) => normalized.includes(token))) return true;
   return UI_QUERY_TRIGGERS.some((trigger) => normalized.includes(trigger));
 }
 
-export function searchForgeKnowledge(
+function searchForgeKnowledge(
   query: string,
   limit = MAX_RETRIEVAL_RESULTS,
 ): ForgeKnowledgeHit[] {

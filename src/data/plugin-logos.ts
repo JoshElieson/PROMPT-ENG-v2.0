@@ -1,6 +1,3 @@
-import anthropicLogo from "@/assets/logos/anthropic.svg";
-import googleLogo from "@/assets/logos/google.svg";
-import openaiLogo from "@/assets/logos/openai.svg";
 import asanaLogo from "@/assets/logos/plugins/asana.svg";
 import auth0Logo from "@/assets/logos/plugins/auth0.svg";
 import awsLogo from "@/assets/logos/plugins/aws.svg";
@@ -15,7 +12,6 @@ import firebaseAuthLogo from "@/assets/logos/plugins/firebase-authentication.svg
 import flyIoLogo from "@/assets/logos/plugins/fly-io.svg";
 import googleAnalyticsLogo from "@/assets/logos/plugins/google-analytics.svg";
 import googleCloudLogo from "@/assets/logos/plugins/google-cloud.svg";
-import huggingFaceLogo from "@/assets/logos/plugins/hugging-face.svg";
 import jiraLogo from "@/assets/logos/plugins/jira.svg";
 import lemonSqueezyLogo from "@/assets/logos/plugins/lemon-squeezy.svg";
 import linearLogo from "@/assets/logos/plugins/linear.svg";
@@ -27,7 +23,6 @@ import mixpanelLogo from "@/assets/logos/plugins/mixpanel.svg";
 import mongodbAtlasLogo from "@/assets/logos/plugins/mongodb-atlas.svg";
 import neonLogo from "@/assets/logos/plugins/neon.svg";
 import netlifyLogo from "@/assets/logos/plugins/netlify.svg";
-import openrouterLogo from "@/assets/logos/plugins/openrouter.svg";
 import paypalLogo from "@/assets/logos/plugins/paypal.svg";
 import planetscaleLogo from "@/assets/logos/plugins/planetscale.svg";
 import posthogLogo from "@/assets/logos/plugins/posthog.svg";
@@ -45,7 +40,7 @@ export interface PluginLogoMeta {
 }
 
 /** Brand logos bundled locally (colored Simple Icons, Homarr dashboard icons, official assets). */
-export const PLUGIN_LOGOS: Record<string, PluginLogoMeta> = {
+const PLUGIN_LOGOS: Record<string, PluginLogoMeta> = {
   docker: { src: dockerLogo },
   figma: { src: figmaLogo },
   excalidraw: { src: excalidrawLogo },
@@ -70,11 +65,6 @@ export const PLUGIN_LOGOS: Record<string, PluginLogoMeta> = {
   slack: { src: slackLogo },
   discord: { src: discordLogo },
   "microsoft-teams": { src: microsoftTeamsLogo },
-  openai: { src: openaiLogo },
-  anthropic: { src: anthropicLogo },
-  "google-ai-studio": { src: googleLogo },
-  openrouter: { src: openrouterLogo },
-  "hugging-face": { src: huggingFaceLogo },
   clerk: { src: clerkLogo },
   auth0: { src: auth0Logo },
   "firebase-authentication": { src: firebaseAuthLogo },

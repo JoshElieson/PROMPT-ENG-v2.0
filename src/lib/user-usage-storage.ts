@@ -229,15 +229,7 @@ export async function saveUserUsageRecord(
   return next;
 }
 
-export async function setUserPlan(
-  accountKey: string,
-  plan: UserPlan,
-): Promise<UserUsageRecord> {
-  const current = await loadUserUsageRecord(accountKey);
-  return saveUserUsageRecord(accountKey, { ...current, plan });
-}
-
-export function nextUsagePeriodResetDate(date = new Date()): Date {
+function nextUsagePeriodResetDate(date = new Date()): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
 }
 

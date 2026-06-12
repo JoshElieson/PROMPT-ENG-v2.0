@@ -3,7 +3,7 @@ import type { ChatTurn } from "@/lib/ai-chat";
 import type { UserPlan } from "@/types/user-plan";
 
 /** Approximate USD per 1M tokens (input / output). Used for estimates only. */
-export interface ModelPricing {
+interface ModelPricing {
   inputPerMillion: number;
   outputPerMillion: number;
 }
@@ -87,7 +87,7 @@ const CHARS_PER_TOKEN = 4;
 const CHAT_SYSTEM_OVERHEAD = 120;
 const WORKSPACE_SYSTEM_OVERHEAD = 900;
 
-export interface ApiUsageTotals {
+interface ApiUsageTotals {
   tokens: number;
   costUsd: number;
 }
@@ -109,11 +109,11 @@ export interface ModelUsageDelta {
   outputTokens: number;
 }
 
-export function emptyApiUsage(): ApiUsageTotals {
+function emptyApiUsage(): ApiUsageTotals {
   return { tokens: 0, costUsd: 0 };
 }
 
-export function emptyModelUsage(): ModelUsageTotals {
+function emptyModelUsage(): ModelUsageTotals {
   return { inputTokens: 0, outputTokens: 0, costUsd: 0 };
 }
 
@@ -121,13 +121,13 @@ export function emptyApiUsageSnapshot(): ApiUsageSnapshot {
   return { totals: emptyApiUsage(), byModel: {} };
 }
 
-export function estimateTextTokens(text: string): number {
+function estimateTextTokens(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
   return Math.max(1, Math.ceil(trimmed.length / CHARS_PER_TOKEN));
 }
 
-export function estimateTurnsTokens(turns: ChatTurn[]): number {
+function estimateTurnsTokens(turns: ChatTurn[]): number {
   return turns.reduce((sum, turn) => sum + estimateTextTokens(turn.content), 0);
 }
 
@@ -147,7 +147,7 @@ export function getModelCostTier(modelId: string): ModelCostTier {
   return 3;
 }
 
-export function costForTokens(
+function costForTokens(
   modelId: string,
   inputTokens: number,
   outputTokens: number,
@@ -159,22 +159,12 @@ export function costForTokens(
   );
 }
 
-export function usageDelta(
+function usageDelta(
   modelId: string,
   inputTokens: number,
   outputTokens: number,
 ): ModelUsageDelta {
   return { modelId, inputTokens, outputTokens };
-}
-
-export function mergeApiUsage(
-  current: ApiUsageTotals,
-  delta: ApiUsageTotals,
-): ApiUsageTotals {
-  return {
-    tokens: current.tokens + delta.tokens,
-    costUsd: current.costUsd + delta.costUsd,
-  };
 }
 
 export function applyUsageDeltas(
@@ -267,13 +257,13 @@ export function totalOutputTokens(snapshot: ApiUsageSnapshot): number {
 }
 
 /** Mirrors Tauri `synthesis_provider_for_models` (first participant, then fallback). */
-export function synthesisModelIdForParticipants(modelIds: string[]): string {
+function synthesisModelIdForParticipants(modelIds: string[]): string {
   const supported = modelIds.filter(isAiModelSupported);
   if (supported.length > 0) return supported[0];
   return "gpt4o";
 }
 
-export function estimatePerModelInputTokens(
+function estimatePerModelInputTokens(
   history: ChatTurn[],
   userContent: string,
   workspaceEnabled: boolean,
@@ -286,7 +276,7 @@ export function estimatePerModelInputTokens(
   return historyTokens + userTokens + system;
 }
 
-export function estimateSynthesisInputTokens(
+function estimateSynthesisInputTokens(
   userContent: string,
   modelOutputs: string[],
 ): number {

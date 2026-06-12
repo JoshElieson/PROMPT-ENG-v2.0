@@ -18,12 +18,12 @@ const DEV_CALLBACK_PATH = "/oauth/google/callback";
 const VERIFIER_CHARS =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
 
-export function getGoogleClientId(): string | undefined {
+function getGoogleClientId(): string | undefined {
   const id = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   return id?.trim() || undefined;
 }
 
-export function getGoogleClientSecret(): string | undefined {
+function getGoogleClientSecret(): string | undefined {
   const secret = import.meta.env.VITE_GOOGLE_CLIENT_SECRET;
   return secret?.trim() || undefined;
 }
@@ -65,7 +65,7 @@ function getDevRedirectUri(): string {
   return `${origin}${DEV_CALLBACK_PATH}`;
 }
 
-export function buildGoogleAuthUrl(
+function buildGoogleAuthUrl(
   clientId: string,
   redirectUri: string,
   codeChallenge: string,

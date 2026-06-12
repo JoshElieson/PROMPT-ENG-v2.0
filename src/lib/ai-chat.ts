@@ -29,7 +29,7 @@ export interface AiToolActivityEvent {
 }
 
 /** App model ids backed by configured providers in the Tauri layer (legacy short ids). */
-export const SUPPORTED_AI_MODEL_IDS = new Set([
+const SUPPORTED_AI_MODEL_IDS = new Set([
   "gpt4o",
   "gpt4-turbo",
   "o1",
@@ -82,7 +82,7 @@ function modelIdIsWired(modelId: string): boolean {
 }
 
 /** Resolve a raw cart/active id to a wired app model id, or null if unsupported. */
-export function resolveModelId(raw: string): string | null {
+function resolveModelId(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
 

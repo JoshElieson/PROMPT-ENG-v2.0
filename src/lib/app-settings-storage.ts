@@ -1,8 +1,8 @@
 import { getModelById } from "@/data/ai-models";
 import { normalizeTargetModelIds } from "@/lib/ai-chat";
 
-export const APP_SETTINGS_STORAGE_KEY = "prompt:app-settings:v1";
-export const THEME_LEGACY_MIGRATION_KEY = "prompt:theme-legacy-migrated:v1";
+const APP_SETTINGS_STORAGE_KEY = "prompt:app-settings:v1";
+const THEME_LEGACY_MIGRATION_KEY = "prompt:theme-legacy-migrated:v1";
 
 export type AppTheme = "light" | "dark" | "dark-blue" | "forest-green";
 
@@ -64,7 +64,7 @@ function applyLegacyThemeMigration(settings: AppSettings): AppSettings {
   }
 }
 
-export function normalizeAppSettings(raw: unknown): AppSettings {
+function normalizeAppSettings(raw: unknown): AppSettings {
   if (!isRecord(raw)) return DEFAULT_APP_SETTINGS;
   const defaultModel =
     typeof raw.defaultModel === "string"

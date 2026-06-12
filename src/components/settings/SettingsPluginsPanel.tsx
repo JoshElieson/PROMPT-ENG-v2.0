@@ -4,6 +4,8 @@ import { PluginIcon } from "@/components/settings/PluginIcon";
 import {
   PLUGIN_GROUPS,
   RECOMMENDED_PLUGIN_IDS,
+  getPluginById,
+  isPluginInstallable,
   type PluginGroup,
   type PluginPlaceholder,
 } from "@/data/plugins";
@@ -122,6 +124,9 @@ function PluginCard({
   onInstall: () => void;
   onUninstall: () => void;
 }) {
+  // Installed-but-unavailable plugins (from before status gating) keep Uninstall.
+  const comingSoon = !isPluginInstallable(plugin) && !installed && !installing;
+
   return (
     <div
       className="border-border-subtle bg-panel/70 flex items-center gap-3 rounded-xl border p-3"
@@ -143,21 +148,26 @@ function PluginCard({
       <button
         type="button"
         onClick={installed ? onUninstall : onInstall}
-        disabled={installing}
+        disabled={installing || comingSoon}
         aria-label={
           installing
             ? `Installing ${plugin.name}`
             : installed
               ? `Uninstall ${plugin.name}`
-              : `Get ${plugin.name}`
+              : comingSoon
+                ? `${plugin.name} coming soon`
+                : `Get ${plugin.name}`
         }
         aria-busy={installing}
-        data-ai-target={`settings.plugins.${plugin.id}.${installing ? "installing" : installed ? "uninstall" : "install"}`}
+        data-ai-target={`settings.plugins.${plugin.id}.${installing ? "installing" : installed ? "uninstall" : comingSoon ? "coming-soon" : "install"}`}
         className={cn(
-          "inline-flex min-w-[4.25rem] shrink-0 items-center justify-center rounded-full px-3.5 py-1 text-xs font-medium transition-colors disabled:cursor-wait disabled:opacity-80",
-          installed || installing
-            ? "bg-panel-elevated text-muted-foreground hover:text-foreground"
-            : "bg-panel-elevated/90 text-foreground hover:bg-panel-elevated",
+          "inline-flex min-w-[4.25rem] shrink-0 items-center justify-center rounded-full px-3.5 py-1 text-xs font-medium transition-colors",
+          installing && "cursor-wait opacity-80",
+          comingSoon
+            ? "bg-panel-elevated/50 text-muted-foreground/70 cursor-default"
+            : installed || installing
+              ? "bg-panel-elevated text-muted-foreground hover:text-foreground"
+              : "bg-panel-elevated/90 text-foreground hover:bg-panel-elevated",
           installing && "hover:text-muted-foreground",
         )}
       >
@@ -165,6 +175,8 @@ function PluginCard({
           <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
         ) : installed ? (
           "Uninstall"
+        ) : comingSoon ? (
+          "Soon"
         ) : (
           "Get"
         )}
@@ -227,6 +239,8 @@ export function SettingsPluginsPanel() {
 
   const handleInstallPlugin = (pluginId: string) => {
     if (installedIds.has(pluginId) || installingRef.current.has(pluginId)) return;
+    const plugin = getPluginById(pluginId);
+    if (!plugin || !isPluginInstallable(plugin)) return;
 
     installingRef.current.add(pluginId);
     setInstallingIds((current) => {

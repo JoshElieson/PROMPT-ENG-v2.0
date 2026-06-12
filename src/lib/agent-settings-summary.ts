@@ -9,14 +9,14 @@ import {
   AGENT_PERMISSION_OPTIONS,
 } from "@/types/agent-permissions";
 
-export interface AgentSettingsSummary {
+interface AgentSettingsSummary {
   name: string;
   promptSummary: string;
   permissionsSummary: string;
   messageCount: number;
 }
 
-export function summarizeAgentSettings(
+function summarizeAgentSettings(
   thread: ChatThread,
   threadIndex: number,
 ): AgentSettingsSummary {
@@ -49,7 +49,7 @@ export function summarizeAgentSettings(
   };
 }
 
-export interface AgentListEntry {
+interface AgentListEntry {
   chatId: string;
   threadId: string;
   thread: ChatThread;

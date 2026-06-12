@@ -30,7 +30,7 @@ export type SettingsSectionId =
   | "rules"
   | "docs";
 
-export interface SettingsNavItem {
+interface SettingsNavItem {
   id: SettingsSectionId;
   label: string;
   icon: LucideIcon;
@@ -42,7 +42,7 @@ export interface SettingsNavGroup {
   items: SettingsNavItem[];
 }
 
-export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
+const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     items: [
       { id: "general", label: "General", icon: Settings2 },

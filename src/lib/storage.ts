@@ -69,7 +69,7 @@ function normalizePermission(value: unknown): NodePermissions {
   return { enabled: legacyEnabled };
 }
 
-export function loadPermissions(): Record<string, NodePermissions> {
+function loadPermissions(): Record<string, NodePermissions> {
   try {
     const raw = localStorage.getItem(PERMISSIONS_KEY);
     if (!raw) return {};
@@ -84,10 +84,6 @@ export function loadPermissions(): Record<string, NodePermissions> {
   } catch {
     return {};
   }
-}
-
-export function savePermissions(permissions: Record<string, NodePermissions>): void {
-  localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(permissions));
 }
 
 function normalizeChatPermissions(
@@ -285,10 +281,6 @@ export function loadApiUsage(): ApiUsageSnapshot {
   } catch {
     return { totals: { tokens: 0, costUsd: 0 }, byModel: {} };
   }
-}
-
-export function saveApiUsage(usage: ApiUsageSnapshot): void {
-  localStorage.setItem(API_USAGE_KEY, JSON.stringify(usage));
 }
 
 export function loadProjectMemories(): Record<string, ProjectMemory> {

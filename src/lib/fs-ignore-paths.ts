@@ -21,12 +21,12 @@ function normalizePath(path: string): string {
 }
 
 /** True when the path is inside `.git` metadata (not normal working-tree files). */
-export function isGitMetadataPath(path: string): boolean {
+function isGitMetadataPath(path: string): boolean {
   return normalizePath(path).includes("/.git/");
 }
 
 /** True when the path is under a build/cache directory that should not drive git refresh. */
-export function pathHasIgnoredSegment(path: string): boolean {
+function pathHasIgnoredSegment(path: string): boolean {
   const segments = normalizePath(path).split("/");
   return segments.some((segment) => {
     if (!segment) return false;

@@ -1,6 +1,6 @@
 import type { AutomationDraft } from "@/types/automation";
 
-export const AUTOMATIONS_STORAGE_KEY = "prompt:automations:v1";
+const AUTOMATIONS_STORAGE_KEY = "prompt:automations:v1";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);

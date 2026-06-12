@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useAutomations } from "@/contexts/AutomationsContext";
 import {
   ArrowLeft,
@@ -13,9 +13,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { useChats } from "@/contexts/ChatsContext";
-import { collectActiveAgentsByProject } from "@/lib/agent-settings-summary";
-import { sortWorkspaces } from "@/lib/chat-utils";
+import {
+  AgentGroupCheckboxList,
+  ProjectCheckboxList,
+  ScopeOptionList,
+  type ScopeOption,
+} from "@/components/settings/scope-picker";
+import { useProjectAgentGroups } from "@/hooks/use-project-agent-groups";
 import {
   createEmptyAutomationDraft,
   type AgentCompletionScope,
@@ -354,21 +358,9 @@ function AgentCompletionTriggerFields({
   draft: AutomationDraft;
   onChange: (patch: Partial<AutomationDraft>) => void;
 }) {
-  const { chats, activeChat } = useChats();
+  const projectGroups = useProjectAgentGroups();
 
-  const projectGroups = useMemo(() => {
-    const byId = new Map(chats.map((chat) => [chat.id, chat]));
-    if (activeChat && !byId.has(activeChat.id)) {
-      byId.set(activeChat.id, activeChat);
-    }
-    return collectActiveAgentsByProject(sortWorkspaces([...byId.values()]));
-  }, [activeChat, chats]);
-
-  const scopeOptions: Array<{
-    id: AgentCompletionScope;
-    label: string;
-    description: string;
-  }> = [
+  const scopeOptions: Array<ScopeOption<AgentCompletionScope>> = [
     {
       id: "any",
       label: "Any agent",
@@ -402,83 +394,23 @@ function AgentCompletionTriggerFields({
 
   return (
     <div className="space-y-3">
-      <div className="space-y-2">
-        {scopeOptions.map((option) => {
-          const active = draft.agentScope === option.id;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => onChange({ agentScope: option.id })}
-              className={cn(
-                "flex w-full cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
-                active
-                  ? "border-[#6366f1]/50 bg-[#6366f1]/8"
-                  : "border-border-subtle/80 hover:bg-panel-elevated/40",
-              )}
-            >
-              <span
-                className={cn(
-                  "mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border",
-                  active
-                    ? "border-[#6366f1] bg-[#6366f1]"
-                    : "border-border-subtle",
-                )}
-              />
-              <span>
-                <span className="text-sm text-foreground">{option.label}</span>
-                <span className="text-muted-foreground mt-0.5 block text-[10px] leading-relaxed">
-                  {option.description}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <ScopeOptionList
+        options={scopeOptions}
+        value={draft.agentScope}
+        onSelect={(agentScope) => onChange({ agentScope })}
+      />
 
       {draft.agentScope === "agents" ? (
         <div>
           <FieldLabel hint="Select one or more agents">
             Agents to watch
           </FieldLabel>
-          {projectGroups.length === 0 ? (
-            <p className="text-muted-foreground rounded-lg border border-dashed border-border-subtle px-3 py-4 text-xs">
-              No agents yet. Create an agent in a project first.
-            </p>
-          ) : (
-            <div className="border-border-subtle max-h-52 space-y-3 overflow-y-auto rounded-lg border p-2">
-              {projectGroups.map((group) => (
-                <div key={group.chatId}>
-                  <p className="text-muted-foreground mb-1 px-1 text-[10px] font-medium tracking-wide uppercase">
-                    {group.projectName}
-                  </p>
-                  <div className="space-y-0.5">
-                    {group.agents.map((agent) => {
-                      const checked = draft.selectedAgentIds.includes(
-                        agent.threadId,
-                      );
-                      return (
-                        <label
-                          key={agent.threadId}
-                          className="hover:bg-panel-elevated/50 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleAgent(agent.threadId)}
-                            className="accent-[#6366f1]"
-                          />
-                          <span className="truncate text-xs text-foreground">
-                            {agent.summary.name}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <AgentGroupCheckboxList
+            groups={projectGroups}
+            selectedIds={draft.selectedAgentIds}
+            onToggle={toggleAgent}
+            maxHeightClass="max-h-52"
+          />
         </div>
       ) : null}
 
@@ -487,40 +419,12 @@ function AgentCompletionTriggerFields({
           <FieldLabel hint="Any agent completing in these projects will trigger">
             Projects to watch
           </FieldLabel>
-          {projectGroups.length === 0 ? (
-            <p className="text-muted-foreground rounded-lg border border-dashed border-border-subtle px-3 py-4 text-xs">
-              No projects yet.
-            </p>
-          ) : (
-            <div className="border-border-subtle max-h-40 space-y-0.5 overflow-y-auto rounded-lg border p-2">
-              {projectGroups.map((group) => {
-                const checked = draft.selectedProjectIds.includes(group.chatId);
-                return (
-                  <label
-                    key={group.chatId}
-                    className="hover:bg-panel-elevated/50 flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5"
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleProject(group.chatId)}
-                        className="accent-[#6366f1]"
-                      />
-                      <span className="truncate text-xs text-foreground">
-                        {group.projectName}
-                      </span>
-                    </span>
-                    <span className="text-muted-foreground shrink-0 text-[10px]">
-                      {group.agents.length === 1
-                        ? "1 agent"
-                        : `${group.agents.length} agents`}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
+          <ProjectCheckboxList
+            groups={projectGroups}
+            selectedIds={draft.selectedProjectIds}
+            onToggle={toggleProject}
+            maxHeightClass="max-h-40"
+          />
         </div>
       ) : null}
     </div>

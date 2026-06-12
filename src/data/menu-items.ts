@@ -41,7 +41,7 @@ export type MenuEntry =
     };
 
 /** Menu actions wired to real behavior in the app. */
-export const implementedMenuActions = new Set<MenuActionId>([
+const implementedMenuActions = new Set<MenuActionId>([
   "file.newAgent",
   "file.newProject",
   "file.newTerminal",
@@ -67,7 +67,7 @@ export const implementedMenuActions = new Set<MenuActionId>([
   "go.nextMessage",
 ]);
 
-export function isMenuEntryImplemented(entry: MenuEntry): boolean {
+function isMenuEntryImplemented(entry: MenuEntry): boolean {
   if (entry.type === "separator") return true;
   if (entry.type === "submenu") {
     return entry.items.some(

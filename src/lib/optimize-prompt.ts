@@ -1,7 +1,7 @@
 import { aiChatComplete, type ChatTurn } from "@/lib/ai-chat";
 
 /** ChatGPT (OpenAI) model used for composer prompt optimization. */
-export const OPTIMIZE_PROMPT_MODEL_ID = "gpt4o";
+const OPTIMIZE_PROMPT_MODEL_ID = "gpt4o";
 
 const OPTIMIZE_PROMPT_SYSTEM = `You are a prompt optimization assistant for FORGE, an AI-native engineering workspace. The user will send a draft prompt they plan to use with an agent.
 

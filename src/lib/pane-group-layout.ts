@@ -1,7 +1,5 @@
 export type PaneGroupOrientation = "horizontal" | "vertical";
 
-export type PaneDropSlot = "before" | "after" | "replace" | "third";
-
 export type SplitDropSlot = "first" | "second";
 
 /** Apply a 2-pane split drop (shared by workspace and bottom panel). */

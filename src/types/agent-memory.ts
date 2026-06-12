@@ -1,6 +1,6 @@
 import type { ChatTurn } from "@/lib/ai-chat";
 
-export type MemoryRecordType =
+type MemoryRecordType =
   | "decision"
   | "file"
   | "summary"
@@ -8,7 +8,7 @@ export type MemoryRecordType =
   | "code-change"
   | "tool-result";
 
-export interface MemoryEmbedding {
+interface MemoryEmbedding {
   values: number[];
   model?: string;
 }
@@ -28,7 +28,7 @@ export interface MemoryRecord {
   supersedesRecordIds?: string[];
 }
 
-export interface IndexedMemoryRecord {
+interface IndexedMemoryRecord {
   recordId: string;
   terms: string[];
   termFrequency: Record<string, number>;

@@ -28,6 +28,7 @@ import {
   loadPendingGitHubAuth,
   savePendingGitHubAuth,
 } from "@/lib/github-pending-auth";
+import { copyTextToClipboard } from "@/lib/edit-clipboard";
 import { isTauri } from "@/lib/tauri";
 import type { AuthProvider, AuthSession, DeviceFlowPending } from "@/types/auth";
 
@@ -68,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginGenerationRef = useRef(0);
   const pollingDeviceCodeRef = useRef<string | null>(null);
+  const copiedUserCodeRef = useRef<string | null>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
   const googleAbortRef = useRef<AbortController | null>(null);
 
@@ -186,6 +188,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [deviceFlow, session, runPoll]);
 
   useEffect(() => {
+    const userCode = deviceFlow?.userCode?.trim();
+    if (!userCode || copiedUserCodeRef.current === userCode) return;
+
+    copiedUserCodeRef.current = userCode;
+    void copyTextToClipboard(userCode).catch(() => {
+      copiedUserCodeRef.current = null;
+    });
+  }, [deviceFlow?.userCode]);
+
+  useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       void refreshSession();
@@ -201,6 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     googleAbortRef.current?.abort();
     googleAbortRef.current = null;
     pollingDeviceCodeRef.current = null;
+    copiedUserCodeRef.current = null;
     clearPendingGitHubAuth();
     setIsLoggingIn(false);
     setLoginProvider(null);

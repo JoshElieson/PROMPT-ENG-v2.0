@@ -37,7 +37,7 @@ function formatStatusSummary(status: GitStatusResult): string {
   return lines.join("\n");
 }
 
-export async function executeGitAssistantCommand(
+async function executeGitAssistantCommand(
   command: GitAssistantCommand,
   gitProjectId: string | null | undefined,
 ): Promise<GitAssistantCommandResult> {

@@ -1,4 +1,4 @@
-export type PaneActionVerb = "open" | "close";
+type PaneActionVerb = "open" | "close";
 
 export type PaneActionTarget =
   | "terminal"
@@ -7,7 +7,7 @@ export type PaneActionTarget =
   | "explorer"
   | "agent-cart";
 
-export interface AssistantPaneAction {
+interface AssistantPaneAction {
   verb: PaneActionVerb;
   target: PaneActionTarget;
 }

@@ -7,7 +7,7 @@ import openaiLogo from "@/assets/logos/openai.svg";
 import xaiLogo from "@/assets/logos/xai.svg";
 
 /** Provider logos (Simple Icons / Wikimedia, bundled locally). */
-export const ORG_LOGOS: Record<string, string> = {
+const ORG_LOGOS: Record<string, string> = {
   openai: openaiLogo,
   anthropic: anthropicLogo,
   google: googleLogo,

@@ -1,0 +1,8 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["src/main.tsx", "scripts/*.mjs"],
+  "project": ["src/**/*.{ts,tsx}"],
+  "ignore": ["src/components/ui/**", "src-tauri/**", "backend/**"],
+  "ignoreDependencies": ["prettier", "playwright", "tailwindcss"],
+  "ignoreBinaries": ["powershell", "ffmpeg"]
+}

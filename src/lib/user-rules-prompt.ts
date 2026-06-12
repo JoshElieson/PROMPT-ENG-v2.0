@@ -6,7 +6,7 @@ function isActiveRule(rule: UserRule): boolean {
   return rule.enabled && rule.content.trim().length > 0;
 }
 
-export function ruleAppliesToContext(
+function ruleAppliesToContext(
   rule: UserRule,
   context?: RuleApplicationContext,
 ): boolean {
@@ -27,11 +27,11 @@ export function ruleAppliesToContext(
   return false;
 }
 
-export function getApplicableRules(context?: RuleApplicationContext): UserRule[] {
+function getApplicableRules(context?: RuleApplicationContext): UserRule[] {
   return readRules().filter((rule) => ruleAppliesToContext(rule, context));
 }
 
-export function ruleAppliesToChat(rule: UserRule, chat: Chat): boolean {
+function ruleAppliesToChat(rule: UserRule, chat: Chat): boolean {
   if (!isActiveRule(rule)) return false;
 
   if (rule.scope === "all") return true;
@@ -62,7 +62,7 @@ export function formatActiveRulesCount(rules: UserRule[]): string | null {
     : `${rules.length} active rules`;
 }
 
-export function buildActiveRulesPrompt(
+function buildActiveRulesPrompt(
   context?: RuleApplicationContext,
 ): string | null {
   const active = getApplicableRules(context);

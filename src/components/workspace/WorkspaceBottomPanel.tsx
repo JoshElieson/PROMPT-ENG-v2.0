@@ -3,15 +3,9 @@ import { TerminalTabPane } from "@/components/workspace/TerminalTabPane";
 import { ToolPanelHeader } from "@/components/workspace/ToolPanelHeader";
 import { SplitPaneGroup } from "@/components/workspace/SplitPaneGroup";
 import { useAppSelection } from "@/contexts/AppSelectionContext";
-import {
-  useWorkspaceBottomPanel,
-  type BottomPanelTab,
-  type BottomPanelTabKind,
-} from "@/contexts/WorkspaceBottomPanelContext";
+import { useWorkspaceBottomPanel } from "@/contexts/WorkspaceBottomPanelContext";
 import { useTerminalCwd } from "@/lib/terminal-cwd";
 import { cn } from "@/lib/utils";
-
-export type { BottomPanelTab, BottomPanelTabKind };
 
 interface WorkspaceBottomPanelProps {
   onClose: () => void;

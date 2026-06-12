@@ -21,7 +21,7 @@ export const DEFAULT_INSTALLED_DATABASE_PLUGIN_IDS = [
 
 export const SUPABASE_PLUGIN_ID: DatabasePluginId = "supabase";
 
-export const DATABASE_PLUGIN_IDS = new Set<string>(
+const DATABASE_PLUGIN_IDS = new Set<string>(
   DATABASE_PLUGINS.map((plugin) => plugin.id),
 );
 

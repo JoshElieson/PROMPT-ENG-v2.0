@@ -2,14 +2,12 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   BarChart3,
-  Bot,
   Bug,
   ChartPie,
   Cloud,
   Container,
   CreditCard,
   Database,
-  FlaskConical,
   Globe,
   KeyRound,
   LayoutDashboard,
@@ -19,24 +17,36 @@ import {
   MessageSquare,
   PenTool,
   Plane,
-  PlugZap,
-  Route,
   Shield,
-  Sparkles,
   StickyNote,
   TrainFront,
   Triangle,
   Users,
   Video,
   Wallet,
-  Brain,
 } from "lucide-react";
+
+/**
+ * "available" plugins have a real integration (setup panel and/or MCP path)
+ * and can be installed. Everything else is catalog-only and shows "Soon".
+ */
+type PluginStatus = "available" | "coming-soon";
 
 export interface PluginPlaceholder {
   id: string;
   name: string;
   description: string;
   icon: LucideIcon;
+  /** Defaults to "coming-soon"; set "available" once the plugin actually works. */
+  status?: PluginStatus;
+}
+
+function getPluginStatus(plugin: PluginPlaceholder): PluginStatus {
+  return plugin.status ?? "coming-soon";
+}
+
+export function isPluginInstallable(plugin: PluginPlaceholder): boolean {
+  return getPluginStatus(plugin) === "available";
 }
 
 export interface PluginGroup {
@@ -45,7 +55,6 @@ export interface PluginGroup {
 }
 
 export const RECOMMENDED_PLUGIN_IDS = new Set([
-  "mcp-manager",
   "docker",
   "figma",
   "excalidraw",
@@ -53,37 +62,18 @@ export const RECOMMENDED_PLUGIN_IDS = new Set([
   "linear",
   "vercel",
   "supabase",
-  "openai",
   "sentry",
 ]);
 
 export const PLUGIN_GROUPS: PluginGroup[] = [
   {
-    label: "Built-in tools",
+    label: "Development",
     plugins: [
-      {
-        id: "mcp-manager",
-        name: "MCP Manager",
-        description: "Install and configure Model Context Protocol servers for agents.",
-        icon: PlugZap,
-      },
-      {
-        id: "api-tester",
-        name: "API Tester",
-        description: "Send HTTP requests and inspect responses without leaving Forge.",
-        icon: FlaskConical,
-      },
       {
         id: "docker",
         name: "Docker",
         description: "Manage containers, images, and compose stacks from the workspace.",
         icon: Container,
-      },
-      {
-        id: "import-ai-models",
-        name: "Import AI Model(s)",
-        description: "Add custom or third-party models to use alongside built-in options.",
-        icon: Brain,
       },
     ],
   },
@@ -118,6 +108,7 @@ export const PLUGIN_GROUPS: PluginGroup[] = [
         name: "Supabase",
         description: "Connect projects to Supabase for database, auth, and storage.",
         icon: Database,
+        status: "available",
       },
       {
         id: "neon",
@@ -256,41 +247,6 @@ export const PLUGIN_GROUPS: PluginGroup[] = [
     ],
   },
   {
-    label: "AI providers",
-    plugins: [
-      {
-        id: "openai",
-        name: "OpenAI",
-        description: "Connect OpenAI API keys and models for agent tasks.",
-        icon: Sparkles,
-      },
-      {
-        id: "anthropic",
-        name: "Anthropic",
-        description: "Use Anthropic Claude models with your Forge agents.",
-        icon: Bot,
-      },
-      {
-        id: "google-ai-studio",
-        name: "Google AI Studio",
-        description: "Access Gemini and other Google AI Studio models.",
-        icon: Sparkles,
-      },
-      {
-        id: "openrouter",
-        name: "OpenRouter",
-        description: "Route requests across many models through OpenRouter.",
-        icon: Route,
-      },
-      {
-        id: "hugging-face",
-        name: "Hugging Face",
-        description: "Browse and run models from the Hugging Face Hub.",
-        icon: Sparkles,
-      },
-    ],
-  },
-  {
     label: "Authentication",
     plugins: [
       {
@@ -382,6 +338,10 @@ export const PLUGIN_GROUPS: PluginGroup[] = [
 export const PLUGIN_CATALOG: PluginPlaceholder[] = PLUGIN_GROUPS.flatMap(
   (group) => group.plugins,
 );
+
+export function getPluginById(pluginId: string): PluginPlaceholder | undefined {
+  return PLUGIN_CATALOG.find((plugin) => plugin.id === pluginId);
+}
 
 export const PLUGIN_SEARCH_TERMS = PLUGIN_GROUPS.flatMap((group) =>
   group.plugins.map((plugin) => ({

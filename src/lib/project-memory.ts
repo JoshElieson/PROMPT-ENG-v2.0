@@ -284,7 +284,7 @@ function scoreRecord(
   return { record, relevanceScore: relevance, reasons };
 }
 
-export function searchProjectMemory(
+function searchProjectMemory(
   projectMemory: ProjectMemory,
   query: string,
   requestingAgentId: string,
@@ -321,7 +321,7 @@ function conflictKey(record: MemoryRecord): string {
   return `${record.type}:${record.title.trim().toLowerCase()}:${files}`;
 }
 
-export function resolveConflictingMemory(records: MemoryRecord[]): Array<{
+function resolveConflictingMemory(records: MemoryRecord[]): Array<{
   key: string;
   records: MemoryRecord[];
 }> {

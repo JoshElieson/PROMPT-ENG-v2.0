@@ -55,7 +55,12 @@ function requireDesktopToken(req, res, next) {
     return next();
   }
   const auth = req.header("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  // Desktop builds <= 1.1.0 sent the client token via the provider-native slots
+  // instead of Authorization: x-api-key header (Anthropic) or ?key= query (Gemini).
+  const legacyHeader = (req.header("x-api-key") || "").trim();
+  const legacyQuery = typeof req.query.key === "string" ? req.query.key.trim() : "";
+  const token = bearer || legacyHeader || legacyQuery;
   if (!token || token !== clientToken) {
     return res.status(401).json({ error: { message: "Unauthorized desktop client." } });
   }

@@ -72,7 +72,7 @@ export function truncateChatTitle(text: string): string {
 export const DEFAULT_WORKSPACE_TITLE = "New Chat";
 
 /** Stored workspace titles that are placeholders until the user names the project. */
-export const PLACEHOLDER_WORKSPACE_TITLES = new Set([
+const PLACEHOLDER_WORKSPACE_TITLES = new Set([
   DEFAULT_WORKSPACE_TITLE,
   "New Project",
 ]);

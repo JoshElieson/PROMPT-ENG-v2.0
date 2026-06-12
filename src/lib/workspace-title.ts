@@ -1,4 +1,5 @@
 import { aiChatComplete, type ChatTurn } from "@/lib/ai-chat";
+import { firstLineOfAiReply } from "@/lib/ai-reply-text";
 import { formatInvokeError } from "@/lib/git";
 import { truncateChatTitle } from "@/lib/chat-utils";
 import type { Chat } from "@/types/chat";
@@ -69,7 +70,7 @@ const STOP_WORDS = new Set([
   "who",
 ]);
 
-export const WORKSPACE_TITLE_MODEL_ID = "grok-fast";
+const WORKSPACE_TITLE_MODEL_ID = "grok-fast";
 
 const WORKSPACE_TITLE_SYSTEM = `You name workspace projects in a sidebar.
 
@@ -118,21 +119,7 @@ export function fallbackWorkspaceTitle(content: string): string {
 }
 
 function normalizeWorkspaceTitle(raw: string): string {
-  let text = raw.trim();
-  if (!text) return "";
-
-  if (text.startsWith("```")) {
-    const lines = text.split("\n");
-    if (lines[0]?.match(/^```/)) lines.shift();
-    const last = lines[lines.length - 1];
-    if (last?.match(/^```/)) lines.pop();
-    text = lines.join("\n").trim();
-  }
-
-  text = text.split(/\r?\n/)[0]?.trim() ?? "";
-  text = text.replace(/^["'`]+|["'`]+$/g, "").trim();
-  text = text.replace(/\.+$/, "").trim();
-
+  const text = firstLineOfAiReply(raw);
   const words = text.split(/\s+/).filter(Boolean);
   const joined =
     words.length > 4 ? words.slice(0, 4).join(" ") : words.join(" ");

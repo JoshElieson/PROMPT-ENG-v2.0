@@ -16,7 +16,7 @@ export const WORKSPACE_LAYOUT_KEY = "prompt:center-workspace-panes:v2";
 
 export const LEGACY_WORKSPACE_LAYOUT_KEY = "prompt:center-workspace-panes:v1";
 
-export function defaultModelSession(): PaneModelSession {
+function defaultModelSession(): PaneModelSession {
   const ids = [...DEFAULT_ROUND_TABLE_IDS];
   return {
     selectedIds: ids,
@@ -53,7 +53,7 @@ function normalizeModelSession(session: PaneModelSession): PaneModelSession {
   };
 }
 
-export function createWorkspaceLeaf(threadId: string): WorkspaceLeafNode {
+function createWorkspaceLeaf(threadId: string): WorkspaceLeafNode {
   return {
     type: "leaf",
     id: crypto.randomUUID(),

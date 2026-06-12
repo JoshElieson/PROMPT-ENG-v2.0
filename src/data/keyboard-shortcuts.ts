@@ -1,6 +1,6 @@
 import { getModelById, type AiModel } from "@/data/ai-models";
 
-export const staticKeyboardShortcuts = [
+const staticKeyboardShortcuts = [
   { keys: "/", label: "Commands" },
   { keys: "@", label: "Mention models" },
 ] as const;

@@ -24,6 +24,7 @@ import { AiCommandBusProvider } from "@/contexts/AiCommandBusContext";
 import { AppToastProvider } from "@/contexts/AppToastContext";
 import { AutomationsProvider } from "@/contexts/AutomationsContext";
 import { RulesProvider } from "@/contexts/RulesContext";
+import { ImportedModelsProvider } from "@/contexts/ImportedModelsContext";
 import { initializeInstalledPlugins } from "@/lib/installed-plugins";
 
 function AppShell() {
@@ -68,6 +69,7 @@ function App() {
           <RoundTableProvider>
             <ModelModeProvider>
               <AppSettingsProvider>
+                <ImportedModelsProvider>
                 <AppToastProvider>
                   <AiCommandBusProvider>
                     <ApiUsageProvider>
@@ -92,6 +94,7 @@ function App() {
                     </ApiUsageProvider>
                   </AiCommandBusProvider>
                 </AppToastProvider>
+                </ImportedModelsProvider>
               </AppSettingsProvider>
             </ModelModeProvider>
           </RoundTableProvider>

@@ -13,7 +13,7 @@ const USER_API_PATH = "/user";
 const OAUTH_BASE = import.meta.env.DEV ? "/api/github-oauth" : "https://github.com";
 const API_BASE = import.meta.env.DEV ? "/api/github" : "https://api.github.com";
 
-export function getGitHubClientId(): string | undefined {
+function getGitHubClientId(): string | undefined {
   const id = import.meta.env.VITE_GITHUB_CLIENT_ID;
   return id?.trim() || undefined;
 }
@@ -29,7 +29,7 @@ type RawDeviceFlow = DeviceFlowPending & {
   expires_in?: number;
 };
 
-export function normalizeDeviceFlowPending(raw: RawDeviceFlow): DeviceFlowPending {
+function normalizeDeviceFlowPending(raw: RawDeviceFlow): DeviceFlowPending {
   const deviceCode = raw.deviceCode ?? raw.device_code ?? "";
   const userCode = raw.userCode ?? raw.user_code ?? "";
   const verificationUri =
@@ -196,7 +196,7 @@ async function pollGitHubDeviceFlowTauri(
   throw new Error("Sign-in timed out. Please try again.");
 }
 
-export async function pollGitHubDeviceFlow(
+async function pollGitHubDeviceFlow(
   pending: DeviceFlowPending,
   signal?: AbortSignal,
   onAttempt?: (attempt: number) => void,
@@ -255,7 +255,7 @@ export async function pollGitHubDeviceFlow(
   throw new Error("Sign-in timed out. Please try again.");
 }
 
-export async function fetchGitHubUser(accessToken: string): Promise<AuthUser> {
+async function fetchGitHubUser(accessToken: string): Promise<AuthUser> {
   if (isTauri()) {
     const user = await invoke<AuthUser & { avatarUrl?: string }>("github_fetch_user", {
       accessToken,

@@ -12,7 +12,7 @@ function isProbablyFile(path: string): boolean {
 }
 
 /** Directories with AI access enabled in the active chat (outermost roots only). */
-export function getSelectedProjectDirectories(
+function getSelectedProjectDirectories(
   permissions: Record<string, NodePermissions> | undefined,
   projectRootPaths: ReadonlySet<string>,
 ): string[] {
@@ -23,7 +23,7 @@ export function getSelectedProjectDirectories(
     );
 }
 
-export function resolveTerminalCwd(
+function resolveTerminalCwd(
   gitRepoPath: string | null | undefined,
   permissions: Record<string, NodePermissions> | undefined,
   projectRootPaths: ReadonlySet<string>,

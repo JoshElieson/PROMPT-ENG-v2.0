@@ -8,7 +8,7 @@ export type ForgeKnowledgeCategory =
   | "agents"
   | "tools";
 
-export interface KnowledgeEmbedding {
+interface KnowledgeEmbedding {
   values: number[];
   model: string;
 }

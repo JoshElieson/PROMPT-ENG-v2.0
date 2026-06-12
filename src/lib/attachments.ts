@@ -31,7 +31,7 @@ function filePathFromFile(file: File): string | null {
 }
 
 /** Resolve absolute paths from a drop (native OS drag or HTML5). */
-export function pathsFromDataTransfer(dataTransfer: DataTransfer): string[] {
+function pathsFromDataTransfer(dataTransfer: DataTransfer): string[] {
   const fromList = dataTransfer.getData("text/uri-list").trim();
   if (fromList) {
     const parsed = fromList

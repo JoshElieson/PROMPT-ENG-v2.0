@@ -18,7 +18,7 @@ export type SavedLayoutBottomPanelKindsVisible = {
   browser: boolean;
 };
 
-export const SAVED_LAYOUTS_STORAGE_KEY = "prompt:saved-layouts:v1";
+const SAVED_LAYOUTS_STORAGE_KEY = "prompt:saved-layouts:v1";
 export const MAX_SAVED_LAYOUTS = 2;
 
 const LEFT_SIDEBAR_WIDTH_KEY = "prompt:left-sidebar-width";

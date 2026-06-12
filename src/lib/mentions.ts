@@ -16,7 +16,7 @@ function cartModelsFromIds(cartIds: string[]): AiModel[] {
 }
 
 /** Resolve a completed @-token to a cart model (id or display name). */
-export function resolveMentionQuery(
+function resolveMentionQuery(
   query: string,
   cartIds?: string[],
 ): AiModel | null {
@@ -39,7 +39,7 @@ export function resolveMentionQuery(
 }
 
 /** Resolve an in-progress @-token for composer highlighting (prefix match). */
-export function resolveMentionQueryPartial(
+function resolveMentionQueryPartial(
   query: string,
   cartIds: string[],
 ): AiModel | null {
@@ -100,7 +100,7 @@ export function splitComposerMentionSegments(
   return segments;
 }
 
-export function mentionToken(modelId: string): string {
+function mentionToken(modelId: string): string {
   return `@${modelId}`;
 }
 
@@ -120,7 +120,7 @@ export type ResolvedMentionSpan = {
 };
 
 /** Ranges for @-tokens that resolve to a cart model (atomic delete targets). */
-export function getResolvedMentionSpans(
+function getResolvedMentionSpans(
   value: string,
   cartIds: string[],
 ): ResolvedMentionSpan[] {
@@ -166,17 +166,13 @@ export function removeMentionSpan(
   };
 }
 
-export function filterModelsNotMentioned(
+function filterModelsNotMentioned(
   content: string,
   models: AiModel[],
   cartIds?: string[],
 ): AiModel[] {
   const mentioned = new Set(parseMentions(content, cartIds));
   return models.filter((model) => !mentioned.has(model.id));
-}
-
-export function hasModelMentions(content: string, cartIds?: string[]): boolean {
-  return parseMentions(content, cartIds).length > 0;
 }
 
 export function isModelMentioned(
@@ -227,7 +223,7 @@ export function resolveTargetModelIds(
   return activeIds;
 }
 
-export function buildMentionTextForModels(models: AiModel[]): string {
+function buildMentionTextForModels(models: AiModel[]): string {
   if (models.length === 0) return "";
   return models.map((m) => mentionToken(m.id)).join(" ");
 }
@@ -251,7 +247,7 @@ export function insertMentionsForModels(
   );
 }
 
-export function insertTextAtCursor(
+function insertTextAtCursor(
   value: string,
   insertion: string,
   selectionStart: number,

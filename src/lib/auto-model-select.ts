@@ -1,6 +1,6 @@
 import { normalizeTargetModelIds } from "@/lib/ai-chat";
 
-export type TaskProfile =
+type TaskProfile =
   | "code"
   | "reasoning"
   | "research"
@@ -8,8 +8,6 @@ export type TaskProfile =
   | "edgy"
   | "fast"
   | "general";
-
-export type ModelMode = "auto" | "manual";
 
 type ModelProfile = {
   /** Base score in auto (balanced) mode. */
@@ -283,7 +281,7 @@ function profileFor(modelId: string): ModelProfile {
   );
 }
 
-export function detectTaskProfile(
+function detectTaskProfile(
   content: string,
   goal?: string | null,
 ): TaskProfile {

@@ -409,6 +409,16 @@ Shared types belong in:
 
 Avoid redefining interfaces repeatedly.
 
+### Plugins
+
+Plugins keep the base app small. Each implemented plugin lives in `src/plugins/<id>/` and owns its setup UI and config storage. Agent-facing functionality runs through external MCP servers (spawned via `npx`, like Supabase) — never embed vendor SDKs in the frontend bundle.
+
+Rules:
+- Catalog entries live in `src/data/plugins.ts`; only plugins with a real integration get `status: "available"`. Everything else stays `coming-soon` and is not installable.
+- Setup panels are registered in `src/plugins/registry.ts` as **lazy imports** so each plugin is a separate chunk, fetched only when its settings are opened.
+- "Installing" a plugin only toggles a persisted flag (`src/lib/installed-plugins.ts`); it must never grow the base bundle.
+- Size budget: main chunk stays under ~500 KB gzip; each plugin chunk under ~50 KB gzip. Check `npm run build` output after adding a plugin.
+
 ---
 
 # AI Agent Coding Behavior Rules

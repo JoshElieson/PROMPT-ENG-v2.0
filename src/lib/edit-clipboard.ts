@@ -6,7 +6,7 @@
  */
 
 /** Identifies the chat input box anywhere in the app. */
-export const CHAT_INPUT_SELECTOR = "[data-composer-textarea]";
+const CHAT_INPUT_SELECTOR = "[data-composer-textarea]";
 
 type EditableElement = HTMLInputElement | HTMLTextAreaElement;
 

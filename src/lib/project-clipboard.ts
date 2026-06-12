@@ -1,4 +1,4 @@
-export type ProjectClipboardOp = "cut" | "copy";
+type ProjectClipboardOp = "cut" | "copy";
 
 export interface ProjectClipboardEntry {
   op: ProjectClipboardOp;

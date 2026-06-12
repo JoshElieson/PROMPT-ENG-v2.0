@@ -1,6 +1,6 @@
-export type MessageTextSegment = { type: "text"; content: string };
+type MessageTextSegment = { type: "text"; content: string };
 
-export type MessageCodeSegment = {
+type MessageCodeSegment = {
   type: "code";
   language: string;
   content: string;

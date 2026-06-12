@@ -1,8 +1,8 @@
 import type { Chat } from "@/types/chat";
 import type { QueuedMessageBehavior } from "@/types/chat-behavior";
 
-export const DEFAULT_AUTO_SCROLL_ENABLED = true;
-export const DEFAULT_QUEUED_MESSAGE_BEHAVIOR: QueuedMessageBehavior = "wait";
+const DEFAULT_AUTO_SCROLL_ENABLED = true;
+const DEFAULT_QUEUED_MESSAGE_BEHAVIOR: QueuedMessageBehavior = "wait";
 
 export const QUEUED_MESSAGE_BEHAVIOR_OPTIONS: ReadonlyArray<{
   value: QueuedMessageBehavior;

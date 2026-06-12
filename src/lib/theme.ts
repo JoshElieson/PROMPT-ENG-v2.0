@@ -5,10 +5,6 @@ import {
 
 export type ResolvedTheme = AppTheme;
 
-export function resolveTheme(preference: AppTheme): ResolvedTheme {
-  return preference;
-}
-
 export function applyThemeToDocument(resolved: ResolvedTheme): void {
   const root = document.documentElement;
   root.dataset.theme = resolved;

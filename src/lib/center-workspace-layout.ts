@@ -11,7 +11,7 @@ import type {
 } from "@/types/workspace-pane";
 import { MAX_WORKSPACE_PANES } from "@/types/workspace-pane";
 
-export function cloneModelSession(session: PaneModelSession): PaneModelSession {
+function cloneModelSession(session: PaneModelSession): PaneModelSession {
   return {
     selectedIds: [...session.selectedIds],
     activeIds: [...session.activeIds],
@@ -65,6 +65,36 @@ export function collectLeaves(root: CenterWorkspaceRoot): WorkspaceLeafNode[] {
   }
 }
 
+function mapLeaves(
+  root: CenterWorkspaceRoot,
+  fn: (leaf: WorkspaceLeafNode) => WorkspaceLeafNode,
+): CenterWorkspaceRoot {
+  switch (root.kind) {
+    case "single":
+      return { kind: "single", leaf: fn(root.leaf) };
+    case "double":
+      return { ...root, first: fn(root.first), second: fn(root.second) };
+    case "triple":
+      return {
+        ...root,
+        topLeft: fn(root.topLeft),
+        topRight: fn(root.topRight),
+        bottom: fn(root.bottom),
+      };
+    case "quad":
+      return {
+        ...root,
+        topLeft: fn(root.topLeft),
+        topRight: fn(root.topRight),
+        bottomLeft: fn(root.bottomLeft),
+        bottomRight: fn(root.bottomRight),
+        overflow: root.overflow?.map(fn),
+      };
+    default:
+      return root;
+  }
+}
+
 export function findLeaf(
   root: CenterWorkspaceRoot,
   leafId: string,
@@ -97,46 +127,12 @@ export function assignLeafModels(
   leafId: string,
   models: PaneModelSession,
 ): WorkspacePaneLayout {
-  const apply = (l: WorkspaceLeafNode) =>
-    l.id === leafId ? { ...l, models: cloneModelSession(models) } : l;
-  const root = layout.root;
-  switch (root.kind) {
-    case "single":
-      return { ...layout, root: { kind: "single", leaf: apply(root.leaf) } };
-    case "double":
-      return {
-        ...layout,
-        root: {
-          ...root,
-          first: apply(root.first),
-          second: apply(root.second),
-        },
-      };
-    case "triple":
-      return {
-        ...layout,
-        root: {
-          ...root,
-          topLeft: apply(root.topLeft),
-          topRight: apply(root.topRight),
-          bottom: apply(root.bottom),
-        },
-      };
-    case "quad":
-      return {
-        ...layout,
-        root: {
-          ...root,
-          topLeft: apply(root.topLeft),
-          topRight: apply(root.topRight),
-          bottomLeft: apply(root.bottomLeft),
-          bottomRight: apply(root.bottomRight),
-          overflow: root.overflow?.map(apply),
-        },
-      };
-    default:
-      return layout;
-  }
+  return {
+    ...layout,
+    root: mapLeaves(layout.root, (l) =>
+      l.id === leafId ? { ...l, models: cloneModelSession(models) } : l,
+    ),
+  };
 }
 
 export function assignLeafScrollTop(
@@ -144,46 +140,12 @@ export function assignLeafScrollTop(
   leafId: string,
   scrollTop: number,
 ): WorkspacePaneLayout {
-  const apply = (l: WorkspaceLeafNode) =>
-    l.id === leafId ? { ...l, scrollTop } : l;
-  const root = layout.root;
-  switch (root.kind) {
-    case "single":
-      return { ...layout, root: { kind: "single", leaf: apply(root.leaf) } };
-    case "double":
-      return {
-        ...layout,
-        root: {
-          ...root,
-          first: apply(root.first),
-          second: apply(root.second),
-        },
-      };
-    case "triple":
-      return {
-        ...layout,
-        root: {
-          ...root,
-          topLeft: apply(root.topLeft),
-          topRight: apply(root.topRight),
-          bottom: apply(root.bottom),
-        },
-      };
-    case "quad":
-      return {
-        ...layout,
-        root: {
-          ...root,
-          topLeft: apply(root.topLeft),
-          topRight: apply(root.topRight),
-          bottomLeft: apply(root.bottomLeft),
-          bottomRight: apply(root.bottomRight),
-          overflow: root.overflow?.map(apply),
-        },
-      };
-    default:
-      return layout;
-  }
+  return {
+    ...layout,
+    root: mapLeaves(layout.root, (l) =>
+      l.id === leafId ? { ...l, scrollTop } : l,
+    ),
+  };
 }
 
 function newLeaf(threadId: string, models: PaneModelSession): WorkspaceLeafNode {
@@ -221,6 +183,16 @@ export function collapseWorkspaceByLeaf(
 
   const removedThreadId = hit.threadId;
 
+  const collapsed = (newRoot: CenterWorkspaceRoot) => ({
+    layout: {
+      ...layout,
+      version: 2 as const,
+      root: newRoot,
+      focusedLeafId: nextFocusedLeafId(layout.focusedLeafId, leafId, newRoot),
+    },
+    removedThreadId,
+  });
+
   switch (root.kind) {
     case "single":
       return null;
@@ -230,19 +202,7 @@ export function collapseWorkspaceByLeaf(
       else if (root.second.id === leafId) kept = root.first;
       else return null;
       const newRoot: SingleWorkspaceRoot = { kind: "single", leaf: kept };
-      return {
-        layout: {
-          ...layout,
-          version: 2,
-          root: newRoot,
-          focusedLeafId: nextFocusedLeafId(
-            layout.focusedLeafId,
-            leafId,
-            newRoot,
-          ),
-        },
-        removedThreadId,
-      };
+      return collapsed(newRoot);
     }
     case "triple": {
       const t = root;
@@ -254,19 +214,7 @@ export function collapseWorkspaceByLeaf(
           first: t.topLeft,
           second: t.topRight,
         };
-        return {
-          layout: {
-            ...layout,
-            version: 2,
-            root: newRoot,
-            focusedLeafId: nextFocusedLeafId(
-              layout.focusedLeafId,
-              leafId,
-              newRoot,
-            ),
-          },
-          removedThreadId,
-        };
+        return collapsed(newRoot);
       }
       if (t.topLeft.id === leafId) {
         const newRoot: DoubleWorkspaceRoot = {
@@ -276,19 +224,7 @@ export function collapseWorkspaceByLeaf(
           first: t.topRight,
           second: t.bottom,
         };
-        return {
-          layout: {
-            ...layout,
-            version: 2,
-            root: newRoot,
-            focusedLeafId: nextFocusedLeafId(
-              layout.focusedLeafId,
-              leafId,
-              newRoot,
-            ),
-          },
-          removedThreadId,
-        };
+        return collapsed(newRoot);
       }
       if (t.topRight.id === leafId) {
         const newRoot: DoubleWorkspaceRoot = {
@@ -298,19 +234,7 @@ export function collapseWorkspaceByLeaf(
           first: t.topLeft,
           second: t.bottom,
         };
-        return {
-          layout: {
-            ...layout,
-            version: 2,
-            root: newRoot,
-            focusedLeafId: nextFocusedLeafId(
-              layout.focusedLeafId,
-              leafId,
-              newRoot,
-            ),
-          },
-          removedThreadId,
-        };
+        return collapsed(newRoot);
       }
       return null;
     }
@@ -324,19 +248,7 @@ export function collapseWorkspaceByLeaf(
           ...q,
           overflow: nextOverflow.length > 0 ? nextOverflow : undefined,
         };
-        return {
-          layout: {
-            ...layout,
-            version: 2,
-            root: newRoot,
-            focusedLeafId: nextFocusedLeafId(
-              layout.focusedLeafId,
-              leafId,
-              newRoot,
-            ),
-          },
-          removedThreadId,
-        };
+        return collapsed(newRoot);
       }
 
       if (overflow.length > 0) {
@@ -351,86 +263,45 @@ export function collapseWorkspaceByLeaf(
         else if (q.bottomLeft.id === leafId) nextRoot.bottomLeft = promoted;
         else if (q.bottomRight.id === leafId) nextRoot.bottomRight = promoted;
         else return null;
-        return {
-          layout: {
-            ...layout,
-            version: 2,
-            root: nextRoot,
-            focusedLeafId: nextFocusedLeafId(
-              layout.focusedLeafId,
-              leafId,
-              nextRoot,
-            ),
-          },
-          removedThreadId,
-        };
+        return collapsed(nextRoot);
       }
 
+      const verticalSizes: [number, number] = [
+        q.verticalSizes[0],
+        q.verticalSizes[1],
+      ];
       if (q.bottomRight.id === leafId) {
         const newRoot: TripleWorkspaceRoot = {
           kind: "triple",
-          verticalSizes: [q.verticalSizes[0], q.verticalSizes[1]] as [
-            number,
-            number,
-          ],
-          topHorizontalSizes: [q.topHorizontalSizes[0], q.topHorizontalSizes[1]] as [
-            number,
-            number,
+          verticalSizes,
+          topHorizontalSizes: [
+            q.topHorizontalSizes[0],
+            q.topHorizontalSizes[1],
           ],
           topLeft: q.topLeft,
           topRight: q.topRight,
           bottom: q.bottomLeft,
         };
-        return {
-          layout: {
-            ...layout,
-            version: 2,
-            root: newRoot,
-            focusedLeafId: nextFocusedLeafId(
-              layout.focusedLeafId,
-              leafId,
-              newRoot,
-            ),
-          },
-          removedThreadId,
-        };
+        return collapsed(newRoot);
       }
       if (q.bottomLeft.id === leafId) {
         const newRoot: TripleWorkspaceRoot = {
           kind: "triple",
-          verticalSizes: [q.verticalSizes[0], q.verticalSizes[1]] as [
-            number,
-            number,
-          ],
-          topHorizontalSizes: [q.topHorizontalSizes[0], q.topHorizontalSizes[1]] as [
-            number,
-            number,
+          verticalSizes,
+          topHorizontalSizes: [
+            q.topHorizontalSizes[0],
+            q.topHorizontalSizes[1],
           ],
           topLeft: q.topLeft,
           topRight: q.topRight,
           bottom: q.bottomRight,
         };
-        return {
-          layout: {
-            ...layout,
-            version: 2,
-            root: newRoot,
-            focusedLeafId: nextFocusedLeafId(
-              layout.focusedLeafId,
-              leafId,
-              newRoot,
-            ),
-          },
-          removedThreadId,
-        };
+        return collapsed(newRoot);
       }
       if (q.topRight.id === leafId) {
         const newRoot: TripleWorkspaceRoot = {
           kind: "triple",
-          verticalSizes: [q.verticalSizes[0], q.verticalSizes[1]] as [
-            number,
-            number,
-          ],
+          verticalSizes,
           topHorizontalSizes: normalizePair(
             q.topHorizontalSizes[0],
             q.bottomHorizontalSizes[0],
@@ -439,27 +310,12 @@ export function collapseWorkspaceByLeaf(
           topRight: q.bottomLeft,
           bottom: q.bottomRight,
         };
-        return {
-          layout: {
-            ...layout,
-            version: 2,
-            root: newRoot,
-            focusedLeafId: nextFocusedLeafId(
-              layout.focusedLeafId,
-              leafId,
-              newRoot,
-            ),
-          },
-          removedThreadId,
-        };
+        return collapsed(newRoot);
       }
       if (q.topLeft.id === leafId) {
         const newRoot: TripleWorkspaceRoot = {
           kind: "triple",
-          verticalSizes: [q.verticalSizes[0], q.verticalSizes[1]] as [
-            number,
-            number,
-          ],
+          verticalSizes,
           topHorizontalSizes: normalizePair(
             q.topHorizontalSizes[1],
             q.bottomHorizontalSizes[0],
@@ -468,19 +324,7 @@ export function collapseWorkspaceByLeaf(
           topRight: q.bottomLeft,
           bottom: q.bottomRight,
         };
-        return {
-          layout: {
-            ...layout,
-            version: 2,
-            root: newRoot,
-            focusedLeafId: nextFocusedLeafId(
-              layout.focusedLeafId,
-              leafId,
-              newRoot,
-            ),
-          },
-          removedThreadId,
-        };
+        return collapsed(newRoot);
       }
       return null;
     }
@@ -578,45 +422,11 @@ export function reconcileWorkspaceThreads(
   validThreadIds: Set<string>,
   fallbackThreadId: string,
 ): WorkspacePaneLayout {
-  const fix = (leaf: WorkspaceLeafNode): WorkspaceLeafNode =>
+  const nextRoot = mapLeaves(layout.root, (leaf) =>
     validThreadIds.has(leaf.threadId)
       ? leaf
-      : { ...leaf, threadId: fallbackThreadId };
-
-  const root = layout.root;
-  let nextRoot: CenterWorkspaceRoot;
-  switch (root.kind) {
-    case "single":
-      nextRoot = { kind: "single", leaf: fix(root.leaf) };
-      break;
-    case "double":
-      nextRoot = {
-        ...root,
-        first: fix(root.first),
-        second: fix(root.second),
-      };
-      break;
-    case "triple":
-      nextRoot = {
-        ...root,
-        topLeft: fix(root.topLeft),
-        topRight: fix(root.topRight),
-        bottom: fix(root.bottom),
-      };
-      break;
-    case "quad":
-      nextRoot = {
-        ...root,
-        topLeft: fix(root.topLeft),
-        topRight: fix(root.topRight),
-        bottomLeft: fix(root.bottomLeft),
-        bottomRight: fix(root.bottomRight),
-        overflow: root.overflow?.map(fix),
-      };
-      break;
-    default:
-      nextRoot = root;
-  }
+      : { ...leaf, threadId: fallbackThreadId },
+  );
 
   const ids = collectLeafIds(nextRoot);
   const focused = ids.includes(layout.focusedLeafId)

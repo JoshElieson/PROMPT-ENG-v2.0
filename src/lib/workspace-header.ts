@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /** Shared top-row chrome for Chats, active models, and Round Table headers. */
-export const WORKSPACE_HEADER_ROW = "flex h-9 shrink-0 items-center border-b";
+const WORKSPACE_HEADER_ROW = "flex h-9 shrink-0 items-center border-b";
 
 /** Same surface as an active `SidebarPanel` (panel + elevated tint). */
 export const WORKSPACE_HEADER_SURFACE = "bg-panel/85";

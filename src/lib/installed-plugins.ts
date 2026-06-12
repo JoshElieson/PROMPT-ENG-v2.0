@@ -8,7 +8,7 @@ import { isTauri } from "@/lib/tauri";
 
 export { SUPABASE_PLUGIN_ID };
 
-export const PLUGINS_CHANGED_EVENT = "forge:plugins-changed";
+const PLUGINS_CHANGED_EVENT = "forge:plugins-changed";
 
 const LOCAL_KEY = "prompt:installed-plugins:v1";
 const STORE_FILE = "installed-plugins.v1.json";
@@ -90,7 +90,7 @@ export async function initializeInstalledPlugins(): Promise<Set<string>> {
   return initializePromise;
 }
 
-export function readInstalledPluginIds(): Set<string> {
+function readInstalledPluginIds(): Set<string> {
   const fromStorage = parseInstalledIds(localStorage.getItem(LOCAL_KEY));
   if (fromStorage === null) {
     return defaultInstalledIds();
@@ -98,7 +98,7 @@ export function readInstalledPluginIds(): Set<string> {
   return fromStorage;
 }
 
-export function writeInstalledPluginIds(
+function writeInstalledPluginIds(
   ids: Set<string>,
   options?: { notify?: boolean },
 ): void {

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
-  Brain,
   ExternalLink,
   LayoutGrid,
+  Loader2,
   Palette,
   Search,
   Settings,
@@ -19,7 +19,7 @@ import { PLUGIN_SEARCH_TERMS } from "@/data/plugins";
 import { SettingsRulesPanel } from "@/components/settings/SettingsRulesPanel";
 import { SettingsPlanUsagePanel } from "@/components/settings/SettingsPlanUsagePanel";
 import { DatabasePluginTodoPanel } from "@/components/settings/DatabasePluginTodoPanel";
-import { SupabaseSetupAssistant } from "@/components/settings/SupabaseSetupAssistant";
+import { PLUGIN_SETUP_PANELS } from "@/plugins/registry";
 import {
   buildSettingsNavGroups,
   SETTINGS_SECTION_LABELS,
@@ -34,7 +34,7 @@ import {
 import { useInstalledPlugins } from "@/lib/installed-plugins";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppSettings } from "@/contexts/AppSettingsContext";
-import { popularAiModels } from "@/data/ai-models";
+import { SettingsModelsPanel } from "@/components/settings/SettingsModelsPanel";
 import { useLayout } from "@/contexts/LayoutContext";
 import { cn } from "@/lib/utils";
 
@@ -187,6 +187,20 @@ function buildNavSearchIndex(navGroups: SettingsNavGroup[]): SettingsSearchResul
   );
 }
 
+const MODELS_SEARCH_TERMS: Array<{
+  label: string;
+  keywords: string;
+}> = [
+  {
+    label: "Default Model",
+    keywords: "models default model provider preference",
+  },
+  {
+    label: "Import AI Model",
+    keywords: "models import custom openrouter ollama azure endpoint",
+  },
+];
+
 const STATIC_SETTINGS_SEARCH_INDEX: SettingsSearchResult[] = [
   ...GENERAL_SETTING_SEARCH_TERMS.map((item, index) => ({
     id: `general-setting-${index}`,
@@ -230,6 +244,13 @@ const STATIC_SETTINGS_SEARCH_INDEX: SettingsSearchResult[] = [
     keywords: item.keywords.toLowerCase(),
     sectionLabel: SETTINGS_SECTION_LABELS.docs,
   })),
+  ...MODELS_SEARCH_TERMS.map((item, index) => ({
+    id: `models-setting-${index}`,
+    sectionId: "models" as const,
+    label: item.label,
+    keywords: item.keywords.toLowerCase(),
+    sectionLabel: SETTINGS_SECTION_LABELS.models,
+  })),
   ...PLUGIN_SEARCH_TERMS.map((item, index) => ({
     id: `plugins-setting-${index}`,
     sectionId: "plugins" as const,
@@ -255,42 +276,6 @@ function SettingsPlaceholderPanel({ sectionId }: { sectionId: SettingsSectionId 
       <p className="text-muted-foreground mt-2 max-w-sm text-sm">
         Settings for {label.toLowerCase()} will appear here.
       </p>
-    </div>
-  );
-}
-
-function SettingsModelsPanel() {
-  const { settings, setSetting } = useAppSettings();
-  const modelOptions = popularAiModels.map((model) => ({
-    id: model.id,
-    label: `${model.name} (${model.provider})`,
-  }));
-
-  return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
-      <section
-        className="border-border-subtle bg-panel/60 rounded-xl border p-4"
-        data-ai-target="settings.models.default-model"
-      >
-        <div className="mb-2 flex items-center gap-2">
-          <Brain className="text-muted-foreground h-4 w-4" />
-          <p className="text-sm font-medium text-foreground">Default Model</p>
-        </div>
-        <p className="text-muted-foreground mb-3 text-xs leading-relaxed">
-          Choose the model Forge should prefer when AI picks a single model for you.
-        </p>
-        <select
-          value={settings.defaultModel}
-          onChange={(event) => setSetting("defaultModel", event.target.value)}
-          className="border-border-subtle bg-panel-elevated/80 text-foreground focus:border-[#6366f1]/60 h-9 w-full rounded-md border px-2 text-xs outline-none"
-        >
-          {modelOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </section>
     </div>
   );
 }
@@ -349,6 +334,23 @@ function SettingsAppearancePanel() {
   );
 }
 
+function PluginSetupPanel({ pluginId }: { pluginId: string }) {
+  const Panel = PLUGIN_SETUP_PANELS[pluginId];
+  if (!Panel) return <DatabasePluginTodoPanel />;
+
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center py-24">
+          <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+        </div>
+      }
+    >
+      <Panel />
+    </Suspense>
+  );
+}
+
 function SettingsContent({
   sectionId,
   installedPluginIds,
@@ -382,10 +384,9 @@ function SettingsContent({
       {sectionId === "agents" && <SettingsAgentsPanel />}
       {sectionId === "docs" && <SettingsDocsPanel />}
       {sectionId === "plugins" && <SettingsPluginsPanel />}
-      {isSupabaseSection && databasePluginInstalled && <SupabaseSetupAssistant />}
-      {databasePlugin &&
-        databasePlugin.id !== "supabase" &&
-        databasePluginInstalled && <DatabasePluginTodoPanel />}
+      {databasePlugin && databasePluginInstalled && (
+        <PluginSetupPanel pluginId={databasePlugin.id} />
+      )}
       {sectionId === "rules" && <SettingsRulesPanel />}
       {sectionId !== "general" &&
         sectionId !== "models" &&

@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { readAppSettings } from "@/lib/app-settings-storage";
 import { isTauri } from "@/lib/tauri";
 
-export type AgentNotificationKind = "complete" | "attention";
+type AgentNotificationKind = "complete" | "attention";
 
 export interface AgentFinishNotificationParams {
   workspaceName: string;
@@ -20,7 +20,7 @@ async function isAppBackgrounded(): Promise<boolean> {
   return isMinimized || !isFocused;
 }
 
-export async function notifyAgentWhenBackgrounded(
+async function notifyAgentWhenBackgrounded(
   params: AgentFinishNotificationParams,
 ): Promise<void> {
   if (!isTauri()) return;

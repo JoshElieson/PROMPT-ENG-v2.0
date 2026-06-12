@@ -1,6 +1,6 @@
 import type { RuleScope, UserRule } from "@/types/rule";
 
-export const RULES_STORAGE_KEY = "prompt:rules:v1";
+const RULES_STORAGE_KEY = "prompt:rules:v1";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);

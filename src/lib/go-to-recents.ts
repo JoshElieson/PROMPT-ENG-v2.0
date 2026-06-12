@@ -9,7 +9,7 @@ export interface GoToRecents {
 const STORAGE_KEY = "prompt:go-to-recents:v1";
 const MAX_RECENTS = 8;
 
-export const EMPTY_GO_TO_RECENTS: GoToRecents = {
+const EMPTY_GO_TO_RECENTS: GoToRecents = {
   agent: [],
   model: [],
   project: [],

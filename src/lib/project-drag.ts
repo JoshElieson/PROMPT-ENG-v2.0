@@ -1,6 +1,6 @@
-import { pathsEqual, relativePathFromRootSync } from "@/lib/project-paths";
+import { relativePathFromRootSync } from "@/lib/project-paths";
 
-export const PROJECT_DRAG_MIME = "application/x-prompteng-project-entry";
+const PROJECT_DRAG_MIME = "application/x-prompteng-project-entry";
 
 export interface ProjectDragPayload {
   path: string;
@@ -25,15 +25,11 @@ export function endProjectDrag(): void {
   activeProjectDrag = null;
 }
 
-export function getActiveProjectDrag(): ProjectDragPayload | null {
-  return activeProjectDrag;
-}
-
 export function isProjectDragActive(): boolean {
   return activeProjectDrag != null;
 }
 
-export function formatProjectDropText(
+function formatProjectDropText(
   relativePath: string,
   name: string,
   isProjectRoot: boolean,
@@ -47,7 +43,7 @@ export function formatProjectDropText(
   return `${base}${sep}`;
 }
 
-export function hasProjectDrag(dataTransfer: DataTransfer): boolean {
+function hasProjectDrag(dataTransfer: DataTransfer): boolean {
   if (activeProjectDrag != null) return true;
   for (let i = 0; i < dataTransfer.types.length; i += 1) {
     if (dataTransfer.types[i] === PROJECT_DRAG_MIME) return true;
@@ -56,7 +52,7 @@ export function hasProjectDrag(dataTransfer: DataTransfer): boolean {
 }
 
 /** OS or browser file input (not project-tree drags). */
-export function dataTransferHasNativeFiles(dataTransfer: DataTransfer): boolean {
+function dataTransferHasNativeFiles(dataTransfer: DataTransfer): boolean {
   for (let i = 0; i < dataTransfer.types.length; i += 1) {
     if (dataTransfer.types[i] === "Files") return true;
   }
@@ -133,33 +129,6 @@ export function readProjectDragPayload(
   } catch {
     return null;
   }
-}
-
-export function getProjectDropText(
-  dataTransfer: DataTransfer,
-  payload: ProjectDragPayload,
-): string {
-  const plain = dataTransfer.getData("text/plain").trim();
-  if (plain) return plain;
-  const rel = relativePathFromRootSync(
-    payload.projectRootPath,
-    payload.path,
-  );
-  const isRoot = pathsEqual(payload.projectRootPath, payload.path);
-  return formatProjectDropText(
-    rel,
-    payload.name,
-    isRoot,
-    payload.isDirectory,
-  );
-}
-
-/** Space before inserted path when the cursor is not at whitespace. */
-export function insertPrefixAtCursor(input: string, cursor: number): string {
-  const before = input.slice(0, cursor);
-  if (before.length === 0) return "";
-  if (/\s$/.test(before)) return "";
-  return " ";
 }
 
 export function buildProjectDragPayload(
