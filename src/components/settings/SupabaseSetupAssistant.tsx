@@ -1210,16 +1210,14 @@ export function SupabaseSetupAssistant() {
                     </div>
 
                     <div className="flex flex-col gap-2 pt-2 border-t border-border-subtle/50">
-                      {activeProjectRef && (
-                        <Button
-                          onClick={() => navigateBrowserWebview("supabase-setup-browser", `https://supabase.com/dashboard/project/${activeProjectRef}`)}
-                          variant="outline"
-                          className="w-full h-8.5 text-xs font-medium border-border-subtle flex items-center justify-center gap-1.5 text-[#6366f1]"
-                        >
-                          <Globe className="h-3.5 w-3.5" />
-                          Go to Project Overview Shortcut
-                        </Button>
-                      )}
+                      <Button
+                        onClick={() => navigateBrowserWebview("supabase-setup-browser", activeProjectRef ? `https://supabase.com/dashboard/project/${activeProjectRef}` : "https://supabase.com/dashboard/projects")}
+                        variant="outline"
+                        className="w-full h-8.5 text-xs font-medium border-border-subtle flex items-center justify-center gap-1.5 text-[#6366f1]"
+                      >
+                        <Globe className="h-3.5 w-3.5" />
+                        {activeProjectRef ? "Go to Project Overview Shortcut" : "Go to Projects Dashboard"}
+                      </Button>
                       <div className="flex gap-2">
                         <Button
                           onClick={() => setStep(3)}
@@ -1294,16 +1292,14 @@ export function SupabaseSetupAssistant() {
                     </div>
 
                     <div className="flex flex-col gap-2 pt-2 border-t border-border-subtle/50">
-                      {activeProjectRef && (
-                        <Button
-                          onClick={() => navigateToProjectApiKeys(activeProjectRef)}
-                          variant="outline"
-                          className="w-full h-8.5 text-xs font-medium border-border-subtle flex items-center justify-center gap-1.5 text-[#6366f1]"
-                        >
-                          <Globe className="h-3.5 w-3.5" />
-                          Go to API Keys Shortcut
-                        </Button>
-                      )}
+                      <Button
+                        onClick={() => activeProjectRef ? navigateToProjectApiKeys(activeProjectRef) : navigateBrowserWebview("supabase-setup-browser", "https://supabase.com/dashboard/projects")}
+                        variant="outline"
+                        className="w-full h-8.5 text-xs font-medium border-border-subtle flex items-center justify-center gap-1.5 text-[#6366f1]"
+                      >
+                        <Globe className="h-3.5 w-3.5" />
+                        {activeProjectRef ? "Go to API Keys Shortcut" : "Go to Projects Dashboard"}
+                      </Button>
                       <div className="flex gap-2">
                         <Button
                           onClick={() => setStep(4)}
