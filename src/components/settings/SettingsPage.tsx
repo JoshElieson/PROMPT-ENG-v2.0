@@ -18,8 +18,9 @@ import {
   PLUGIN_SEARCH_TERMS,
   SettingsPluginsPanel,
 } from "@/components/settings/SettingsPluginsPanel";
-import { SettingsPlanUsagePanel } from "@/components/settings/SettingsPlanUsagePanel";
 import { SettingsRulesPanel } from "@/components/settings/SettingsRulesPanel";
+import { SettingsPlanUsagePanel } from "@/components/settings/SettingsPlanUsagePanel";
+import { SupabaseSetupAssistant } from "@/components/settings/SupabaseSetupAssistant";
 import {
   SETTINGS_NAV_GROUPS,
   SETTINGS_SECTION_LABELS,
@@ -333,8 +334,14 @@ function SettingsContent({ sectionId }: { sectionId: SettingsSectionId }) {
   const title = SETTINGS_SECTION_LABELS[sectionId];
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-10 py-8">
-      <h1 className="mb-8 text-2xl font-semibold tracking-tight text-foreground">
+    <div className={cn(
+      "min-h-0 flex-1 px-10 py-8",
+      sectionId === "supabase" ? "overflow-hidden flex flex-col h-full" : "overflow-y-auto"
+    )}>
+      <h1 className={cn(
+        "text-2xl font-semibold tracking-tight text-foreground",
+        sectionId === "supabase" ? "mb-4 shrink-0" : "mb-8"
+      )}>
         {title}
       </h1>
       {sectionId === "general" && <SettingsGeneralPanel />}
@@ -345,6 +352,7 @@ function SettingsContent({ sectionId }: { sectionId: SettingsSectionId }) {
       {sectionId === "agents" && <SettingsAgentsPanel />}
       {sectionId === "docs" && <SettingsDocsPanel />}
       {sectionId === "plugins" && <SettingsPluginsPanel />}
+      {sectionId === "supabase" && <SupabaseSetupAssistant />}
       {sectionId === "rules" && <SettingsRulesPanel />}
       {sectionId !== "general" &&
         sectionId !== "models" &&
@@ -354,6 +362,7 @@ function SettingsContent({ sectionId }: { sectionId: SettingsSectionId }) {
         sectionId !== "agents" &&
         sectionId !== "docs" &&
         sectionId !== "plugins" &&
+        sectionId !== "supabase" &&
         sectionId !== "rules" && (
           <SettingsPlaceholderPanel sectionId={sectionId} />
         )}

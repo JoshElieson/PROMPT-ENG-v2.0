@@ -40,6 +40,7 @@
     "lucide-react": "^1.16.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "supabase-mcp": "^1.5.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.0"
   },

@@ -209,6 +209,9 @@ export function BrowserTabPane({
 
     const unlistenPromise = listenBrowserNavigated((event) => {
       if (event.id !== tabId) return;
+      if (event.url.includes("#forge-eval-") || event.url.startsWith("forge-eval://")) {
+        return;
+      }
       nativeUrlRef.current = event.url;
       setLoadError(null);
       setPageUrl(event.url);

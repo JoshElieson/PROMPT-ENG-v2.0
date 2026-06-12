@@ -1,5 +1,6 @@
 mod agent_context;
 mod agent_notifications;
+pub mod mcp_client;
 mod system_tray;
 mod app_icon;
 mod ai_chat;
@@ -30,7 +31,7 @@ use git::{
 };
 use ai_chat::{ai_chat_complete, ai_chat_synthesize};
 use embedded_browser::{
-    browser_webview_close, browser_webview_go_back, browser_webview_go_forward,
+    browser_webview_close, browser_webview_eval, browser_webview_go_back, browser_webview_go_forward,
     browser_webview_navigate, browser_webview_open, browser_webview_reload,
     browser_webview_set_bounds, browser_webview_set_visible, BrowserWebviewState,
 };
@@ -96,6 +97,7 @@ pub fn run() {
             ai_chat_complete,
             ai_chat_synthesize,
             ai_connection_status,
+            mcp_client::verify_supabase_mcp_config,
             start_file_drag,
             open_terminal_run_command,
             terminal_spawn,
@@ -110,6 +112,7 @@ pub fn run() {
             browser_webview_set_bounds,
             browser_webview_set_visible,
             browser_webview_close,
+            browser_webview_eval,
             show_agent_finish_notification,
             show_automation_complete_notification,
             set_system_tray_visible,

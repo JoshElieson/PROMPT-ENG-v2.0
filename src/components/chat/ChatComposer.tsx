@@ -14,6 +14,7 @@ import {
 import {
   ArrowUp,
   Clock,
+  Database,
   Loader2,
   Paperclip,
   Sparkles,
@@ -72,6 +73,8 @@ import {
   readProjectDragPayload,
 } from "@/lib/project-drag";
 import { useAiLoadingHighlight } from "@/hooks/use-ai-loading-highlight";
+import { useLayout } from "@/contexts/LayoutContext";
+import { loadSupabaseConfig } from "@/lib/supabase-auth";
 import { cn } from "@/lib/utils";
 
 const OPTIMIZE_PROMPT_AI_TOOLTIP = "Optimize prompt wording (keep meaning)";
@@ -218,6 +221,34 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   );
   const optimizeAbortRef = useRef(false);
   const isProgrammaticInputRef = useRef(false);
+
+  const { openSettings } = useLayout();
+  const [supabaseConnected, setSupabaseConnected] = useState(true);
+
+  useEffect(() => {
+    void loadSupabaseConfig().then((config) => {
+      const isConnected = !!(config.personalAccessToken && config.projectUrl && config.anonKey);
+      setSupabaseConnected(isConnected);
+    });
+  }, [chatId, threadId]);
+
+  const showDatabaseHint = useMemo(() => {
+    if (supabaseConnected) return false;
+    const keywords = ["database", "supabase", "postgres", "sql", "table", "schema"];
+    const text = input.toLowerCase();
+    return keywords.some((k) => text.includes(k));
+  }, [input, supabaseConnected]);
+
+  const navigateToSupabase = useCallback(() => {
+    openSettings();
+    setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("forge:settings-navigate", {
+          detail: { sectionId: "supabase" },
+        })
+      );
+    }, 100);
+  }, [openSettings]);
 
   const appendText = useCallback((text: string) => {
     const el = textareaRef.current?.getElement();
@@ -964,6 +995,24 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               onActiveIndexChange={setMentionIndex}
             />
           </section>
+        )}
+
+        {showDatabaseHint && (
+          <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-[#6366f1]/20 bg-[#6366f1]/5 px-3 py-1.5 text-[11px] text-muted-foreground shadow-sm">
+            <div className="flex items-center gap-2">
+              <Database className="h-3.5 w-3.5 text-[#6366f1] shrink-0" />
+              <span>
+                💡 <b>Need a database?</b> Link Supabase to automate table creation and schemas.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={navigateToSupabase}
+              className="text-[11px] font-semibold text-[#6366f1] hover:underline shrink-0"
+            >
+              Configure Supabase →
+            </button>
+          </div>
         )}
 
         <section

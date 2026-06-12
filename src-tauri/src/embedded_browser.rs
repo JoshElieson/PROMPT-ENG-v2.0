@@ -181,6 +181,16 @@ pub async fn browser_webview_open(
             tauri::webview::WebviewBuilder::new(&label, WebviewUrl::External(parsed))
                 .on_navigation(move |nav_url| {
                     let url_str = nav_url.to_string();
+                    if url_str.starts_with("forge-eval://") || url_str.contains("forge-eval.local") {
+                        emit_navigation(
+                            &app_for_nav,
+                            &tab_id,
+                            &url_str,
+                            false,
+                            false,
+                        );
+                        return false; // Cancel navigation
+                    }
                     let (can_go_back, can_go_forward) =
                         record_navigation(&state_for_nav, &tab_id, &url_str);
                     emit_navigation(
@@ -330,3 +340,15 @@ pub async fn browser_webview_close(
     state.0.lock().expect("browser state lock").remove(&id);
     Ok(())
 }
+
+#[tauri::command]
+pub async fn browser_webview_eval(
+    app: AppHandle,
+    id: String,
+    script: String,
+) -> Result<(), String> {
+    with_webview(&app, &id, |webview| {
+        webview.eval(&script).map_err(|e| e.to_string())
+    })
+}
+

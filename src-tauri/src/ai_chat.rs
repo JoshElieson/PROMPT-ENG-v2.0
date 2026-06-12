@@ -511,13 +511,16 @@ fn append_pane_tools_openai(tools: &mut Vec<serde_json::Value>, policy: &Workspa
     ]);
 }
 
-fn tools_schema_openai(policy: &WorkspacePolicy) -> Vec<serde_json::Value> {
+async fn tools_schema_openai(policy: &WorkspacePolicy) -> Vec<serde_json::Value> {
     let mut tools = Vec::new();
     append_file_tools_openai(&mut tools, policy);
     if policy.allows_git() {
         append_git_tools_openai(&mut tools);
     }
     append_pane_tools_openai(&mut tools, policy);
+    if let Ok(mut mcp) = crate::mcp_client::get_mcp_tools().await {
+        tools.append(&mut mcp);
+    }
     tools
 }
 
@@ -1006,12 +1009,23 @@ fn run_pane_tool(
     })
 }
 
-fn run_tool(
+async fn run_tool(
     policy: &WorkspacePolicy,
     name: &str,
     args: &str,
     activity_sink: Option<&ToolActivitySink>,
 ) -> ToolExecution {
+    if name.starts_with("mcp_") {
+        let output = match crate::mcp_client::execute_mcp_tool(name, args).await {
+            Ok(res) => res,
+            Err(e) => format!("ERROR: {}", e),
+        };
+        return ToolExecution {
+            output: cap_tool_output(output),
+            activity: None,
+        };
+    }
+
     let result = (|| -> Result<ToolExecution, String> {
         let v: serde_json::Value =
             serde_json::from_str(args).map_err(|e| format!("Invalid tool arguments JSON: {e}"))?;
@@ -1272,7 +1286,7 @@ async fn openai_agent_loop(
     validate_base_url(Provider::OpenAi, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = tools_schema_openai(policy);
+    let tools = tools_schema_openai(policy).await;
 
     let mut api_messages: Vec<serde_json::Value> = if let Some(cont) =
         continuation.filter(|state| state.provider == "openai")
@@ -1355,7 +1369,7 @@ async fn openai_agent_loop(
                     let name = call["function"]["name"].as_str().unwrap_or("");
                     let args = call["function"]["arguments"].as_str().unwrap_or("{}");
                     signatures.push(tool_signature(name, args));
-                    let output = run_tool(policy, name, args, activity_sink.as_ref());
+                    let output = run_tool(policy, name, args, activity_sink.as_ref()).await;
                     if let Some(activity) = output.activity {
                         activities.push(activity);
                     }
@@ -1485,7 +1499,7 @@ async fn deepseek_agent_loop(
     validate_base_url(Provider::DeepSeek, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = tools_schema_openai(policy);
+    let tools = tools_schema_openai(policy).await;
 
     let mut api_messages: Vec<serde_json::Value> = if let Some(cont) =
         continuation.filter(|state| state.provider == "deepseek")
@@ -1568,7 +1582,7 @@ async fn deepseek_agent_loop(
                     let name = call["function"]["name"].as_str().unwrap_or("");
                     let args = call["function"]["arguments"].as_str().unwrap_or("{}");
                     signatures.push(tool_signature(name, args));
-                    let output = run_tool(policy, name, args, activity_sink.as_ref());
+                    let output = run_tool(policy, name, args, activity_sink.as_ref()).await;
                     if let Some(activity) = output.activity {
                         activities.push(activity);
                     }
@@ -1714,7 +1728,7 @@ async fn xai_agent_loop_once(
     validate_base_url(Provider::Xai, &base)?;
     let url = format!("{}/chat/completions", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = tools_schema_openai(policy);
+    let tools = tools_schema_openai(policy).await;
 
     let mut api_messages: Vec<serde_json::Value> = if let Some(cont) =
         continuation.filter(|state| state.provider == "xai")
@@ -1796,7 +1810,7 @@ async fn xai_agent_loop_once(
                     let name = call["function"]["name"].as_str().unwrap_or("");
                     let args = call["function"]["arguments"].as_str().unwrap_or("{}");
                     signatures.push(tool_signature(name, args));
-                    let output = run_tool(policy, name, args, activity_sink.as_ref());
+                    let output = run_tool(policy, name, args, activity_sink.as_ref()).await;
                     if let Some(activity) = output.activity {
                         activities.push(activity);
                     }
@@ -2053,13 +2067,17 @@ fn append_pane_tools_anthropic(tools: &mut Vec<serde_json::Value>, policy: &Work
     ]);
 }
 
-fn anthropic_tools(policy: &WorkspacePolicy) -> Vec<serde_json::Value> {
+async fn anthropic_tools(policy: &WorkspacePolicy) -> Vec<serde_json::Value> {
     let mut tools = Vec::new();
     append_file_tools_anthropic(&mut tools, policy);
     if policy.allows_git() {
         append_git_tools_anthropic(&mut tools);
     }
     append_pane_tools_anthropic(&mut tools, policy);
+    if let Ok(mcp_openai) = crate::mcp_client::get_mcp_tools().await {
+        let mut mcp = crate::mcp_client::to_anthropic_tools(&mcp_openai);
+        tools.append(&mut mcp);
+    }
     tools
 }
 
@@ -2154,7 +2172,7 @@ async fn anthropic_agent_loop(
     validate_base_url(Provider::Anthropic, &base)?;
     let url = format!("{}/v1/messages", base.trim_end_matches('/'));
     let client = http_client()?;
-    let tools = anthropic_tools(policy);
+    let tools = anthropic_tools(policy).await;
 
     let mut api_messages: Vec<serde_json::Value> = if let Some(cont) =
         continuation.filter(|state| state.provider == "anthropic")
@@ -2252,7 +2270,7 @@ async fn anthropic_agent_loop(
                 .collect();
             let signatures = tool_signatures_from_json_args(&sig_calls);
             for (id, name, args) in tool_uses {
-                let out = run_tool(policy, &name, &args, activity_sink.as_ref());
+                let out = run_tool(policy, &name, &args, activity_sink.as_ref()).await;
                 if let Some(activity) = out.activity {
                     activities.push(activity);
                 }
@@ -2474,13 +2492,17 @@ fn append_pane_tools_gemini(declarations: &mut Vec<serde_json::Value>, policy: &
     ]);
 }
 
-fn gemini_tool_declarations(policy: &WorkspacePolicy) -> serde_json::Value {
+async fn gemini_tool_declarations(policy: &WorkspacePolicy) -> serde_json::Value {
     let mut declarations = Vec::new();
     append_file_tools_gemini(&mut declarations, policy);
     if policy.allows_git() {
         append_git_tools_gemini(&mut declarations);
     }
     append_pane_tools_gemini(&mut declarations, policy);
+    if let Ok(mcp_openai) = crate::mcp_client::get_mcp_tools().await {
+        let mut mcp = crate::mcp_client::to_gemini_tools(&mcp_openai);
+        declarations.append(&mut mcp);
+    }
     json!([{ "function_declarations": declarations }])
 }
 
@@ -2604,7 +2626,7 @@ async fn gemini_agent_loop(
             "systemInstruction": {
                 "parts": [{ "text": merged_workspace_system(policy, system) }],
             },
-            "tools": gemini_tool_declarations(policy),
+            "tools": gemini_tool_declarations(policy).await,
         });
 
         let res = gemini_post(&client, &url, key.as_str())
@@ -2666,7 +2688,7 @@ async fn gemini_agent_loop(
             let signatures = tool_signatures_from_json_args(&sig_calls);
             for (name, args_val) in function_calls {
                 let args_str = serde_json::to_string(&args_val).unwrap_or_else(|_| "{}".to_string());
-                let out = run_tool(policy, &name, &args_str, activity_sink.as_ref());
+                let out = run_tool(policy, &name, &args_str, activity_sink.as_ref()).await;
                 if let Some(activity) = out.activity {
                     activities.push(activity);
                 }

@@ -3,6 +3,7 @@ import {
   BookOpen,
   Bot,
   Brain,
+  Database,
   Palette,
   Puzzle,
   Repeat2,
@@ -21,6 +22,7 @@ export type SettingsSectionId =
   | "workflows"
   | "models"
   | "plugins"
+  | "supabase"
   | "rules"
   | "docs";
 
@@ -54,6 +56,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     items: [
       { id: "plugins", label: "Plugins", icon: Puzzle },
+      { id: "supabase", label: "Supabase Setup", icon: Database },
       { id: "automation", label: "Automation", icon: Repeat2 },
       { id: "rules", label: "Rules", icon: ScrollText },
     ],
@@ -74,6 +77,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSectionId, string> = {
   workflows: "Workflows",
   models: "Models",
   plugins: "Plugins",
+  supabase: "Supabase Setup",
   rules: "Rules",
   docs: "Docs",
 };
