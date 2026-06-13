@@ -1,12 +1,10 @@
-import { useEffect, useState, useRef } from "react";
+﻿import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Database,
   CheckCircle2,
   AlertCircle,
   Loader2,
   Globe,
-  RefreshCw,
   Copy,
   Check,
   Info,
@@ -16,6 +14,7 @@ import {
   Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { isTauri } from "@/lib/tauri";
 import {
   evaluateBrowserWebview,
@@ -33,10 +32,55 @@ import {
   type SupabaseConfig,
 } from "@/plugins/supabase/supabase-auth";
 
+const SETUP_INPUT_CLASS =
+  "border-border-subtle bg-panel-elevated/80 text-foreground placeholder:text-muted-foreground/70 focus:border-[#6366f1]/60 h-9 w-full rounded-md border px-2 text-xs outline-none font-mono";
+
+const SETUP_LABEL_CLASS = "text-muted-foreground text-xs font-medium";
+
+function StepIndicator({
+  number,
+  completed,
+  active,
+}: {
+  number: number;
+  completed: boolean;
+  active: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium transition-colors",
+        completed && "bg-emerald-500/15 text-emerald-400",
+        active && !completed && "bg-[#6366f1] text-white",
+        !active && !completed && "border-border-subtle bg-panel-elevated text-muted-foreground border",
+      )}
+    >
+      {completed ? <Check className="h-3 w-3" /> : number}
+    </span>
+  );
+}
+
+function PageStatus({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-2 text-[11px] leading-relaxed text-emerald-400">
+      <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function SetupGuide({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-border-subtle bg-panel/60 flex flex-col gap-2 rounded-xl border px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      {children}
+    </div>
+  );
+}
+
 export function SupabaseSetupAssistant() {
   const [config, setConfig] = useState<SupabaseConfig | null>(null);
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
-  const [debugText, setDebugText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusText, setStatusText] = useState("");
@@ -363,19 +407,10 @@ export function SupabaseSetupAssistant() {
               const cleaned = data.extractedAnon.trim();
               setInputAnon((prev) => prev !== cleaned ? cleaned : prev);
             }
-
-            // Update user-visible status indicators
-            let debugMsg = `Page: ${data.url.split('/').pop() || 'Unknown'}\n`;
-            debugMsg += `• Project URL: ${data.extractedUrl ? "✓ Auto-Detected" : "Searching..."}\n`;
-            debugMsg += `• Anon Key: ${data.extractedAnon ? "✓ Auto-Detected" : "Searching..."}\n`;
-            if (data.domElements && data.domElements.length > 0) {
-              debugMsg += "\nElements found:\n" + data.domElements.join('\n');
-            }
-            setDebugText(debugMsg);
           }
         }
-      } catch (e) {
-        setDebugText("Error: " + (e instanceof Error ? e.message : String(e)));
+      } catch {
+        // Polling errors are non-fatal during setup.
       }
     }, 1500);
 
@@ -695,68 +730,60 @@ export function SupabaseSetupAssistant() {
   };
 
   const renderManualView = () => (
-    <form onSubmit={handleManualSubmit} className="flex flex-col gap-4">
-      <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-relaxed text-amber-400">
-        <Info className="h-4.5 w-4.5 shrink-0" />
+    <form onSubmit={handleManualSubmit} className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+      <div className="border-border-subtle bg-panel/60 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+        <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          Automated webview setup is only supported in the desktop application. Please input your Supabase parameters below to connect.
+          Automated setup is available in the desktop app. Enter your Supabase credentials below to connect.
         </span>
       </div>
 
-      <div className="flex flex-col gap-3.5">
+      <div className="border-border-subtle bg-panel/60 flex flex-col gap-3.5 rounded-xl border px-4 py-3.5">
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Personal Access Token (Optional)
-          </label>
+          <label className={SETUP_LABEL_CLASS}>Personal Access Token (optional)</label>
           <input
             type="password"
             value={manualPat}
             onChange={(e) => setManualPat(e.target.value)}
             placeholder="sbp_..."
-            className="border-border-subtle bg-panel-elevated/70 text-foreground focus:border-[#6366f1]/60 h-8.5 rounded-md border px-3 text-xs outline-none focus:ring-1 focus:ring-[#6366f1]/30 font-mono"
+            className={SETUP_INPUT_CLASS}
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Project Reference (Optional)
-          </label>
+          <label className={SETUP_LABEL_CLASS}>Project Reference (optional)</label>
           <input
             type="text"
             value={manualRef}
             onChange={(e) => setManualRef(e.target.value)}
             placeholder="abcde12345..."
-            className="border-border-subtle bg-panel-elevated/70 text-foreground focus:border-[#6366f1]/60 h-8.5 rounded-md border px-3 text-xs outline-none focus:ring-1 focus:ring-[#6366f1]/30 font-mono"
+            className={SETUP_INPUT_CLASS}
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Project URL *
-          </label>
+          <label className={SETUP_LABEL_CLASS}>Project URL</label>
           <input
             type="text"
             value={manualUrl}
             onChange={(e) => setManualUrl(e.target.value)}
             placeholder="https://xyz.supabase.co"
             required
-            className="border-border-subtle bg-panel-elevated/70 text-foreground focus:border-[#6366f1]/60 h-8.5 rounded-md border px-3 text-xs outline-none focus:ring-1 focus:ring-[#6366f1]/30 font-mono"
+            className={SETUP_INPUT_CLASS}
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Anon Public Key *
-          </label>
+          <label className={SETUP_LABEL_CLASS}>Anon Public Key</label>
           <input
             type="password"
             value={manualAnon}
             onChange={(e) => setManualAnon(e.target.value)}
             placeholder="eyJhbGciOiJIUzI1NiIs..."
             required
-            className="border-border-subtle bg-panel-elevated/70 text-foreground focus:border-[#6366f1]/60 h-8.5 rounded-md border px-3 text-xs outline-none focus:ring-1 focus:ring-[#6366f1]/30 font-mono"
+            className={SETUP_INPUT_CLASS}
           />
         </div>
       </div>
 
-      <Button type="submit" className="bg-[#6366f1] hover:bg-[#5558e6] text-white mt-2 h-9 w-full font-medium">
+      <Button type="submit" className="h-9 w-full max-w-2xl font-medium">
         Save Connection
       </Button>
     </form>
@@ -772,217 +799,90 @@ export function SupabaseSetupAssistant() {
       )}
 
       {step < 6 && !isTauri() ? (
-        <div className="border-border-subtle bg-panel/60 rounded-xl border p-6 max-w-xl mx-auto w-full">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="bg-emerald-500/10 flex h-10 w-10 items-center justify-center rounded-lg text-emerald-400">
-              <Database className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-foreground">Supabase Setup</h2>
-              <p className="text-muted-foreground mt-0.5 text-xs">
-                Link a Supabase database instance to store data.
-              </p>
-            </div>
-          </div>
-          {renderManualView()}
-        </div>
+        renderManualView()
       ) : (
-        <div className="flex flex-1 w-full border border-border-subtle rounded-xl overflow-hidden bg-panel/40 backdrop-blur min-h-0">
+        <div className="border-border-subtle bg-panel/60 flex min-h-0 w-full flex-1 overflow-hidden rounded-xl border">
           {/* Left Wizard Pane */}
-          <div className={`shrink-0 border-border-subtle p-5 flex flex-col justify-between bg-panel-elevated/20 overflow-y-auto ${step === 6 ? "flex-1 w-full" : "w-[340px] border-r"}`}>
-            <div className="flex flex-col gap-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-emerald-500/10 flex h-10 w-10 items-center justify-center rounded-lg text-emerald-400">
-                    <Database className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-semibold text-foreground">Supabase Setup</h2>
-                    <p className="text-muted-foreground mt-0.5 text-[11px]">
-                      Configure credentials manually.
-                    </p>
-                  </div>
-                </div>
-                {step > 1 && (
+          <div
+            className={cn(
+              "border-border-subtle flex shrink-0 flex-col justify-between overflow-y-auto bg-panel/40 p-4",
+              step === 6 ? "w-full flex-1" : "w-[320px] border-r",
+            )}
+          >
+            <div className="flex flex-col gap-5">
+              {step > 1 && step < 6 && (
+                <div className="flex justify-end">
                   <Button
                     variant="ghost"
-                    size="icon"
+                    size="sm"
                     onClick={resetSetup}
                     title="Reset configuration and start over"
-                    className="text-muted-foreground hover:text-red-400 h-8 w-8 shrink-0"
+                    className="text-muted-foreground hover:text-destructive h-8 gap-1.5 px-2"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Reset
                   </Button>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Step checklist */}
-              <div className="flex flex-col gap-2 border-t border-border-subtle pt-4">
-                {/* Step 1 Check */}
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`flex h-5.5 w-5.5 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
-                      step > 1
-                        ? "bg-emerald-500 text-background"
-                        : step === 1
-                          ? "bg-[#6366f1] text-white shadow-md shadow-[#6366f1]/20"
-                          : "bg-panel-elevated text-muted-foreground border border-border-subtle"
-                    }`}
-                  >
-                    {step > 1 ? "✓" : "1"}
-                  </span>
-                  <div className="flex flex-col">
-                    <span className={`text-xs ${step === 1 ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
-                      Sign In
-                    </span>
-                    {step === 1 && (
-                      <span className="text-[10px] text-muted-foreground/70 leading-normal">
-                        Authorize inside the console webview
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Step 2 Check */}
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`flex h-5.5 w-5.5 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
-                      step > 2
-                        ? "bg-emerald-500 text-background"
-                        : step === 2
-                          ? "bg-[#6366f1] text-white shadow-md shadow-[#6366f1]/20"
-                          : "bg-panel-elevated text-muted-foreground border border-border-subtle"
-                    }`}
-                  >
-                    {step > 2 ? "✓" : "2"}
-                  </span>
-                  <div className="flex flex-col">
-                    <span className={`text-xs ${step === 2 ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
-                      Personal Access Token
-                    </span>
-                    {step === 2 && (
-                      <span className="text-[10px] text-muted-foreground/70 leading-normal">
-                        Save a Management API Key (PAT)
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Step 3 Check */}
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`flex h-5.5 w-5.5 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
-                      step > 3
-                        ? "bg-emerald-500 text-background"
-                        : step === 3
-                          ? "bg-[#6366f1] text-white shadow-md shadow-[#6366f1]/20"
-                          : "bg-panel-elevated text-muted-foreground border border-border-subtle"
-                    }`}
-                  >
-                    {step > 3 ? "✓" : "3"}
-                  </span>
-                  <div className="flex flex-col">
-                    <span className={`text-xs ${step === 3 ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
-                      Navigate to Project
-                    </span>
-                    {step === 3 && (
-                      <span className="text-[10px] text-muted-foreground/70 leading-normal">
-                        Select or create your project
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Step 4 Check */}
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`flex h-5.5 w-5.5 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
-                      step > 4
-                        ? "bg-emerald-500 text-background"
-                        : step === 4
-                          ? "bg-[#6366f1] text-white shadow-md shadow-[#6366f1]/20"
-                          : "bg-panel-elevated text-muted-foreground border border-border-subtle"
-                    }`}
-                  >
-                    {step > 4 ? "✓" : "4"}
-                  </span>
-                  <div className="flex flex-col">
-                    <span className={`text-xs ${step === 4 ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
-                      Project URL
-                    </span>
-                    {step === 4 && (
-                      <span className="text-[10px] text-muted-foreground/70 leading-normal">
-                        Copy and paste the database API URL
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Step 5 Check */}
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`flex h-5.5 w-5.5 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
-                      step > 5
-                        ? "bg-emerald-500 text-background"
-                        : step === 5
-                          ? "bg-[#6366f1] text-white shadow-md shadow-[#6366f1]/20"
-                          : "bg-panel-elevated text-muted-foreground border border-border-subtle"
-                    }`}
-                  >
-                    {step > 5 ? "✓" : "5"}
-                  </span>
-                  <div className="flex flex-col">
-                    <span className={`text-xs ${step === 5 ? "text-foreground font-semibold" : "text-muted-foreground"}`}>
-                      Anon Public Key
-                    </span>
-                    {step === 5 && (
-                      <span className="text-[10px] text-muted-foreground/70 leading-normal">
-                        Copy and paste the anon public key
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Wizard Body Controls */}
-              <div className="border-t border-border-subtle pt-3 flex flex-col gap-3">
-                {step === 1 && (
-                  <div className="flex flex-col gap-4">
-                    <div className="rounded-lg border border-border-subtle bg-panel-elevated p-3 text-[11px] leading-relaxed text-muted-foreground flex flex-col gap-2">
-                      <span className="font-semibold text-foreground flex items-center gap-1.5">
-                        <Info className="h-3.5 w-3.5 text-[#6366f1]" />
-                        Step 1 Guide: Account Login
-                      </span>
-                      <p>
-                        Please sign in to your Supabase account using the browser window on the right.
+              {step < 6 && (
+              <div className="flex flex-col gap-2.5">
+                {[
+                  { n: 1, label: "Sign In", hint: "Authorize in the webview" },
+                  { n: 2, label: "Access Token", hint: "Generate and save a PAT" },
+                  { n: 3, label: "Project", hint: "Select or create a project" },
+                  { n: 4, label: "Project URL", hint: "Copy the API URL" },
+                  { n: 5, label: "Anon Key", hint: "Copy the public key" },
+                ].map(({ n, label, hint }) => (
+                  <div key={n} className="flex items-center gap-3">
+                    <StepIndicator number={n} completed={step > n} active={step === n} />
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={cn(
+                          "text-xs",
+                          step === n ? "font-medium text-foreground" : "text-muted-foreground",
+                        )}
+                      >
+                        {label}
                       </p>
-                      {isUserLoggedIn ? (
-                        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded p-2 text-[10px] font-medium leading-normal flex items-center gap-1.5">
-                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                          <span>Logged in detected! You can proceed.</span>
-                        </div>
-                      ) : (
-                        <div className="bg-[#6366f1]/5 border border-[#6366f1]/10 rounded p-1.5 text-foreground font-medium text-[10px]">
-                          👉 If the login page is not loading automatically, click **"Load Sign In page"** below to direct the browser.
-                        </div>
+                      {step === n && (
+                        <p className="text-muted-foreground text-[11px] leading-relaxed">{hint}</p>
                       )}
                     </div>
-                    
+                  </div>
+                ))}
+              </div>
+              )}
+
+              {/* Wizard Body Controls */}
+              <div className="border-border-subtle flex flex-col gap-3 border-t pt-4">
+                {step === 1 && (
+                  <div className="flex flex-col gap-3">
+                    <SetupGuide title="Sign in">
+                      <p>Sign in to your Supabase account using the browser on the right.</p>
+                      {isUserLoggedIn ? (
+                        <PageStatus>Login detected. You can continue.</PageStatus>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          If the login page does not load, use Load Sign In Page below.
+                        </p>
+                      )}
+                    </SetupGuide>
+
                     <div className="flex flex-col gap-2">
                       <Button
                         onClick={navigateToLogin}
                         variant="outline"
                         disabled={isProcessing}
-                        className="w-full h-8.5 text-xs font-medium border-border-subtle"
+                        size="sm"
+                        className="w-full"
                       >
                         {isProcessing && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
                         Load Sign In Page
                       </Button>
-                      <Button
-                        onClick={() => setStep(2)}
-                        className="bg-[#6366f1] hover:bg-[#5558e6] text-white w-full h-8.5 text-xs font-medium flex items-center justify-center gap-1"
-                      >
-                        Continue to Step 2
+                      <Button onClick={() => setStep(2)} size="sm" className="w-full">
+                        Continue
                         <ArrowRight className="h-3 w-3" />
                       </Button>
                     </div>
@@ -990,66 +890,50 @@ export function SupabaseSetupAssistant() {
                 )}
 
                 {step === 2 && (
-                  <div className="flex flex-col gap-4">
-                    <div className="rounded-lg border border-border-subtle bg-panel-elevated p-3 text-[11px] leading-relaxed text-muted-foreground flex flex-col gap-2">
-                      <span className="font-semibold text-foreground flex items-center gap-1.5">
-                        <Info className="h-3.5 w-3.5 text-[#6366f1]" />
-                        Step 2 Guide: Access Token (PAT)
-                      </span>
+                  <div className="flex flex-col gap-3">
+                    <SetupGuide title="Personal access token">
                       {currentUrl.includes("/tokens") ? (
-                        <div className="flex flex-col gap-1.5">
-                          <p className="font-semibold text-emerald-400">🎉 You are on the Tokens page!</p>
-                          <ul className="list-disc pl-3 text-muted-foreground text-[10px] flex flex-col gap-1">
-                            <li>Click **"Generate new token"** in the webview.</li>
-                            <li>Give the token a name (e.g. "Forge") and click **Generate**.</li>
-                            <li>Copy the generated token and paste it below.</li>
-                          </ul>
-                        </div>
+                        <>
+                          <PageStatus>Tokens page open.</PageStatus>
+                          <p>Generate a new token, copy it, and paste it below.</p>
+                        </>
                       ) : (
-                        <div className="flex flex-col gap-1.5">
+                        <>
                           <p>
-                            A Personal Access Token (starts with <code className="text-[#6366f1] font-semibold">sbp_</code>) allows the Supabase MCP to manage databases and list database schemas.
+                            A Personal Access Token (<code className="text-foreground">sbp_</code>) lets Forge manage your Supabase project.
                           </p>
-                          <div className="bg-[#6366f1]/5 border border-[#6366f1]/10 rounded p-1.5 text-[10px] text-foreground">
-                            👉 Click the **"Go to Tokens Page"** button below to direct the webview, then generate and paste your token.
-                          </div>
-                        </div>
+                          <p className="text-muted-foreground">
+                            Open the tokens page, generate a token, then paste it here.
+                          </p>
+                        </>
                       )}
-                    </div>
+                    </SetupGuide>
 
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Personal Access Token
-                      </label>
+                    <div className="flex flex-col gap-1">
+                      <label className={SETUP_LABEL_CLASS}>Personal Access Token</label>
                       <input
                         type="password"
                         placeholder="sbp_..."
                         value={inputPat}
                         onChange={(e) => setInputPat(e.target.value)}
-                        className="w-full border-border-subtle bg-panel-elevated/80 text-foreground h-8.5 rounded-md border px-2.5 text-xs outline-none focus:border-[#6366f1] font-mono"
+                        className={SETUP_INPUT_CLASS}
                       />
                     </div>
 
-                    <div className="flex flex-col gap-2 pt-2 border-t border-border-subtle/50">
-                      <Button
-                        onClick={navigateToTokens}
-                        variant="outline"
-                        className="w-full h-8.5 text-xs font-medium border-border-subtle"
-                      >
+                    <div className="flex flex-col gap-2">
+                      <Button onClick={navigateToTokens} variant="outline" size="sm" className="w-full">
                         Go to Tokens Page
                       </Button>
                       <div className="flex gap-2">
-                        <Button
-                          onClick={() => setStep(1)}
-                          variant="ghost"
-                          className="flex-1 h-8.5 text-xs font-medium"
-                        >
-                          <ArrowLeft className="mr-1 h-3 w-3" /> Back
+                        <Button onClick={() => setStep(1)} variant="ghost" size="sm" className="flex-1">
+                          <ArrowLeft className="h-3 w-3" />
+                          Back
                         </Button>
                         <Button
                           onClick={savePat}
                           disabled={!inputPat.trim().startsWith("sbp_")}
-                          className="flex-1 bg-[#6366f1] hover:bg-[#5558e6] text-white h-8.5 text-xs font-medium flex items-center justify-center gap-1"
+                          size="sm"
+                          className="flex-1"
                         >
                           Continue
                           <ArrowRight className="h-3 w-3" />
@@ -1060,83 +944,49 @@ export function SupabaseSetupAssistant() {
                 )}
 
                 {step === 3 && (
-                  <div className="flex flex-col gap-4">
-                    <div className="rounded-lg border border-border-subtle bg-panel-elevated p-3 text-[11px] leading-relaxed text-muted-foreground flex flex-col gap-2.5">
-                      <span className="font-semibold text-foreground flex items-center gap-1.5">
-                        <Info className="h-3.5 w-3.5 text-[#6366f1]" />
-                        Step 3 Guide: Project Page
-                      </span>
+                  <div className="flex flex-col gap-3">
+                    <SetupGuide title="Choose a project">
                       {currentUrl.includes("/dashboard/new/") || currentUrl.includes("/project/new") ? (
-                        <div className="flex flex-col gap-1.5">
-                          <p className="font-semibold text-[#6366f1]">✨ You are creating a new project!</p>
-                          <ul className="list-disc pl-3 text-muted-foreground text-[10px] flex flex-col gap-1">
-                            <li>Choose your Organization and enter a project name.</li>
-                            <li>Generate and copy the secure database password below.</li>
-                            <li>Select the **Free Tier ($0.00)** plan.</li>
-                            <li>Click **Create new project**. Once loaded, we'll auto-advance!</li>
-                          </ul>
-                        </div>
+                        <>
+                          <PageStatus>Creating a new project.</PageStatus>
+                          <p>Enter a project name, use the generated password below, and create the project.</p>
+                        </>
                       ) : currentUrl.includes("/dashboard/org/") ? (
-                        <div className="flex flex-col gap-2 animate-fade-in">
-                          <p className="font-semibold text-[#6366f1]">🏢 You are inside an Organization page!</p>
-                          <p>If you don't see any projects in the list:</p>
-                          <ul className="list-disc pl-3 text-muted-foreground text-[10px] flex flex-col gap-1">
-                            <li>Click **"New project"** in the webview to create one.</li>
-                            <li>Otherwise, click on any existing project listed on your screen.</li>
-                          </ul>
-                        </div>
+                        <>
+                          <PageStatus>Organization page open.</PageStatus>
+                          <p>Create a new project or select an existing one from the list.</p>
+                        </>
                       ) : (
-                        <div className="flex flex-col gap-2">
-                          <p>
-                            Choose the database project you want to link:
-                          </p>
-                          <div className="text-foreground leading-normal flex flex-col gap-1 border-l-2 border-emerald-500/40 pl-2 text-[10px]">
-                            <span className="font-medium">A. Select Existing Project</span>
-                            <span className="text-muted-foreground">Simply click your project in the dashboard on the right.</span>
-                          </div>
-                          <div className="text-foreground leading-normal flex flex-col gap-1 border-l-2 border-indigo-500/40 pl-2 text-[10px]">
-                            <span className="font-medium">B. Create New Project</span>
-                            <span className="text-muted-foreground">Click **"New Project"** in the webview on the right.</span>
-                          </div>
-                        </div>
+                        <p>Select an existing project or create a new one in the browser.</p>
                       )}
-                    </div>
+                    </SetupGuide>
 
-                    {/* Database Password Generator Helper */}
-                    <div className="flex flex-col gap-1.5 bg-panel-elevated/40 border border-border-subtle/40 rounded-lg p-2.5">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between">
-                        <span>New DB Password Helper</span>
+                    <div className="border-border-subtle bg-panel/60 flex flex-col gap-2 rounded-xl border px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={SETUP_LABEL_CLASS}>Suggested database password</span>
                         <button
+                          type="button"
                           onClick={copyPassword}
-                          className="text-[#6366f1] hover:underline normal-case font-normal flex items-center gap-1"
+                          className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs transition-colors"
                         >
                           {copiedPassword ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                           {copiedPassword ? "Copied" : "Copy"}
                         </button>
-                      </span>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-xs font-mono text-foreground select-all overflow-hidden text-ellipsis whitespace-nowrap">
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Lock className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                        <span className="text-foreground truncate font-mono text-xs select-all">
                           {dbPassword}
                         </span>
                       </div>
-                      <span className="text-[9px] text-muted-foreground/80 mt-1">
-                        Use this generated password to ensure database security.
-                      </span>
                     </div>
 
-                    <div className="flex gap-2 pt-2 border-t border-border-subtle/50">
-                      <Button
-                        onClick={() => setStep(2)}
-                        variant="ghost"
-                        className="flex-1 h-8.5 text-xs font-medium"
-                      >
-                        <ArrowLeft className="mr-1 h-3 w-3" /> Back
+                    <div className="flex gap-2">
+                      <Button onClick={() => setStep(2)} variant="ghost" size="sm" className="flex-1">
+                        <ArrowLeft className="h-3 w-3" />
+                        Back
                       </Button>
-                      <Button
-                        onClick={() => setStep(4)}
-                        className="flex-1 bg-[#6366f1] hover:bg-[#5558e6] text-white h-8.5 text-xs font-medium flex items-center justify-center gap-1"
-                      >
+                      <Button onClick={() => setStep(4)} size="sm" className="flex-1">
                         Continue
                         <ArrowRight className="h-3 w-3" />
                       </Button>
@@ -1145,83 +995,80 @@ export function SupabaseSetupAssistant() {
                 )}
 
                 {step === 4 && (
-                  <div className="flex flex-col gap-2.5">
-                    <div className="rounded-lg border border-border-subtle bg-panel-elevated p-2.5 text-[11px] leading-relaxed text-muted-foreground flex flex-col gap-1.5">
-                      <span className="font-semibold text-foreground flex items-center gap-1.5">
-                        <Info className="h-3.5 w-3.5 text-[#6366f1]" />
-                        Step 4 Guide: Copy Project URL & Anon Key
-                      </span>
-                      {currentUrl.includes(`/dashboard/project/${activeProjectRef}`) && !currentUrl.includes('/settings') ? (
-                        <div className="flex flex-col gap-1.5">
-                          <p className="font-semibold text-emerald-400">🎉 You are on the Project Overview page!</p>
-                          <p>
-                            Find the section labeled **Project API**.
-                          </p>
-                          <ul className="list-disc pl-3 text-muted-foreground text-[10px] flex flex-col gap-1">
-                            <li>Click the **Copy** button to copy the API URL (starts with `https://`).</li>
-                            <li>Copy the **anon/public** key (starts with `eyJ`).</li>
-                            <li>The app should auto-detect these, but you can paste them manually if needed.</li>
-                            <li>Click **Continue** to move to the next step.</li>
-                          </ul>
-                        </div>
+                  <div className="flex flex-col gap-3">
+                    <SetupGuide title="Project URL">
+                      {currentUrl.includes(`/dashboard/project/${activeProjectRef}`) && !currentUrl.includes("/settings") ? (
+                        <>
+                          <PageStatus>Project overview open.</PageStatus>
+                          <p>Copy the Project API URL from the overview page. Values may auto-fill below.</p>
+                        </>
                       ) : (
-                        <div className="flex flex-col gap-1.5">
-                          <p>
-                            Copy the Project URL and Anon Key:
-                          </p>
-                          <div className="bg-[#6366f1]/5 border border-[#6366f1]/10 rounded p-1.5 text-[10px] text-foreground flex flex-col gap-1">
-                            <span>👉 The webview should automatically navigate you to the Project Overview.</span>
-                            <span className="text-muted-foreground">Or manually: Click the **top right three lines** (menu) → **Project overview**. The API keys are listed in the Project API section.</span>
-                          </div>
-                        </div>
+                        <p>
+                          Copy the project URL from Project overview, or use the shortcut below to navigate there.
+                        </p>
                       )}
-                    </div>
+                    </SetupGuide>
 
-                    {debugText && (
-                      <pre className="text-[9px] font-mono bg-black/40 text-green-400 p-2 rounded max-h-40 overflow-y-auto whitespace-pre-wrap shrink-0">
-                        {debugText}
-                      </pre>
+                    {(inputUrl || inputAnon) && (
+                      <div className="text-muted-foreground flex flex-col gap-1 text-[11px]">
+                        {inputUrl && (
+                          <span className="flex items-center gap-1.5">
+                            <Check className="h-3 w-3 text-emerald-400" />
+                            Project URL detected
+                          </span>
+                        )}
+                        {inputAnon && (
+                          <span className="flex items-center gap-1.5">
+                            <Check className="h-3 w-3 text-emerald-400" />
+                            Anon key detected
+                          </span>
+                        )}
+                      </div>
                     )}
 
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Project URL
-                      </label>
+                    <div className="flex flex-col gap-1">
+                      <label className={SETUP_LABEL_CLASS}>Project URL</label>
                       <input
                         type="text"
                         placeholder="https://xyz.supabase.co"
                         value={inputUrl}
                         onChange={(e) => setInputUrl(e.target.value)}
-                        className="w-full border-border-subtle bg-panel-elevated/80 text-foreground h-8.5 rounded-md border px-2.5 text-xs outline-none focus:border-[#6366f1] font-mono"
+                        className={SETUP_INPUT_CLASS}
                       />
                       {inputUrl.includes("/rest/v1") && (
-                        <span className="text-[10px] text-amber-400/80">
-                          Note: We will automatically clean up the trailing `/rest/v1/` for you.
-                        </span>
+                        <p className="text-muted-foreground text-[11px]">
+                          Trailing /rest/v1/ will be removed automatically.
+                        </p>
                       )}
                     </div>
 
-                    <div className="flex flex-col gap-2 pt-2 border-t border-border-subtle/50">
+                    <div className="flex flex-col gap-2">
                       <Button
-                        onClick={() => navigateBrowserWebview("supabase-setup-browser", activeProjectRef ? `https://supabase.com/dashboard/project/${activeProjectRef}` : "https://supabase.com/dashboard/projects")}
+                        onClick={() =>
+                          navigateBrowserWebview(
+                            "supabase-setup-browser",
+                            activeProjectRef
+                              ? `https://supabase.com/dashboard/project/${activeProjectRef}`
+                              : "https://supabase.com/dashboard/projects",
+                          )
+                        }
                         variant="outline"
-                        className="w-full h-8.5 text-xs font-medium border-border-subtle flex items-center justify-center gap-1.5 text-[#6366f1]"
+                        size="sm"
+                        className="w-full"
                       >
                         <Globe className="h-3.5 w-3.5" />
-                        {activeProjectRef ? "Go to Project Overview Shortcut" : "Go to Projects Dashboard"}
+                        {activeProjectRef ? "Open Project Overview" : "Open Projects Dashboard"}
                       </Button>
                       <div className="flex gap-2">
-                        <Button
-                          onClick={() => setStep(3)}
-                          variant="ghost"
-                          className="flex-1 h-8.5 text-xs font-medium"
-                        >
-                          <ArrowLeft className="mr-1 h-3 w-3" /> Back
+                        <Button onClick={() => setStep(3)} variant="ghost" size="sm" className="flex-1">
+                          <ArrowLeft className="h-3 w-3" />
+                          Back
                         </Button>
                         <Button
                           onClick={() => setStep(5)}
                           disabled={!inputUrl.trim().startsWith("https://")}
-                          className="flex-1 bg-[#6366f1] hover:bg-[#5558e6] text-white h-8.5 text-xs font-medium flex items-center justify-center gap-1"
+                          size="sm"
+                          className="flex-1"
                         >
                           Continue
                           <ArrowRight className="h-3 w-3" />
@@ -1232,80 +1079,58 @@ export function SupabaseSetupAssistant() {
                 )}
 
                 {step === 5 && (
-                  <div className="flex flex-col gap-2.5">
-                    <div className="rounded-lg border border-border-subtle bg-panel-elevated p-2.5 text-[11px] leading-relaxed text-muted-foreground flex flex-col gap-1.5">
-                      <span className="font-semibold text-foreground flex items-center gap-1.5">
-                        <Info className="h-3.5 w-3.5 text-[#6366f1]" />
-                        Step 5 Guide: Copy Anon Key
-                      </span>
+                  <div className="flex flex-col gap-3">
+                    <SetupGuide title="Anon public key">
                       {currentUrl.includes("/settings/api") ? (
-                        <div className="flex flex-col gap-1.5">
-                          <p className="font-semibold text-emerald-400">🎉 You are on the API Settings page!</p>
-                          <p>
-                            Scroll down to the **Project API keys** section.
-                          </p>
-                          <ul className="list-disc pl-3 text-muted-foreground text-[10px] flex flex-col gap-1">
-                            <li>Find the key labeled **anon / public**.</li>
-                            <li>Click **Copy** to copy the public key (starts with `eyJ...`).</li>
-                            <li>Paste it into the **Anon Public Key** input below.</li>
-                            <li>Click **Connect DB** to complete the connection!</li>
-                          </ul>
-                        </div>
+                        <>
+                          <PageStatus>API settings open.</PageStatus>
+                          <p>Copy the anon / public key and paste it below.</p>
+                        </>
                       ) : (
-                        <div className="flex flex-col gap-1.5">
-                          <p>
-                            Copy the Anon Public Key:
-                          </p>
-                          <div className="bg-[#6366f1]/5 border border-[#6366f1]/10 rounded p-1.5 text-[10px] text-foreground flex flex-col gap-1">
-                            <span>👉 Click the **"Go to API Keys Shortcut"** button below to navigate directly.</span>
-                            <span className="text-muted-foreground">Or manually: Click the **top right three lines** (menu) → **Project Settings** → **API**. Scroll to the bottom for keys.</span>
-                          </div>
-                        </div>
+                        <p>
+                          Copy the anon public key from API settings, or use the shortcut below.
+                        </p>
                       )}
-                    </div>
+                    </SetupGuide>
 
-                    {debugText && (
-                      <pre className="text-[9px] font-mono bg-black/40 text-green-400 p-2 rounded max-h-40 overflow-y-auto whitespace-pre-wrap shrink-0">
-                        {debugText}
-                      </pre>
-                    )}
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Anon Public Key
-                      </label>
+                    <div className="flex flex-col gap-1">
+                      <label className={SETUP_LABEL_CLASS}>Anon Public Key</label>
                       <input
                         type="password"
                         placeholder="eyJhbGciOiJIUzI1NiIs..."
                         value={inputAnon}
                         onChange={(e) => setInputAnon(e.target.value)}
-                        className="w-full border-border-subtle bg-panel-elevated/80 text-foreground h-8.5 rounded-md border px-2.5 text-xs outline-none focus:border-[#6366f1] font-mono"
+                        className={SETUP_INPUT_CLASS}
                       />
                     </div>
 
-                    <div className="flex flex-col gap-2 pt-2 border-t border-border-subtle/50">
+                    <div className="flex flex-col gap-2">
                       <Button
-                        onClick={() => activeProjectRef ? navigateToProjectApiKeys(activeProjectRef) : navigateBrowserWebview("supabase-setup-browser", "https://supabase.com/dashboard/projects")}
+                        onClick={() =>
+                          activeProjectRef
+                            ? navigateToProjectApiKeys(activeProjectRef)
+                            : navigateBrowserWebview("supabase-setup-browser", "https://supabase.com/dashboard/projects")
+                        }
                         variant="outline"
-                        className="w-full h-8.5 text-xs font-medium border-border-subtle flex items-center justify-center gap-1.5 text-[#6366f1]"
+                        size="sm"
+                        className="w-full"
                       >
                         <Globe className="h-3.5 w-3.5" />
-                        {activeProjectRef ? "Go to API Keys Shortcut" : "Go to Projects Dashboard"}
+                        {activeProjectRef ? "Open API Keys" : "Open Projects Dashboard"}
                       </Button>
                       <div className="flex gap-2">
-                        <Button
-                          onClick={() => setStep(4)}
-                          variant="ghost"
-                          className="flex-1 h-8.5 text-xs font-medium"
-                        >
-                          <ArrowLeft className="mr-1 h-3 w-3" /> Back
+                        <Button onClick={() => setStep(4)} variant="ghost" size="sm" className="flex-1">
+                          <ArrowLeft className="h-3 w-3" />
+                          Back
                         </Button>
                         <Button
                           onClick={saveApiCredentials}
-                          disabled={!inputAnon.trim()}
-                          className="flex-1 bg-[#6366f1] hover:bg-[#5558e6] text-white h-8.5 text-xs font-medium flex items-center justify-center gap-1"
+                          disabled={!inputAnon.trim() || isProcessing}
+                          size="sm"
+                          className="flex-1"
                         >
-                          Connect DB
+                          {isProcessing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                          Connect
                         </Button>
                       </div>
                     </div>
@@ -1313,75 +1138,59 @@ export function SupabaseSetupAssistant() {
                 )}
 
                 {step === 6 && config && (
-                  <div className="flex flex-col gap-4 animate-fade-in">
-                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-[11px] leading-relaxed text-muted-foreground flex flex-col gap-1.5">
-                      <span className="font-semibold text-foreground flex items-center gap-1.5">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                        Supabase MCP Connected!
-                      </span>
-                      <p>
-                        Your credentials are saved. The **Supabase MCP** is now active in the background.
+                  <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 animate-fade-in">
+                    <div className="border-border-subtle bg-panel/60 flex flex-col gap-2 rounded-xl border px-4 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        <p className="text-sm font-medium text-foreground">Connected</p>
+                      </div>
+                      <p className="text-muted-foreground text-xs leading-relaxed">
+                        Supabase is configured. Agents can read schemas, run migrations, and persist application data.
                       </p>
-                      <ul className="list-disc pl-3 text-muted-foreground text-[10px] flex flex-col gap-0.5">
-                        <li>AI agents can automatically fetch tables and schemas</li>
-                        <li>Agents can write migrations and create new tables</li>
-                        <li>User application data is saved securely in your database</li>
-                      </ul>
                     </div>
 
-                    <div className="flex flex-col gap-2.5 border-t border-border-subtle/50 pt-4 text-xs font-mono">
+                    <div className="border-border-subtle bg-panel/60 flex flex-col gap-3 rounded-xl border px-4 py-3.5 text-xs">
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-muted-foreground">
-                          Project Ref
-                        </span>
-                        <span className="bg-panel-elevated/70 border border-border-subtle/40 px-2 py-1 rounded text-foreground overflow-hidden text-ellipsis select-all">
+                        <span className={SETUP_LABEL_CLASS}>Project Ref</span>
+                        <span className="border-border-subtle bg-panel-elevated/70 text-foreground truncate rounded-md border px-2 py-1.5 font-mono select-all">
                           {config.projectRef || "N/A"}
                         </span>
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-muted-foreground">
-                          Project URL
-                        </span>
-                        <span className="bg-panel-elevated/70 border border-border-subtle/40 px-2 py-1 rounded text-foreground overflow-hidden text-ellipsis select-all">
+                        <span className={SETUP_LABEL_CLASS}>Project URL</span>
+                        <span className="border-border-subtle bg-panel-elevated/70 text-foreground truncate rounded-md border px-2 py-1.5 font-mono select-all">
                           {config.projectUrl || "N/A"}
                         </span>
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-muted-foreground">
-                          Anon Key
-                        </span>
-                        <span className="bg-panel-elevated/70 border border-border-subtle/40 px-2 py-1 rounded text-foreground overflow-hidden text-ellipsis select-all">
+                        <span className={SETUP_LABEL_CLASS}>Anon Key</span>
+                        <span className="border-border-subtle bg-panel-elevated/70 text-foreground truncate rounded-md border px-2 py-1.5 font-mono select-all">
                           {config.anonKey ? `${config.anonKey.slice(0, 15)}...` : "N/A"}
                         </span>
                       </div>
                       {config.dbPassword && (
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-muted-foreground">
-                            DB Password
-                          </span>
-                          <span className="bg-panel-elevated/70 border border-border-subtle/40 px-2 py-1 rounded text-foreground overflow-hidden text-ellipsis select-all">
+                          <span className={SETUP_LABEL_CLASS}>DB Password</span>
+                          <span className="border-border-subtle bg-panel-elevated/70 text-foreground truncate rounded-md border px-2 py-1.5 font-mono select-all">
                             {config.dbPassword}
                           </span>
                         </div>
                       )}
                     </div>
 
-                    <div className="flex gap-2 mt-2">
-                      <Button
-                        onClick={() => setStep(5)}
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 h-8.5 font-medium flex items-center justify-center gap-1.5"
-                      >
-                        <ArrowLeft className="h-3.5 w-3.5" /> Back to Setup
+                    <div className="flex gap-2">
+                      <Button onClick={() => setStep(5)} variant="outline" size="sm" className="flex-1">
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                        Edit credentials
                       </Button>
                       <Button
                         onClick={resetSetup}
                         variant="outline"
                         size="sm"
-                        className="flex-1 text-red-400 hover:text-red-300 border-red-500/20 hover:bg-red-500/5 h-8.5 font-medium flex items-center justify-center gap-1.5"
+                        className="text-destructive hover:text-destructive flex-1"
                       >
-                        <Trash2 className="h-3.5 w-3.5" /> Disconnect Config
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Disconnect
                       </Button>
                     </div>
                   </div>
@@ -1391,8 +1200,8 @@ export function SupabaseSetupAssistant() {
 
             {/* Bottom Status / Loader Indicator */}
             {isProcessing && statusText && (
-              <div className="mt-4 flex items-center gap-2 rounded-lg bg-panel-elevated/40 border border-border-subtle/30 px-3 py-2 text-[11px] text-muted-foreground leading-normal animate-pulse shrink-0">
-                <RefreshCw className="h-3.5 w-3.5 animate-spin text-[#6366f1] shrink-0" />
+              <div className="border-border-subtle bg-panel/60 mt-4 flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-[11px] text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                 <span>{statusText}</span>
               </div>
             )}
@@ -1400,31 +1209,21 @@ export function SupabaseSetupAssistant() {
 
           {/* Right Webview Pane */}
           {step !== 6 && (
-            <div className="flex-1 bg-black/10 relative flex flex-col min-w-0">
-            {/* Header controls for the Webview */}
-            <div className="border-b border-border-subtle bg-panel flex h-9 shrink-0 items-center justify-between px-3 text-xs">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Globe className="h-3.5 w-3.5" />
-                <span className="font-sans font-medium text-foreground select-none overflow-hidden text-ellipsis whitespace-nowrap max-w-[200px]">
-                  {currentUrl.replace("https://", "")}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping mr-1" />
-                <span className="text-muted-foreground text-[10px]">Active</span>
-              </div>
+            <div className="relative flex min-w-0 flex-1 flex-col bg-panel/20">
+            <div className="border-border-subtle bg-panel/60 flex h-9 shrink-0 items-center gap-2 border-b px-3 text-xs">
+              <Globe className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+              <span className="text-muted-foreground truncate font-medium">
+                {currentUrl.replace("https://", "")}
+              </span>
             </div>
 
-            {/* Webview Container frame */}
-            <div className="flex-1 relative min-h-0 min-w-0 bg-panel-elevated/10">
-              <div ref={hostRef} className="absolute inset-0 w-full h-full bg-transparent" />
-              
+            <div className="relative min-h-0 min-w-0 flex-1">
+              <div ref={hostRef} className="absolute inset-0 h-full w-full bg-transparent" />
+
               {!webviewReady && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-panel/80 z-10 backdrop-blur-sm">
-                  <Loader2 className="h-6 w-6 animate-spin text-[#6366f1]" />
-                  <span className="text-xs text-muted-foreground">
-                    Initializing web console overlay...
-                  </span>
+                <div className="bg-panel/80 absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 backdrop-blur-sm">
+                  <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+                  <span className="text-muted-foreground text-xs">Loading browser...</span>
                 </div>
               )}
             </div>
