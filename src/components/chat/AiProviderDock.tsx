@@ -136,6 +136,7 @@ function DockProviderIcon({
             size="sm"
             muted={!selected}
             className="ring-0"
+            showTitle={false}
           />
         </button>
       </TooltipTrigger>

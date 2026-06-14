@@ -7,6 +7,11 @@ interface ModelLogoProps {
   size?: "xs" | "sm" | "md";
   className?: string;
   muted?: boolean;
+  /**
+   * Set false to suppress the native `title` tooltip — use when a wrapping
+   * custom tooltip already shows the model name (avoids a duplicate tooltip).
+   */
+  showTitle?: boolean;
 }
 
 const sizeClasses = {
@@ -15,7 +20,13 @@ const sizeClasses = {
   md: "h-8 w-8 rounded-lg p-1.5",
 };
 
-export function ModelLogo({ orgId, size = "md", className, muted }: ModelLogoProps) {
+export function ModelLogo({
+  orgId,
+  size = "md",
+  className,
+  muted,
+  showTitle = true,
+}: ModelLogoProps) {
   const src = getOrgLogo(orgId);
   const org = modelOrgs.find((o) => o.id === orgId);
   const label = org?.name ?? orgId;
@@ -43,7 +54,7 @@ export function ModelLogo({ orgId, size = "md", className, muted }: ModelLogoPro
         muted && "opacity-50 grayscale",
         className,
       )}
-      title={label}
+      title={showTitle ? label : undefined}
     >
       <img
         src={src}
